@@ -138,3 +138,7 @@ docker-compose.override.yml
 !data/**/.gitkeep
 !docs/state/gates/.gitkeep
 !docs/state/blocks/.gitkeep
+
+# Local scratch data root for dev container runs. Market data lives on the VM (rule 14);
+# this exists so a dev run cannot accidentally bind the real one.
+.devdata/

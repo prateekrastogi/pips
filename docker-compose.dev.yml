@@ -8,9 +8,13 @@ services:
       - .:/app
       - ./fixtures:/srv/pips/fixtures:ro
       - pips-dev-venv:/app/.venv
+      # A laptop must never bind the VM's data root. Rule 14 keeps market data on the VM, and
+      # a dev run that wrote there would be the quietest possible way to violate it.
+      - ./.devdata:/srv/pips
     environment:
       PIPS_ENV: dev
       PIPS_DATA_ROOT: /srv/pips
+
 
 volumes:
   pips-dev-venv:

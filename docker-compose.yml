@@ -13,6 +13,12 @@
 # that means bronze written by an outdated normalizer. Pinned by a test so the two files cannot
 # drift apart.
 
+# EXPLICIT PROJECT NAME. Compose derives it from the directory otherwise, and the directory
+# changes — /srv/pips/checkout gave `checkout_*`, a verification worktree gave `verify_*`. The
+# Jenkins controller taught this once already; this is the same lesson on the data plane, where
+# the cost is fragmented market data rather than a clobbered container.
+name: pips
+
 services:
   research:
     build:
@@ -28,7 +34,7 @@ services:
       PIPS_ENV: ${PIPS_ENV:-dev}
       PIPS_DATA_ROOT: /srv/pips
     volumes:
-      - pips-data:/srv/pips
+      - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
     working_dir: /app
     command: ["make", "ci"]
 
@@ -55,7 +61,7 @@ services:
     # never meet in one process.
     env_file: [.env]
     volumes:
-      - pips-data:/srv/pips
+      - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
       - pips-sock:/run/pips
     restart: unless-stopped
     profiles: ["vm"]
@@ -70,12 +76,15 @@ services:
       PIPS_MODE: shadow          # simulated orders against real quotes
       PIPS_LIVE: "0"             # the live chain is never enabled from this file
     volumes:
-      - pips-data:/srv/pips
+      - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
       - pips-sock:/run/pips
     depends_on: [breeze-reader]
     restart: unless-stopped
     profiles: ["vm"]
 
 volumes:
-  pips-data:
+  # pips-data is gone on purpose: /srv/pips is now a BIND to the host, so the path means the
+  # same thing to the container, the operator, the systemd unit and any backup — regardless of
+  # which directory compose was invoked from. Only the reader->engine socket stays a volume,
+  # because nothing outside the containers needs to read it.
   pips-sock:

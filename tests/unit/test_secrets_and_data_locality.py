@@ -82,12 +82,24 @@ def test_repo_data_zones_hold_no_market_data(zone: str) -> None:
     assert stray == [], f"data/{zone} contains {stray} — market data belongs on the VM"
 
 
-def test_compose_points_the_data_root_at_a_vm_volume() -> None:
+def test_the_data_root_is_the_vm_path_the_operator_can_see() -> None:
+    """The data root must resolve to /srv/pips on the VM, by a path host tools can reach.
+
+    This test previously asserted the OPPOSITE — that the data root must be a named volume —
+    and that assertion was written before anything had been run. The first real campaign
+    showed why it was wrong: compose prefixes volume names with the project, which it derives
+    from the directory, so the same declaration produced `pips-data`, `checkout_pips-data` and
+    `verify_pips-data` depending on where it was invoked. Six bronze records landed in a volume
+    that the runbook, the systemd unit and any backup pointed nowhere near.
+
+    Corrected rather than kept alongside the new one: two tests demanding opposite things is
+    not coverage.
+    """
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     research = compose["services"]["research"]
     assert research["environment"]["PIPS_DATA_ROOT"] == "/srv/pips"
-    mounts = [m for m in research["volumes"] if m.startswith("pips-data:")]
-    assert mounts == ["pips-data:/srv/pips"], "the data root must be a named volume, not a bind"
+    mounts = [m for m in research["volumes"] if str(m).endswith(":/srv/pips")]
+    assert mounts, "the research service must mount the data root"
 
 
 def test_data_plane_services_load_the_tracked_env_file() -> None:
@@ -136,3 +148,36 @@ def test_order_plane_credentials_are_not_in_the_tracked_env(
     env = strip_comments(env_path.read_text(encoding="utf-8"))
     for forbidden in ("FLATTRADE_API_KEY=", "FLATTRADE_API_SECRET=", "PIPS_LIVE=1"):
         assert forbidden not in env, f"{forbidden} must not appear in the tracked .env"
+
+
+def test_the_data_root_is_a_host_bind_not_a_named_volume() -> None:
+    """Market data must live at a stable, inspectable path on the VM.
+
+    Found by running the first real campaign: the data root was a named volume, and compose
+    prefixes volume names with the PROJECT — which it derives from the directory. Running from
+    /srv/pips/checkout produced `checkout_pips-data`, a throwaway verification worktree
+    produced `verify_pips-data`, and the bootstrap had created `pips-data`. Three volumes for
+    one data root, and the six records the campaign wrote were invisible to every host tool
+    pointed at /srv/pips — including the runbook, the systemd unit, and any backup.
+
+    A bind mount makes the path mean the same thing to the container, the operator and the
+    backup, regardless of which directory compose was invoked from.
+    """
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    for name, spec in compose["services"].items():
+        mounts = [m for m in (spec.get("volumes") or []) if str(m).endswith(":/srv/pips")]
+        if not mounts:
+            continue
+        source = str(mounts[0]).rsplit(":/srv/pips", 1)[0]
+        assert "/" in source or source.startswith("$"), (
+            f"{name} mounts a NAMED VOLUME at /srv/pips ({source!r}). Compose prefixes volume "
+            "names with the project, so the same data root becomes a different volume "
+            "depending on the directory it was run from."
+        )
+
+
+def test_compose_pins_an_explicit_project_name() -> None:
+    # The other half of the same lesson, already learned once on the Jenkins controller: an
+    # implicit project name is derived from the directory, and the directory changes.
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    assert compose.get("name"), "docker-compose.yml must set an explicit top-level name:"
