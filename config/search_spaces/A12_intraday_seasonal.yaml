@@ -70,6 +70,8 @@ falsifiers_deferred:
 falsifier_checks:
   - falsifier: "Reject isolated day-of-week or slot spikes after family-wise correction"
     check: "bh-fdr"
+  - falsifier: "Reject if it depends on a handful of expiry days"
+    check: "leave-day-out"
 
 data_tier: T1
 

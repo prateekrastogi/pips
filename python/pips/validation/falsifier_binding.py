@@ -53,6 +53,9 @@ CHECK_REGISTRY: dict[str, str] = {
     "delay-2bar": "pips.validation.stress",
     "fill-degraded": "pips.validation.stress",
     "drop-best-block": "pips.validation.stress",
+    "leave-stock-out": "pips.validation.leave_out",
+    "leave-day-out": "pips.validation.leave_out",
+    "leave-session-out": "pips.validation.leave_out",
     # Selection and validation machinery.
     "plateau-centroid": "pips.validation.plateau",
     "shuffled-future": "pips.validation.nulls",

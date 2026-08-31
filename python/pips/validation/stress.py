@@ -89,6 +89,17 @@ class StressCase:
     description: str
     config: StressConfig = field(default_factory=StressConfig)
     drop_best_block: bool = False
+    requires: str | None = None
+    """An input this case cannot run without, named on the CASE rather than inferred.
+
+    Two defects made this necessary, both of the same kind. The concentration cases first ran
+    as no-op perturbations against a bare return series and PASSED — a case that cannot be
+    evaluated certifying itself, which is precisely what NOT_RUN exists to prevent. And
+    `leave-sector-out`, the battery's own flagship example of an unrunnable case, had the same
+    hole from the day it was written: it only ever appeared as NOT_RUN because every test
+    remembered to pass it in `unavailable`. A caller who forgot got a PASS.
+
+    A dependency the caller has to remember is a dependency that will be forgotten."""
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,18 @@ class StressVerdict:
 @dataclass(frozen=True)
 class StressReport:
     verdicts: tuple[StressVerdict, ...]
+
+    @property
+    def all_run_cases_passed(self) -> bool:
+        """Nothing that RAN failed. §6 M16's Verify is about this, not about certification.
+
+        Kept separate from :attr:`certifies` deliberately. The battery cannot certify anything
+        today — leave-sector-out needs a sector map, the concentration cases need attribution
+        — so collapsing the two would make the Verify unsatisfiable and tempt someone to
+        weaken `certifies` until it passed.
+        """
+        ran = [v for v in self.verdicts if v.outcome is not CaseOutcome.NOT_RUN]
+        return bool(ran) and all(v.outcome is CaseOutcome.PASSED for v in ran)
 
     @property
     def certifies(self) -> bool:
@@ -143,9 +166,26 @@ def default_cases() -> tuple[StressCase, ...]:
         StressCase("universe-plus", "universe widened", StressConfig(universe_delta=10)),
         StressCase("drop-best-block", "best block removed", drop_best_block=True),
         StressCase(
+            "leave-stock-out",
+            "worst single-instrument removal — NEEDS PER-BUCKET ATTRIBUTION, which a bare "
+            "return series cannot supply",
+            requires="attribution",
+        ),
+        StressCase(
+            "leave-day-out",
+            "worst single-day removal — NEEDS PER-BUCKET ATTRIBUTION",
+            requires="attribution",
+        ),
+        StressCase(
+            "leave-session-out",
+            "worst single-session removal — NEEDS PER-BUCKET ATTRIBUTION",
+            requires="attribution",
+        ),
+        StressCase(
             "leave-sector-out",
             "one sector removed — NEEDS A SECTOR MAP, which pips does not have until M6's "
             "masters carry one",
+            requires="sector-map",
         ),
     )
 
@@ -158,14 +198,28 @@ class StressBattery:
     block_size: int
     cases: tuple[StressCase, ...] = field(default_factory=default_cases)
 
-    def run(self, evaluate: Evaluate, unavailable: set[str] | None = None) -> StressReport:
-        """Evaluate every case. ``unavailable`` names cases the caller cannot run."""
+    def run(
+        self,
+        evaluate: Evaluate,
+        unavailable: set[str] | None = None,
+        provides: set[str] | None = None,
+    ) -> StressReport:
+        """Evaluate every case.
+
+        ``provides`` names inputs the caller HAS — "attribution", "sector-map". A case
+        declaring a requirement the caller has not provided is NOT_RUN, without the caller
+        having to know which cases those are. ``unavailable`` remains for cases a caller
+        cannot run for reasons the case itself cannot predict.
+        """
         if not self.cases:
             raise ValueError(
                 "a battery with no cases certifies everything it is given. If the intent is "
                 "to run nothing, say so somewhere a certificate cannot be issued."
             )
-        cannot = unavailable or set()
+        cannot = set(unavailable or set())
+        have = provides or set()
+        # One code path for "could not be evaluated", and the case decides — not the caller.
+        cannot |= {c.name for c in self.cases if c.requires and c.requires not in have}
         baseline = sharpe(evaluate(StressConfig()))
 
         verdicts: list[StressVerdict] = []

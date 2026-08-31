@@ -67,6 +67,8 @@ falsifier_checks:
     check: "newey-west-hac"
   - falsifier: "Reject if the sign flips under a one-bar skip"
     check: "delay-1bar"
+  - falsifier: "Reject if results are dominated by open gaps"
+    check: "leave-session-out"
 
 data_tier: T1
 

@@ -75,10 +75,32 @@ def battery(**over: object) -> StressBattery:
 # ------------------------------------------------------- the Verify --------------------
 
 
-def test_a_known_robust_toy_passes() -> None:
+def test_a_known_robust_toy_passes_every_case_that_could_run() -> None:
+    """§6 M16's Verify, stated as what it can actually mean today.
+
+    The battery cannot CERTIFY anything: leave-sector-out needs a sector map, and the three
+    concentration cases need per-bucket attribution a bare return series cannot supply. So the
+    Verify is about the cases that ran — and keeping the two properties apart matters, because
+    collapsing them would make the Verify unsatisfiable and tempt someone to weaken
+    `certifies` until it passed.
+    """
     report = battery().run(robust)
-    assert report.certifies, report.describe()
-    assert all(v.outcome is CaseOutcome.PASSED for v in report.verdicts)
+    assert report.all_run_cases_passed, report.describe()
+    assert not report.certifies, "four cases cannot run today, and that blocks certification"
+
+
+def test_a_case_needing_attribution_does_not_quietly_run_against_a_bare_series() -> None:
+    """The principle, applied to the cases added to exercise it.
+
+    When the concentration cases were first added they had no way to say they needed
+    attribution, so they ran as no-op perturbations against the plain return series and
+    PASSED — a case that cannot be evaluated certifying itself, which is exactly what NOT_RUN
+    exists to prevent. The requirement is now declared on the case.
+    """
+    report = battery().run(robust)
+    for name in ("leave-stock-out", "leave-day-out", "leave-session-out"):
+        verdict = next(v for v in report.verdicts if v.case == name)
+        assert verdict.outcome is CaseOutcome.NOT_RUN, f"{name} has no attribution to work on"
 
 
 def test_a_known_fragile_toy_fails() -> None:
@@ -137,7 +159,7 @@ def test_a_case_that_cannot_be_evaluated_is_not_run_and_blocks_certification() -
     robustness never demonstrated. Both let a certification claim a battery larger than the
     one that ran.
     """
-    report = battery().run(robust, unavailable={"leave-sector-out"})
+    report = battery().run(robust)
     sector = next(v for v in report.verdicts if v.case == "leave-sector-out")
     assert sector.outcome is CaseOutcome.NOT_RUN
     assert not report.certifies
@@ -147,9 +169,10 @@ def test_a_case_that_cannot_be_evaluated_is_not_run_and_blocks_certification() -
 def test_not_run_is_distinguishable_from_failed_in_the_report() -> None:
     # An operator acts differently on the two: one means build the sector map, the other means
     # the strategy is fragile. A report that merges them tells neither story.
-    report = battery().run(robust, unavailable={"leave-sector-out"})
+    report = battery().run(robust)
     assert not any(v.outcome is CaseOutcome.FAILED for v in report.verdicts)
-    assert sum(v.outcome is CaseOutcome.NOT_RUN for v in report.verdicts) == 1
+    not_run = {v.case for v in report.verdicts if v.outcome is CaseOutcome.NOT_RUN}
+    assert not_run == {"leave-sector-out", "leave-stock-out", "leave-day-out", "leave-session-out"}
 
 
 def test_an_empty_battery_certifies_nothing() -> None:

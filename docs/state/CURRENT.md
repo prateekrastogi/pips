@@ -1,13 +1,14 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0
+**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · **Loop PAUSED** by the
+owner at the end of this tick, for a clean start tomorrow.
 
 > This file is a snapshot, not a log. It had accreted every finished milestone since M0 and
 > still named a branch we left and two owner-actions the owner had already cleared. The
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M16 stress battery — core landed, and falsifiers are now structurally bound to it.** M15 is DONE: Purged/embargoed outer and inner folds, plateau-centroid
+**M16 stress battery — core, falsifier binding and concentration leave-outs landed.** M15 is DONE: Purged/embargoed outer and inner folds, plateau-centroid
 selection, and successive halving that counts every viewed trial (rule 4). M14 is
 complete: F1 state machine, flatten scheduler and F0/F1 reconciliation. M6's masters are complete
 except ASM/GSM/T2T and index membership; all nine T1 alphas have compute plugins.
@@ -68,7 +69,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 150 files · mypy --strict 150 files · 811 pytest · clippy clean · cargo test ok
+  ruff 152 files · mypy --strict 152 files · 820 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -104,7 +105,9 @@ QC on real arb-vm data — control 0 findings; injected halving -> ratio_jump qu
 falsifier-binding mutation run — removing the registry's import killed NOTHING, and that
   import is the whole premise: without it "this check exists" is "this name is in a dict I
   wrote". Needed a phantom module entry to observe. Eighth test-level finding this session.
-falsifier coverage — 12 bound, 20 unbound of 32. The unbound are NAMED, not just counted.
+falsifier coverage — 15 bound, 17 unbound of 32. The unbound are NAMED, not just counted.
+stress battery — all_run_cases_passed True, certifies False (4 cases cannot run: 3 need
+  per-bucket attribution, 1 needs a sector map). With every input provided it certifies.
 stress-battery mutation run — 6 of 6 killed. The drop-best-block fixture could NOT be
   repaired by changing the fixture: any version spiky enough to matter fails the case under
   both implementations. Asserted the operation directly instead.
@@ -154,10 +157,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **Close the falsifier coverage gap** — 20 of 32 pre-registered falsifiers have no check
-   behind them, now named individually by `coverage_report`. The biggest clusters need
-   concentration leave-outs (leave stock/day/session out, §6 M16) and a sector map. The
-   leave-outs need no data and are the next honest step.
+3. **Close the remaining falsifier coverage gap** — now 17 of 32 unbound, each named by
+   `coverage_report`. What is left needs: a sector map (M6, blocked on the instrument master),
+   an events/circuit master, era-stability splits, and midquote/next-bar-open confirmation
+   (needs T2 quote data). Several are genuinely blocked on data; the era-stability split is
+   not, and is the next unblocked one.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
