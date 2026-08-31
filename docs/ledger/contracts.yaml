@@ -177,6 +177,7 @@
     - "tests/unit/test_vector_engine.py::test_every_result_is_stamped_with_its_fill_tier"
     - "tests/unit/test_vector_engine.py::test_cross_tier_comparison_is_refused"
     - "tests/unit/test_protected_limit.py"
+    - "tests/unit/test_flatten.py"
   status: building
   owner_milestone: M14
   # BUILDING, not enforced, and the gap is exactly F1-F3. M10 landed the F0 screen tier plus
