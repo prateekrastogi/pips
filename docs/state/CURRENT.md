@@ -60,7 +60,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 130 files · mypy --strict 130 files · 688 pytest · clippy clean · cargo test ok
+  ruff 132 files · mypy --strict 132 files · 701 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -97,7 +97,7 @@ verdict-seam mutation run — 3 of 4 killed, 1 SURVIVED:
 
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
-make s1-smoke — 9 specs · 8 with plugins (A01-A08, DERIVED not hardcoded) · 1 awaiting
+make s1-smoke — 9 specs · ALL NINE with plugins (DERIVED not hardcoded) · 0 awaiting
   rank_ic 0.0063 · p 0.7114 (correctly no promotion)
 gap-family mutation run — 5 of 6 killed, 1 SURVIVED:
   breadth counting the name itself — a floor of 1/n, so a name whose only peer disagrees
@@ -105,6 +105,8 @@ gap-family mutation run — 5 of 6 killed, 1 SURVIVED:
 A07 mutation run — 5 of 6 killed, 1 SURVIVED:
   dropping the volatility buffer entirely — my fixture never cleared even the RAW range.
   Fixed by pairing: zero with the buffer, positive with buffer_atr=0.
+A12 mutation run — 5 of 6 killed; the survivor was the zero-variance branch, whose only
+  coverage I had just removed by de-degenerating the fixtures.
 A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   removing volatility normalisation killed nothing —  held under the alpha
   AND under the variance forecast it must not be. Fixed with a RATIO (>5x), not an ordering.
@@ -120,9 +122,9 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **Compute plugin for A12** — the intraday seasonal, the last of the nine. A05/A06 landed as
-   a pair (writing one first would itself be the ex-post sign selection their pre-registration
-   forbids), then A07 and A08. Needs no credentials or data.
+3. **Broker-capability daily snapshotter onto the PIT store** — the last M6 item needing no
+   external download. M3's manually maintained CSV is the v0; moving it onto the bitemporal
+   store makes "what could this broker do on that date" an as-of read like everything else.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
