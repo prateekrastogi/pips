@@ -20,15 +20,45 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from pips.alphas.spec import load_alpha_spec
+from pips.alphas.spec import AlphaSpec, load_alpha_spec
 from pips.alphas.t1.a01 import A01Params, compute
 from pips.core.asof import AsOfPanelView
+from pips.validation.fdr import benjamini_hochberg
 from pips.validation.nulls import rank_ic, shuffled_future_control
 
-__all__ = ["main", "run_s1_smoke"]
+__all__ = ["apply_family_fdr", "enumerate_specs", "main", "run_s1_smoke"]
 
 NS = 1_000_000_000
 _SPEC = Path("config/search_spaces/A01_residual_momentum.yaml")
+
+
+def enumerate_specs(spec_dir: Path) -> list[AlphaSpec]:
+    """Every pre-registered AlphaSpec, in id order.
+
+    Loading is validation, so a spec that has lost its falsifiers cannot be swept — it fails
+    here rather than producing a result nobody could reject.
+    """
+    return sorted((load_alpha_spec(path) for path in spec_dir.glob("A*.yaml")), key=lambda s: s.id)
+
+
+def apply_family_fdr(candidates: list[dict[str, object]], q: float) -> list[dict[str, object]]:
+    """BH-FDR **within family x universe** (§6 M13).
+
+    The grouping is the design, not a detail. Pooling every family into one correction would
+    penalise a family for tests another family ran; correcting nothing would promote the best
+    of N. Each candidate keeps its group key so a report can show which bar it cleared.
+    """
+    groups: dict[tuple[object, object], list[int]] = {}
+    for i, candidate in enumerate(candidates):
+        groups.setdefault((candidate["family"], candidate["universe"]), []).append(i)
+
+    out = [dict(c) for c in candidates]
+    for indices in groups.values():
+        rejected = benjamini_hochberg([float(candidates[i]["p_value"]) for i in indices], q=q)  # type: ignore[arg-type]
+        for i, survives in zip(indices, rejected, strict=True):
+            out[i]["survives"] = survives
+            out[i]["n_tests_in_group"] = len(indices)
+    return out
 
 
 def _load_panel(fixtures: Path) -> pl.DataFrame:
@@ -80,7 +110,12 @@ def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
             scores.append(float(forecast.expected_return_bps))
             outcomes.append((nxt - here) / here)
 
+    registered = enumerate_specs(spec_path.parent)
+    with_plugin = {"A01"}  # compute plugins implemented so far
     report: dict[str, object] = {
+        "specs_registered": len(registered),
+        "specs_with_a_compute_plugin": sorted(with_plugin),
+        "specs_awaiting_a_plugin": sorted({s.id for s in registered} - with_plugin),
         "spec": spec.strategy_id,
         "spec_hash": spec.short_id(),
         "bars": len(stamps),

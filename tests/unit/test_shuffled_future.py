@@ -85,3 +85,55 @@ def test_too_few_observations_are_refused() -> None:
     # A permutation test on a handful of points reports a p-value it has no right to.
     with pytest.raises(ValueError, match="observations"):
         shuffled_future_control(np.zeros(3), np.zeros(3), n_permutations=10, seed=1)
+
+
+# ------------------------------------------------- null-search calibration (§6 M13) -----
+
+
+def test_a_null_search_survives_at_approximately_q() -> None:
+    """§6 M13's Verify: feature/label destruction => survivor rate ~ q.
+
+    This is the self-test of the entire S1 statistics chain — rank IC, Newey-West t, normal
+    p-value, BH step-up — run end to end on data with nothing in it. Under the complete null
+    BH's FDR equals its FWER, so the fraction of SEARCHES producing at least one survivor
+    should sit near q.
+
+    If it comes out far above q the correction is too weak and S1 will promote noise. If it
+    comes out near zero the chain is too conservative and will discard real alphas. Either
+    way the number that matters is not any single p-value but this rate, and it is the only
+    check that can see a miscalibration in the chain as a whole.
+    """
+    from pips.validation.nulls import null_search_calibration
+
+    result = null_search_calibration(
+        n_searches=200, n_candidates=10, n_observations=200, q=0.10, seed=1407
+    )
+    assert 0.04 <= result.survivor_rate <= 0.20, (
+        f"survivor rate {result.survivor_rate} is not near q={result.q} — the S1 statistics "
+        "chain is miscalibrated"
+    )
+    assert result.calibrated
+
+
+def test_null_search_calibration_is_deterministic() -> None:
+    from pips.validation.nulls import null_search_calibration
+
+    kwargs = {"n_searches": 50, "n_candidates": 5, "n_observations": 120, "q": 0.10, "seed": 3}
+    a = null_search_calibration(**kwargs)  # type: ignore[arg-type]
+    b = null_search_calibration(**kwargs)  # type: ignore[arg-type]
+    assert a.survivor_rate == b.survivor_rate
+
+
+def test_a_broken_correction_is_detected_as_miscalibrated() -> None:
+    # The control on the control. At q=0.9 the "correction" is barely correcting, so the
+    # survivor rate must rise far above a sensible q — proving this harness can actually
+    # SEE a miscalibration rather than always reporting calibrated.
+    from pips.validation.nulls import null_search_calibration
+
+    loose = null_search_calibration(
+        n_searches=200, n_candidates=10, n_observations=200, q=0.90, seed=1407
+    )
+    tight = null_search_calibration(
+        n_searches=200, n_candidates=10, n_observations=200, q=0.10, seed=1407
+    )
+    assert loose.survivor_rate > tight.survivor_rate * 3
