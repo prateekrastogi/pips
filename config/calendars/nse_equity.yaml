@@ -1,0 +1,45 @@
+# NSE cash-equity calendar [C-SESS-01] (§3.15, ADR-0004).
+#
+# A calendar is effective-dated data, exactly like a fee schedule (rule 6): it carries a
+# source and a verification date, and code may ask whether it has been verified.
+#
+# HOLIDAYS ARE DELIBERATELY EMPTY. Inventing plausible dates would be worse than shipping
+# none — an invented holiday is indistinguishable from a verified one at the point of use,
+# and it would silently delete or fabricate a trading day in every backtest that spans it.
+# The list is sourced at M6 from the PIT exchange-calendar master, with source and
+# verified_on filled in by the same commit. Until then `holidays_verified` is false and
+# anything on the path to real capital must call `require_verified_holidays()` and refuse.
+
+schema_version: 1
+exchange: NSE
+segment: CASH_EQUITY
+timezone: Asia/Kolkata
+
+# The continuous session. Bars are close-labelled and pre-open is excluded from them (§3.5).
+continuous_session:
+  start: "09:15:00"
+  end: "15:30:00"
+
+# Session states within the continuous session (§3.15). Half-open [start, next_start):
+# the opening instant is in-session, and each boundary belongs to the state it begins.
+# LATE_CTS has no fixed end here ON PURPOSE — it runs to the BROKER CUTOFF, which is
+# per broker x product x instrument x side and arrives from the daily capability snapshot.
+# A cutoff constant in this file would be the exact "hard-coded time" §3.15 forbids.
+session_states:
+  OPEN_SHOCK:  "09:15:00"
+  OPEN_DIGEST: "09:30:00"
+  MID:         "10:30:00"
+  LATE_CTS:    "14:30:00"
+
+# The closing auction. A SEPARATE VENUE, not a phase: it overlaps the continuous session in
+# wall-clock (15:15-15:35 against a 15:30 close), so it cannot be one of the states above.
+# F&O-eligible names only. DISABLED as an alpha venue until auction data and broker support
+# are verified (ADR-0004) — flipping this to true requires that ADR to be superseded.
+cas_window:
+  start: "15:15:00"
+  end:   "15:35:00"
+  enabled_as_alpha: false
+
+holidays: []
+holidays_source: null
+holidays_verified_on: null

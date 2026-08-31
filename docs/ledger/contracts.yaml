@@ -174,10 +174,14 @@
   title: "Six session states incl. CAS; eligibility from the daily capability snapshot"
   spec: "IMPLEMENTATION.md#315-session"
   source_refs: ["ADR-0004"]
-  code: "config/calendars"
-  tests: []
-  status: planned
+  code: "python/pips/core/calendar.py"
+  tests: ["tests/unit/core/test_calendar.py"]
+  status: enforced
   owner_milestone: M2
+  # The load-bearing test is test_the_broker_cutoff_is_data_not_a_constant: the same instant
+  # must resolve to LATE_CTS under one broker's cutoff and FLATTEN_ONLY under another. If it
+  # ever stops holding, a square-off time has been baked into the code — the exact
+  # "hard-coded time" §3.15 forbids.
 
 - id: C-DEPLOY-01
   title: "Immutable SHA-tagged images; data/secrets in VM volumes, never baked in"
