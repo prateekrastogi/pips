@@ -53,12 +53,29 @@ def jump_explainer(pit_root: Path) -> JumpExplainer | None:
     actions = CorporateActionMaster(store)
 
     def explain(symbol: str, day: date, previous_close_paise: int, open_paise: int) -> JumpVerdict:
+        # BOTH IDENTIFIER SPACES. pips' bronze is keyed by the DATA VENDOR's code (RELIND)
+        # while the master's `symbol` is the exchange's (RELIANCE), and a broker fill will
+        # carry the exchange one. Asking only for the symbol meant that with 5,851 real
+        # instruments loaded, the seam still reported "RELIND is not in the instrument
+        # master" — and QC could not show it, because a run with no ratio jumps never calls
+        # the explainer at all.
         try:
-            instrument = instruments.resolve_symbol(symbol, on=day)
+            by_vendor = instruments.resolve_vendor_code(symbol, on=day)
+            by_symbol = instruments.resolve_symbol(symbol, on=day)
         except AmbiguousSymbolError as exc:
-            # Two live claims on one symbol. Refusing to guess here is the same refusal the
-            # master makes, carried through to QC instead of being swallowed into a verdict.
+            # Two live claims on one identifier. Refusing to guess here is the same refusal
+            # the master makes, carried through to QC instead of swallowed into a verdict.
             return JumpVerdict(False, f"symbol {symbol!r} is ambiguous on {day}: {exc}")
+
+        if by_vendor is not None and by_symbol is not None and by_vendor != by_symbol:
+            # One string, two securities, by different routes. Taking the first is how one
+            # company's actions get used to explain another's prices.
+            return JumpVerdict(
+                False,
+                f"{symbol!r} is ambiguous on {day.isoformat()}: it is the vendor code of "
+                f"{by_vendor.isin} and the exchange symbol of {by_symbol.isin}",
+            )
+        instrument = by_vendor or by_symbol
         if instrument is None:
             return JumpVerdict(
                 False,

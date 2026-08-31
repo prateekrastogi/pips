@@ -189,3 +189,110 @@ def test_the_symbol_is_resolved_as_of_the_qc_date_not_today(
 
     assert main([str(tmp_path)]) == 0, "the split of the holder ON THE DAY must explain it"
     assert "ratio_jump" not in capsys.readouterr().out
+
+
+# ------------------------------------------- which identifier bronze actually carries ----
+
+
+def seed_real_shaped_instrument(root: Path) -> None:
+    """As the real scrip master records it: vendor code RELIND, exchange symbol RELIANCE."""
+    InstrumentMaster(PitStore(root / "pit")).upsert(
+        Instrument(
+            isin=ISIN,
+            exchange_token="2885",
+            symbol="RELIANCE",
+            name="RELIANCE INDUSTRIES",
+            series="EQ",
+            lot_size=1,
+            tick_size_paise=1,
+            vendor_code="RELIND",
+        ),
+        known_from=D(2026, 1, 1),
+    )
+
+
+def test_a_bronze_vendor_code_resolves_against_the_real_master() -> None:
+    """The bug the live master exposed, and QC could not have shown.
+
+    pips' bronze is keyed by the DATA VENDOR's code — RELIND — while the master's `symbol` is
+    the exchange's, RELIANCE. The explainer asked `resolve_symbol`, so with 5,851 real
+    instruments loaded it still reported *"RELIND is not in the instrument master"*.
+
+    QC never showed it: the run had no ratio jumps, so the explainer was never called and the
+    report said 0 findings either way. Only asking the explainer directly surfaced it.
+
+    The message was at least honest — "an unidentified security, NOT a security with no
+    actions" — which is the distinction that made the bug legible instead of looking like an
+    absence of corporate actions.
+    """
+    import tempfile
+
+    root = Path(tempfile.mkdtemp())
+    seed_real_shaped_instrument(root)
+    explain = jump_explainer(root / "pit")
+    assert explain is not None
+
+    verdict = explain("RELIND", D(2026, 8, 28), 128_540, 64_270)
+    assert verdict is not None
+    assert "not in the instrument master" not in verdict.reason, verdict.reason
+    assert "no known action" in verdict.reason
+
+
+def test_an_exchange_symbol_also_resolves() -> None:
+    # Bronze carries the vendor code today; a broker fill will carry the exchange symbol.
+    # Both must work, or the seam breaks the first time it is used from the other side.
+    import tempfile
+
+    root = Path(tempfile.mkdtemp())
+    seed_real_shaped_instrument(root)
+    explain = jump_explainer(root / "pit")
+    assert explain is not None
+    by_symbol = explain("RELIANCE", D(2026, 8, 28), 128_540, 64_270)
+    assert by_symbol is not None
+    assert "not in the instrument master" not in by_symbol.reason
+
+
+def test_an_identifier_that_resolves_to_two_different_securities_is_refused() -> None:
+    """One string, two instruments, by different routes.
+
+    If a name's vendor code is some other name's exchange symbol, trying both and taking the
+    first is how one company's actions get used to explain another's prices. It is the same
+    refusal `resolve_symbol` already makes for two live claims on one symbol, carried across
+    the two identifier spaces.
+    """
+    import tempfile
+
+    root = Path(tempfile.mkdtemp())
+    master = InstrumentMaster(PitStore(root / "pit"))
+    master.upsert(
+        Instrument(
+            isin=ISIN,
+            exchange_token="1",
+            symbol="ACME",
+            name="A",
+            series="EQ",
+            lot_size=1,
+            tick_size_paise=1,
+            vendor_code="ZZZ",
+        ),
+        known_from=D(2026, 1, 1),
+    )
+    master.upsert(
+        Instrument(
+            isin="INE467B01029",
+            exchange_token="2",
+            symbol="OTHER",
+            name="B",
+            series="EQ",
+            lot_size=1,
+            tick_size_paise=1,
+            vendor_code="ACME",
+        ),
+        known_from=D(2026, 1, 1),
+    )
+    explain = jump_explainer(root / "pit")
+    assert explain is not None
+    verdict = explain("ACME", D(2026, 8, 28), 128_540, 64_270)
+    assert verdict is not None
+    assert not verdict.explained
+    assert "ambiguous" in verdict.reason

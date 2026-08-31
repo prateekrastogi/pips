@@ -265,6 +265,13 @@ class PitStore:
     def as_of(self, table: str, known_on: date, valid_on: date | None = None) -> list[PitRecord]:
         """The table as it was readable on ``known_on``, sorted by key.
 
+        COST, stated rather than left to be discovered the way the append defect was: this is
+        O(keys x records), because each key scans every record for its latest admissible
+        version. On the real instrument master — 5,851 keys, one version each — that is about
+        0.4s, fine for a daily read and not for a per-bar one. If a caller ever needs it in a
+        loop the fix is an index by key, not a cache of the answer.
+
+
         ``valid_on`` defaults to ``known_on``: the overwhelmingly common question is "what did
         the world look like on day D, as we understood it on day D", and making the caller
         spell that out twice invites the two dates drifting apart by accident.
