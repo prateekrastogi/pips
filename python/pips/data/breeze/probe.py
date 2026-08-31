@@ -1,0 +1,118 @@
+"""Breeze feasibility probe  (§6 M3, §3.5, ADR-0001).
+
+Answers the questions §6 M3 asks about the vendor, as **saved artifacts** rather than as
+folklore: the bar-timestamp convention, the true history depth, and the real per-minute rate.
+
+The convention question is the one that can quietly ruin everything downstream. pips labels
+bars by CLOSE and treats them as usable at or after the label. If Breeze labels by OPEN and we
+ingest without normalizing, every bar becomes usable one interval too early -- a one-bar
+lookahead applied uniformly to every backtest, which is the most flattering bug available and
+leaves no trace in any result.
+
+**Ported from SAL-0002** (`intraday be8186d:src/volarb/adapters/breeze/history.py`), which
+carries a fact worth more than the code around it: *`get_historical_data_v2` treats
+`from_date`/`to_date` as IST wall-clock and ignores the trailing `Z`; sending UTC silently
+CLIPS the window.* A full NSE session 09:15->15:30 returns 375 one-minute candles.
+"""
+
+from __future__ import annotations
+
+from datetime import date, time
+from enum import StrEnum
+from typing import Any
+
+__all__ = ["BarLabelling", "infer_bar_labelling", "ist_window", "session_minutes"]
+
+
+class BarLabelling(StrEnum):
+    """Which end of its interval a vendor candle is stamped with."""
+
+    OPEN_LABELLED = "OPEN_LABELLED"
+    CLOSE_LABELLED = "CLOSE_LABELLED"
+    AMBIGUOUS = "AMBIGUOUS"
+
+    @property
+    def intervals_to_add(self) -> int:
+        """Intervals to add on ingest so the bar becomes close-labelled [C-BAR-01].
+
+        ``AMBIGUOUS`` raises rather than returning 0. Zero is a decision -- specifically, the
+        decision that the vendor is already close-labelled -- and making it by default is how
+        an unverified convention becomes a silent lookahead.
+        """
+        if self is BarLabelling.AMBIGUOUS:
+            raise ValueError(
+                "bar labelling is ambiguous — no normalization shift can be justified. "
+                "Re-probe on a full, unhalted session before ingesting anything (§3.5)."
+            )
+        return 1 if self is BarLabelling.OPEN_LABELLED else 0
+
+
+def ist_window(day: date, start: str = "09:15", end: str = "15:30") -> tuple[str, str]:
+    """``(from_date, to_date)`` for one NSE session, as IST wall-clock.
+
+    From SAL-0002, verified on live data: Breeze reads these as IST and ignores the trailing
+    ``Z``. Passing UTC silently clips the window rather than erroring, so the mistake shows up
+    as missing bars rather than as a failure.
+    """
+    iso = day.isoformat()
+    return f"{iso}T{start}:00.000Z", f"{iso}T{end}:00.000Z"
+
+
+def session_minutes(session_open: time, session_close: time) -> int:
+    """Minutes in the continuous session -- 375 for a full NSE day."""
+    return (session_close.hour * 60 + session_close.minute) - (
+        session_open.hour * 60 + session_open.minute
+    )
+
+
+def infer_bar_labelling(
+    first: time | None,
+    last: time | None,
+    count: int,
+    session_open: time,
+    session_close: time,
+    interval_minutes: int = 1,
+) -> BarLabelling:
+    """Decide the convention from a full session's candle endpoints and count.
+
+    Open-labelled: the first candle carries the session open and the last carries
+    ``close - interval``. Close-labelled: the first carries ``open + interval`` and the last
+    carries the close. Both shapes yield the same COUNT, so the endpoints decide and the count
+    only corroborates -- if the two disagree, neither is trusted.
+    """
+    if first is None or last is None or count == 0:
+        return BarLabelling.AMBIGUOUS
+
+    expected = session_minutes(session_open, session_close) // interval_minutes
+    if count != expected:
+        # A partial session, a halt, or a clipped window. Resolving it by picking the likelier
+        # convention is exactly the guess this function exists to refuse.
+        return BarLabelling.AMBIGUOUS
+
+    open_minute = session_open.hour * 60 + session_open.minute
+    close_minute = session_close.hour * 60 + session_close.minute
+    first_minute = first.hour * 60 + first.minute
+    last_minute = last.hour * 60 + last.minute
+
+    if first_minute == open_minute and last_minute == close_minute - interval_minutes:
+        return BarLabelling.OPEN_LABELLED
+    if first_minute == open_minute + interval_minutes and last_minute == close_minute:
+        return BarLabelling.CLOSE_LABELLED
+    return BarLabelling.AMBIGUOUS
+
+
+def summarise_candles(payload: dict[str, Any]) -> dict[str, Any]:
+    """Endpoints, count and a sample from a ``get_historical_data_v2`` reply.
+
+    Deliberately returns SHAPE, not data: this feeds a committed feasibility artifact, and
+    market data belongs on the VM (rule 14), not in the repository.
+    """
+    rows = payload.get("Success") or payload.get("data") or []
+    stamps = [str(r.get("datetime", "")) for r in rows if r.get("datetime")]
+    return {
+        "count": len(rows),
+        "first": stamps[0] if stamps else None,
+        "last": stamps[-1] if stamps else None,
+        "second": stamps[1] if len(stamps) > 1 else None,
+        "fields": sorted(rows[0].keys()) if rows else [],
+    }
