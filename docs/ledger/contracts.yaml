@@ -23,17 +23,28 @@
   title: "AlphaSpec pre-registration object (H, I_t, T_h, φ_θ, C, E, N, F)"
   spec: "IMPLEMENTATION.md#32-alphaspec"
   source_refs: ["reference/alphaforge Part II"]
-  code: "schemas/alpha_spec"
-  tests: []
-  status: planned
+  code: "python/pips/alphas/spec.py"
+  tests:
+    - "tests/unit/test_alpha_spec.py::test_a_spec_without_falsifiers_is_refused"
+    - "tests/unit/test_alpha_spec.py::test_a_spec_without_null_models_is_refused"
+    - "tests/unit/test_alpha_spec.py::test_a_falsifier_must_state_a_condition_not_a_sentiment"
+    - "tests/unit/test_alpha_spec.py::test_a_t2_claim_on_t1_data_is_refused"
+  status: enforced
   owner_milestone: M12
+  # Rule 5 is enforced AT ENTRY, not reviewed later: a spec without null models or without a
+  # written falsifier does not validate, and a "falsifier" naming no perturbation and no
+  # outcome ("looks bad") is refused too — it could not be evaluated at the only time it
+  # would matter. A01 is the first pre-registration; A02-A08 and A12 follow in M12.
 
 - id: C-FCST-01
   title: "Forecast contract: comparable economics independent of order logic"
   spec: "IMPLEMENTATION.md#33-forecast-contract"
-  code: "schemas/forecast"
-  tests: []
-  status: planned
+  code: "python/pips/alphas/forecast.py"
+  tests:
+    - "tests/unit/test_alpha_spec.py::test_the_trade_gate_needs_edge_above_stressed_cost_plus_estimation_error"
+    - "tests/unit/test_alpha_spec.py::test_a_forecast_that_expires_before_it_is_made_is_refused"
+    - "tests/unit/test_alpha_spec.py::test_a_forecast_flagged_invalid_is_never_tradeable"
+  status: enforced
   owner_milestone: M12
 
 - id: C-DATA-01

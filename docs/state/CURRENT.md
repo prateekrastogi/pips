@@ -3,6 +3,12 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M12 alpha wave 1 — STARTED.** The contracts are `enforced`: `[C-SPEC-01]` refuses a spec
+without null models or a written falsifier (rule 5, at entry), `[C-FCST-01]` carries the
+two-term trade gate. A01 is pre-registered with the reference's own falsifiers and its compute
+plugin passes the neutralization test. `make s1-smoke` runs the funnel end to end. Remaining
+for M12: A02–A08 and A12 as AlphaSpecs.
+
 **M10 vectorized engine (F0) — DONE.** Three-day toy case reconciles to the paisa
 (gross 3,000,000 · cost 10,644 · net 2,989,356), the accounting identity holds by
 construction, and a peeking signal dies *inside* the engine. `[C-FILL-01]` is now `building`:
@@ -39,8 +45,13 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 78 files · mypy --strict 78 files · 332 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (14/3/9)
+  ruff 86 files · mypy --strict 86 files · 360 pytest · clippy clean (21 crates) ·
+  cargo test ok · determinism bit-identical · ledger-check 26 rows (12/3/11)
+
+make s1-smoke -> the S1 funnel ran end to end on fixtures
+  1875 bars · 3708 forecasts · rank_ic 0.0063 · p 0.7114 (correctly does NOT promote)
+  harness_self_test OK (shuffled mean |IC| 0.0138 < bound 0.0821)
+  — an IC of 0.006 on a seeded random walk is the RIGHT answer: there is nothing there.
 ```
 
 ## Next 3 actions
@@ -50,10 +61,10 @@ make ci -> ci: green
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **M12 alpha wave 1 (T1 core)** — A01–A08 + A12 as AlphaSpecs `[C-SPEC-01]` with written
-   falsifiers and shuffled-future tests, then **M13's S1 runner**. Every piece they need is
-   now in place: the as-of view, the canary, the cost model, the registry, and an engine that
-   can score a signal to the paisa. Still no credentials required.
+3. **Finish M12** — A02–A08 and A12 as AlphaSpecs, each with the reference card's own
+   falsifiers and a compute plugin whose mechanism claim is tested the way A01's
+   neutralization is. Then **M13's S1 runner** (BH-FDR within family×universe, null-search
+   calibration). Still no credentials required.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private

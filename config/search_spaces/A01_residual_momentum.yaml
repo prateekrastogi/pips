@@ -1,0 +1,85 @@
+# A01 — Cross-sectional residual momentum  [C-SPEC-01] (§3.2, reference A-catalogue A01).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are copied from the
+# reference's own A01 card, not invented afterwards — which is the entire point of rule 5.
+
+id: A01
+version: "1.0.0"
+
+hypothesis: >
+  Information diffuses at different speeds across stocks. The claim is IDIOSYNCRATIC
+  continuation after removing contemporaneously estimable market and sector moves — not raw
+  winner-chasing. Who is slow: participants who update on a stock only after the common move
+  is already priced. If the effect survives only in raw returns and dies under
+  neutralization, the mechanism claimed here is absent and the alpha is rejected.
+
+information_set:
+  - "close_paise @ bar close label (usable at/after the label, [C-BAR-01])"
+  - "volume @ bar close label"
+  - "cross-sectional peer returns @ same bar close, eligible PIT universe only"
+
+target:
+  horizon_minutes: [15, 120]
+  price_convention: "close-to-close on close-labelled bars"
+  side: "both"
+  quantity: "expected relative return, ranked cross-sectionally"
+
+feature_dag:
+  - node: residual_return
+    op: "return minus contemporaneous cross-sectional factor projection"
+    warmup_bars: 120
+    missingness: "drop the bar; never forward-fill a return"
+  - node: residual_momentum
+    op: "rolling sum of residual return over L, scaled by rolling residual sigma over V"
+    warmup_bars: 120
+    missingness: "insufficient warmup => no forecast, not a zero"
+  - node: score
+    op: "cross-sectional robust z over the eligible PIT universe"
+    warmup_bars: 0
+    missingness: "a name missing at t is absent from the cross-section, not imputed"
+
+parameter_domain:
+  residual_lookback_m: [3, 120]
+  scale_window_m: [10, 120]
+  beta_history_sessions: [20, 120]
+  hold_minutes: [15, 120]
+  skip_bars: [0, 3]
+  ridge_log_grid: [-6, 2]
+
+fit_protocol: >
+  Betas estimated by rolling WLS on observations ending at t only — never centred, never
+  full-sample. Ridge selected on inner folds only (M15). Nothing is fitted on the outer fold,
+  and no parameter is chosen by looking at test-period P&L.
+
+null_models:
+  - "zero forecast"
+  - "naive sign of raw (non-residualized) return — isolates the neutralization claim"
+  - "cross-sectional rank of raw return — the simpler parent this must beat"
+
+# Copied from the reference's A01 card. Each names a perturbation AND an outcome, so M16's
+# stress battery can evaluate them mechanically rather than by argument.
+falsifiers:
+  - "Reject if performance disappears after sector neutralization"
+  - "Reject if performance disappears under a one-bar execution delay"
+  - "Reject if performance disappears under beta-window perturbation"
+  - "Reject if performance disappears after removal of the best month"
+  - "Require monotone rank-IC across the horizon grid"
+  - "Require stable cross-sectional breadth; reject if the edge concentrates in few names"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A01 — cross-sectional residual momentum [R01][R04]"
+  - "IMPLEMENTATION.md §5 — T1 launch surface"

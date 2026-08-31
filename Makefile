@@ -67,8 +67,8 @@ refs-extract: ## Cache pandoc extractions of docs/reference/*.docx (needs pandoc
 qc: ## Data quality control over the silver zone (M5)
 	@echo "qc: not implemented until M5"; exit 1
 
-s1-smoke: ## Stage-1 screening smoke run on fixtures (M13)
-	@echo "s1-smoke: not implemented until M13"; exit 1
+s1-smoke: ## Stage-1 screening smoke run on fixtures (§6 M12 Verify)
+	$(PY) -m pips.cli s1-smoke fixtures
 
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
 	@echo "backtest-smoke: not implemented until M14"; exit 1
