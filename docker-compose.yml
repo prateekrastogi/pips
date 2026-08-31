@@ -20,6 +20,10 @@ services:
       dockerfile: docker/research.Dockerfile
       target: research
     image: pips/research:${PIPS_SHA:-current}
+    # The Breeze DATA-plane credentials, per ADR-0011. env_file is a runtime read, so this
+    # does not put the token in the image — .dockerignore still excludes it and a test pins
+    # that. Order-plane credentials are NOT here (rule 7: two planes, two credentials).
+    env_file: [.env]
     environment:
       PIPS_ENV: ${PIPS_ENV:-dev}
       PIPS_DATA_ROOT: /srv/pips
@@ -46,7 +50,10 @@ services:
       dockerfile: docker/reader.Dockerfile
       target: reader
     image: pips/reader:${PIPS_SHA:-current}
-    env_file: [/srv/pips/secrets/breeze.env]   # data-plane credentials ONLY (rule 7)
+    # Data-plane credentials ONLY (rule 7). Since ADR-0011 these live in the repo's tracked
+    # .env rather than a VM-side file; the order plane keeps its own, VM-side, and the two
+    # never meet in one process.
+    env_file: [.env]
     volumes:
       - pips-data:/srv/pips
       - pips-sock:/run/pips

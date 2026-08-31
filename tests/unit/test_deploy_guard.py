@@ -14,6 +14,7 @@ blocks rather than waves through.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -117,7 +118,9 @@ def test_an_unverified_holiday_list_errs_toward_deferring() -> None:
 # ------------------------------------ the rail's service set must be real ---------------
 
 
-def test_every_service_the_rail_promotes_exists_in_the_compose_file() -> None:
+def test_every_service_the_rail_promotes_exists_in_the_compose_file(
+    strip_comments: Callable[[str], str],
+) -> None:
     """The rail must not discover a missing service mid-promotion.
 
     It did exactly that on its first real deploy: it promoted `research-runner`, then failed

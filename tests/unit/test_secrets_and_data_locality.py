@@ -11,6 +11,7 @@ must NOT be in the repo.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -87,3 +88,51 @@ def test_compose_points_the_data_root_at_a_vm_volume() -> None:
     assert research["environment"]["PIPS_DATA_ROOT"] == "/srv/pips"
     mounts = [m for m in research["volumes"] if m.startswith("pips-data:")]
     assert mounts == ["pips-data:/srv/pips"], "the data root must be a named volume, not a bind"
+
+
+def test_data_plane_services_load_the_tracked_env_file() -> None:
+    """ADR-0011 put the Breeze data-plane token in the repo's `.env`; compose must read it.
+
+    Found by running the first real campaign: the container raised KeyError('BREEZE_API_KEY')
+    because compose was still pointing the data plane at the VM-side secrets file the ADR had
+    superseded. The decision was recorded in docs and never wired, which is the failure mode a
+    ledger exists to prevent and this test now covers.
+
+    `env_file` is a RUNTIME read, not a build input — so this does not weaken the rule that
+    `.env` never enters an image, which the tests above still enforce.
+    """
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    for name in ("research", "breeze-reader"):
+        spec = compose["services"][name]
+        env_files = spec.get("env_file") or []
+        files = [env_files] if isinstance(env_files, str) else list(env_files)
+        assert any(str(f).endswith(".env") and not str(f).startswith("/srv") for f in files), (
+            f"{name} must load the repo's tracked .env (ADR-0011); it currently has {files}"
+        )
+
+
+def test_order_plane_credentials_are_not_in_the_tracked_env(
+    strip_comments: Callable[[str], str],
+) -> None:
+    # ADR-0011 relaxed rule 14 for the DATA plane only. Rule 7 keeps the planes in separate
+    # processes with separate credentials, so a broker secret appearing here would quietly
+    # merge them — and put an order-plane credential in git, which the ADR did not authorise.
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        # Inside the research image, and that is CORRECT: .dockerignore excludes .env so the
+        # token never reaches a container image — the half of rule 14 ADR-0011 deliberately
+        # kept. Unlike .gitignore, which was added to the build context when a guard needed
+        # it, .env must stay out.
+        #
+        # So the check inverts rather than skipping: absence here must be CAUSED by the
+        # exclusion, not by the file having quietly vanished. A plain skip would make this
+        # test vacuous in CI, which is the one place it runs unattended.
+        assert ".env" in strip_comments((ROOT / ".dockerignore").read_text(encoding="utf-8")), (
+            ".env is absent but .dockerignore does not exclude it — it has gone missing for "
+            "some other reason, and this guard would silently stop checking anything"
+        )
+        return
+
+    env = strip_comments(env_path.read_text(encoding="utf-8"))
+    for forbidden in ("FLATTRADE_API_KEY=", "FLATTRADE_API_SECRET=", "PIPS_LIVE=1"):
+        assert forbidden not in env, f"{forbidden} must not appear in the tracked .env"
