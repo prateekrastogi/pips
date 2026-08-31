@@ -21,9 +21,16 @@ DATA_ZONES = ("bronze", "silver", "gold", "quarantine", "snapshots", "universes"
 
 
 def _ignore_lines(name: str) -> list[str]:
+    path = ROOT / name
+    # An explicit statement of the requirement beats a bare FileNotFoundError: this file
+    # must be in the docker build context, or the guard silently cannot run where it matters.
+    assert path.exists(), (
+        f"{name} is missing from {ROOT} — it is a policy file these tests assert against, "
+        "so it must not be excluded from the image build context (.dockerignore)"
+    )
     return [
         line.strip()
-        for line in (ROOT / name).read_text(encoding="utf-8").splitlines()
+        for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
 

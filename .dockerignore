@@ -4,7 +4,11 @@
 # the branch was written test-first, so the research/CI image must carry it or the gate goes
 # vacuous. The engine and reader images never receive it — their Dockerfiles COPY only
 # Cargo manifests and rust/, never `COPY . .` — so no history reaches a production image.
-.gitignore
+#
+# .gitignore is included for the same class of reason: it is a POLICY file that
+# tests/unit/test_secrets_and_data_locality.py asserts against (ADR-0011 tracks .env, and a
+# later cleanup must not silently revert that). Excluding it made the guard pass locally and
+# error inside the image, which is the exact shape of failure a merge gate exists to catch.
 .venv
 target/
 **/__pycache__/
