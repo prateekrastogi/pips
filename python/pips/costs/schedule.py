@@ -12,43 +12,26 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from pydantic import field_validator
-
-from pips.core.config import PipsConfig, load_yaml
+from pips.core.config import DecimalFromStr, PipsConfig, load_yaml
 
 __all__ = ["BrokerSchedule", "CostSchedule", "StatutoryRates", "load_cost_schedule"]
 
 
-class _DecimalRates(PipsConfig):
-    """Base for models whose rates are written as STRINGS in YAML.
-
-    Quoted on purpose: a YAML float is binary and already lossy before it reaches us, so
-    ``0.0000297`` would arrive as something that is not 0.0000297 and every golden would miss
-    by a hair nobody could explain. PipsConfig is strict (no silent coercion at a schema
-    boundary), so the string -> Decimal step is made explicit here rather than by relaxing it.
-    """
-
-    @field_validator("*", mode="before")
-    @classmethod
-    def _decimal_from_string(cls, value: object) -> object:
-        return Decimal(value) if isinstance(value, str) else value
-
-
-class StatutoryRates(_DecimalRates):
+class StatutoryRates(PipsConfig):
     """Rates that apply to every broker: they are the state's, not the venue's."""
 
-    stt_sell_rate: Decimal
-    exchange_txn_rate: Decimal
-    ipft_rate: Decimal
-    sebi_turnover_rate: Decimal
-    stamp_buy_rate: Decimal
-    gst_rate: Decimal
+    stt_sell_rate: DecimalFromStr
+    exchange_txn_rate: DecimalFromStr
+    ipft_rate: DecimalFromStr
+    sebi_turnover_rate: DecimalFromStr
+    stamp_buy_rate: DecimalFromStr
+    gst_rate: DecimalFromStr
 
 
-class BrokerSchedule(_DecimalRates):
+class BrokerSchedule(PipsConfig):
     """One broker's brokerage rule: a rate, optionally capped per order."""
 
-    brokerage_rate: Decimal
+    brokerage_rate: DecimalFromStr
     brokerage_cap_paise: int
 
     def brokerage_for(self, notional_paise: int) -> Decimal:

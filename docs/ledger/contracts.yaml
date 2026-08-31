@@ -108,10 +108,20 @@
 - id: C-COST-04
   title: "Impact κ(q/ADV)^ψ + spread·aggression + latency + adverse selection terms"
   spec: "IMPLEMENTATION.md#37-cost-model"
-  code: "python/pips/costs/impact.py"
-  tests: []
-  status: planned
+  code: "python/pips/costs/model.py"
+  tests:
+    - "tests/unit/costs/test_execution_costs.py::test_cost_rises_with_aggression"
+    - "tests/unit/costs/test_execution_costs.py::test_the_decomposition_is_additive_and_complete"
+    - "tests/unit/costs/test_execution_costs.py::test_impact_follows_the_square_root_prior"
+    - "tests/unit/costs/test_execution_costs.py::test_corwin_schultz_is_absent_from_the_cost_path"
+  status: enforced
   owner_milestone: M9
+  # ENFORCED means the STRUCTURE is enforced, not that the constants are measured. kappa, the
+  # spread table, latency and adverse selection are conservative placeholders declaring
+  # themselves uncalibrated; require_calibrated() refuses any path to real capital. What the
+  # tests pin is what reference §10.2-§10.3 actually specifies: the terms are additive, cost
+  # rises with aggression (or the turnover optimiser has no interior optimum), and impact
+  # follows the square-root prior. Calibrated at M14/M25.
 
 - id: C-FILL-01
   title: "Fill-fidelity tiers F0–F3; every result stamped; cross-tier comparison refused"

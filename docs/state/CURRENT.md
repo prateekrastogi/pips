@@ -3,10 +3,10 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
-**M9 cost model — statutory stack DONE** (`[C-COST-01/02/03]` all `enforced`; all five §3.7
-goldens reproduce exactly). Taken out of §6 order because M4 is blocked on the Breeze token and
-M9 needs no data at all. Remaining for M9: `[C-COST-04]` — impact, spread·aggression, latency
-and adverse selection, which has its own donors (SAL-0013, SAL-0014).
+**M9 cost model — DONE.** All four `[C-COST-*]` rows are `enforced`: the statutory stack
+reproduces all five §3.7 goldens exactly, and the execution-friction terms enforce the
+*structure* reference §10.2-§10.3 specifies (additive, monotone in aggression, square-root
+impact) with every constant declaring itself an uncalibrated placeholder.
 
 **M3.5 arb-vm deploy rail — built and VM-bootstrapped; end-to-end verify blocked on two human
 items.** arb-vm now has Docker 29.7.2 + Compose v5.5.0 running, `/srv/pips` with all data
@@ -30,8 +30,8 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 68 files · mypy --strict 68 files · 271 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (17/2/7)
+  ruff 71 files · mypy --strict 71 files · 283 pytest · clippy clean (21 crates) ·
+  cargo test ok · determinism bit-identical · ledger-check 26 rows (16/2/8)
 ```
 
 ## Next 3 actions
@@ -41,10 +41,10 @@ make ci -> ci: green
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **`[C-COST-04]`** — the non-statutory cost terms (impact κ(q/ADV)^ψ, spread·aggression,
-   latency, adverse selection), porting SAL-0013 (`spread_impact.py`) and SAL-0014
-   (Corwin–Schultz with its rejection rules). Needs no credentials, so it stays available
-   while M4 is blocked.
+3. **M10 vectorized engine (F0/F1-lite)** or **M11 registry** `[C-REG-01]` — both are pure
+   engineering on fixtures and need no credentials, so the loop keeps moving while M4 is
+   blocked. M11 is the better next step: the append-only registry and the M/M_erank
+   multiplicity ledger are what make every later trial count (rule 4).
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private

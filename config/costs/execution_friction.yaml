@@ -1,0 +1,58 @@
+# Non-statutory execution friction [C-COST-04] (§3.7, reference §10.2-§10.3).
+#
+# EVERY NUMBER BELOW IS A CONSERVATIVE PLACEHOLDER, and the file says so in a field the code
+# reads. The reference is explicit about why that is the right shape: "where a constant's true
+# value is uncertain (fill intensities, impact exponents, adverse selection), the document
+# specifies the estimator and the refit schedule rather than a number — that is the intended
+# meaning of 'no voodoo'." So this file carries estimators and refit schedules, plus starting
+# values chosen to be HIGHER than any plausible measured value for the launch universe.
+#
+# THE DIRECTION OF CONSERVATISM IS NOT SYMMETRIC. An overstated cost kills a live edge, which
+# costs opportunity. An understated cost makes a DEAD edge look alive, which costs capital and
+# is the single most expensive error this project can make. So placeholders overstate.
+#
+# Calibrated at M14 (F1/F2 fills) and finalised at M25 against real TCA and contract notes.
+# Until then `calibrated: false`, and require_calibrated() refuses any path to real capital.
+
+schema_version: 1
+market: NSE
+segment: CASH_EQUITY
+calibrated: false
+conservative_direction: OVERSTATE
+source: >
+  Structure from IMPLEMENTATION.md §3.7 and the Quantitative Foundations reference §10.2-§10.3.
+  Values are conservative placeholders, NOT measurements.
+refit_schedule: >
+  impact (kappa, psi): quarterly log-log regression on our OWN child orders — ALL orders,
+  filled and crossed. Conditioning on fills only selects against impact and biases kappa DOWN
+  (reference §10.2), which is the wrong direction for a cost model. spread: measured from the
+  forward quote archive once M4's websocket capture has run. adverse selection: from the
+  post-fill mark-out curve at M25.
+
+impact:
+  # slippage_bps = kappa * (q / ADV_interval)^psi
+  psi: "0.5"                 # the stated prior (square-root family, reference §10.2)
+  psi_source: "Prior from reference §10.2; refit quarterly, not assumed forever"
+  kappa_bps: "25.0"          # PLACEHOLDER, deliberately high
+  kappa_source: "CONSERVATIVE PLACEHOLDER — no own-order data exists yet to regress on"
+
+# Half-spread paid, in bps, by session state. A single average would flatter open-session
+# strategies and penalise mid-session ones, which is why §3.7 asks for a table.
+# All PLACEHOLDERS, ordered by the shape everyone agrees on (open widest, middle tightest)
+# and levelled well above liquid NSE large-cap reality so they cannot understate.
+half_spread_bps:
+  OPEN_SHOCK: "12.0"
+  OPEN_DIGEST: "7.0"
+  MID: "4.0"
+  LATE_CTS: "6.0"
+
+# Timing/latency drift: adverse price movement between decision and fill. Measured directly at
+# M25 from (decision_ts, arrival_ts, fill_ts) — the shortfall decomposition is exact given
+# timestamps (reference §10.3), so this placeholder is temporary by construction.
+latency_bps: "1.5"
+latency_source: "CONSERVATIVE PLACEHOLDER — exact once M25 has decision/arrival/fill stamps"
+
+# Adverse selection: the toll for being filled by someone better informed. Only measurable
+# from post-fill mark-outs, which need the forward quote archive (T2).
+adverse_selection_bps: "2.0"
+adverse_selection_source: "CONSERVATIVE PLACEHOLDER — needs post-fill mark-outs (T2, M25)"

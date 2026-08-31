@@ -218,12 +218,17 @@
   ref: main
   found_at_head: true
   size_bytes: 15896
-  decision: PORT
+  decision: SKIP
   covers_needs: ["M9 cost model"]
   notes: >
-    Complements SAL-0006: that donor has the statutory stack, this one the spread and impact
-    terms [C-COST-04]. Test suites at HEAD are substantial (tests/cost/test_invariants.py
-    26409b, test_spread_impact.py 11120b, test_friction_stress.py 10678b).
+    DECISION CHANGED PORT -> SKIP after reading it (M9, 2026-08-31). Its impact model is
+    anchored to a dollar rebalance notional for a crypto book, and its useful content is
+    CALIBRATION technique against data pips does not have. Meanwhile [C-COST-04]'s functional
+    form is fully specified without it: §3.7 gives kappa*(q/ADV_interval)^psi and reference
+    §10.2 gives psi ~ 0.5 as the prior plus the refit procedure. Porting a calibrated constant
+    from another venue would have been worse than a declared placeholder, because it would
+    look measured. One thing WAS taken as knowledge rather than code: its amihud_ratio shape
+    corroborates SAL-0015, which remains a PORT for M7's liquidity score.
 
 - id: SAL-0014
   component: "Corwin-Schultz spread estimator + rejection rules"
@@ -233,12 +238,20 @@
   ref: main
   found_at_head: true
   size_bytes: 16439
-  decision: PORT
+  decision: SKIP
   covers_needs: ["M9 cost model"]
   notes: >
-    A high-low spread estimator with its rejection conditions already worked out — directly
-    useful for the session-dependent spread table when only OHLC is available (T1, before
-    the quote archive exists). The rejection rules matter more than the estimator.
+    DECISION CHANGED PORT -> SKIP after reading it (M9, 2026-08-31). This is not an estimator
+    to adopt; it is a REJECT MODULE. The donor measured Corwin-Schultz on 1-minute-aggregated
+    daily OHLC producing a spread an ORDER OF MAGNITUDE above their measured anchor (~135bp
+    against a 13bp round-trip anchor), confined the runnable estimator to the reject module so
+    no cost-path module could import it, and added an AST scan treating any reference — even
+    from a test — as a reintroduction. The original note here guessed "the rejection rules
+    matter more than the estimator"; that was right, and more strongly than it knew. What pips
+    took is the negative result and the guard shape, not the code:
+    tests/unit/costs/test_execution_costs.py::test_corwin_schultz_is_absent_from_the_cost_path
+    carries the scan forward. The T1 spread term is a session-dependent table of conservative
+    placeholders instead, measured for real once M4's websocket capture exists.
 
 - id: SAL-0015
   component: "Amihud illiquidity calibration"
