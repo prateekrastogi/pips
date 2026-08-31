@@ -65,7 +65,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 134 files · mypy --strict 134 files · 710 pytest · clippy clean · cargo test ok
+  ruff 134 files · mypy --strict 134 files · 713 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -96,6 +96,8 @@ corporate-action mutation run — 6 of 6 killed, including both donor bugs repro
   ratio sanity check removed
 QC runner wiring — 3 of 3 killed: adjacency guard, finding discarded, previous close never kept
 QC on real arb-vm data — control 0 findings; injected halving -> ratio_jump quarantined
+  coverage now reported: 6 records, comparisons made 4, skipped 2 (each symbol's first
+  session has no predecessor) — "0 findings" finally arrives with its own scope attached
 verdict-seam mutation run — 3 of 4 killed, 1 SURVIVED:
   resolve_symbol(on=day) -> on=date.max killed nothing — the reused-symbol splice
   reintroduced at the JOIN. Now covered; mutation caught.
@@ -129,10 +131,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **NSE holiday list** — `holidays_verified: false`, so every session-state decision rests on
-   an empty list and `is_trading_day` calls every weekday a trading day. That now matters
-   directly: QC's overnight-ratio check uses it to tell adjacent sessions from a gap, so a jump
-   across a holiday is compared as if it were overnight.
+3. **NSE holiday list** — still `holidays_verified: false`, and it needs a source I have not
+   been able to fetch. Its consequence is at least no longer silent: QC now warns that an
+   unverified list makes holiday-separated sessions look non-adjacent, and reports how many
+   overnight comparisons it actually made versus skipped.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
