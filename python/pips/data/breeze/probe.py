@@ -19,9 +19,16 @@ from __future__ import annotations
 
 from datetime import date, time
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
-__all__ = ["BarLabelling", "infer_bar_labelling", "ist_window", "session_minutes"]
+__all__ = [
+    "BREEZE_BAR_LABELLING",
+    "BarLabelling",
+    "infer_bar_labelling",
+    "ist_window",
+    "session_minutes",
+    "summarise_candles",
+]
 
 
 class BarLabelling(StrEnum):
@@ -66,39 +73,40 @@ def session_minutes(session_open: time, session_close: time) -> int:
 
 
 def infer_bar_labelling(
-    first: time | None,
-    last: time | None,
-    count: int,
+    first_bar_label: time,
     session_open: time,
-    session_close: time,
+    carries_day_open: bool,
     interval_minutes: int = 1,
 ) -> BarLabelling:
-    """Decide the convention from a full session's candle endpoints and count.
+    """Decide the convention from the label of the bar that carries the day's opening price.
 
-    Open-labelled: the first candle carries the session open and the last carries
-    ``close - interval``. Close-labelled: the first carries ``open + interval`` and the last
-    carries the close. Both shapes yield the same COUNT, so the endpoints decide and the count
-    only corroborates -- if the two disagree, neither is trusted.
+    **Counting candles cannot answer this.** A full NSE session returned 370 candles, not 375,
+    because minutes with no trades are omitted rather than zero-filled; other days returned
+    376. Endpoints are no better: 15:30 is present on some days and absent on others, so it is
+    a traded minute rather than a structural boundary.
+
+    What does decide it is a price identity. The day's opening price belongs to exactly one
+    one-minute bar, and that bar's label gives the convention directly. ``carries_day_open``
+    is that identity, established by the caller against the daily bar; without it a label
+    proves nothing, because a widened window returns pre-open prints too.
     """
-    if first is None or last is None or count == 0:
+    if not carries_day_open:
         return BarLabelling.AMBIGUOUS
 
-    expected = session_minutes(session_open, session_close) // interval_minutes
-    if count != expected:
-        # A partial session, a halt, or a clipped window. Resolving it by picking the likelier
-        # convention is exactly the guess this function exists to refuse.
-        return BarLabelling.AMBIGUOUS
-
+    label_minute = first_bar_label.hour * 60 + first_bar_label.minute
     open_minute = session_open.hour * 60 + session_open.minute
-    close_minute = session_close.hour * 60 + session_close.minute
-    first_minute = first.hour * 60 + first.minute
-    last_minute = last.hour * 60 + last.minute
-
-    if first_minute == open_minute and last_minute == close_minute - interval_minutes:
+    if label_minute == open_minute:
         return BarLabelling.OPEN_LABELLED
-    if first_minute == open_minute + interval_minutes and last_minute == close_minute:
+    if label_minute == open_minute + interval_minutes:
         return BarLabelling.CLOSE_LABELLED
     return BarLabelling.AMBIGUOUS
+
+
+# Probed live on 2026-08-28 (RELIND, NSE cash): the day's open 1285.4 matched the 09:15 bar's
+# open, and the day's close 1287.0 matched the 15:29 bar's close. Breeze stamps a bar with the
+# minute it STARTS. pips labels by close [C-BAR-01], so ingest adds one interval. See
+# docs/reports/feasibility/breeze-bar-convention.md and ADR-0001.
+BREEZE_BAR_LABELLING: Final = BarLabelling.OPEN_LABELLED
 
 
 def summarise_candles(payload: dict[str, Any]) -> dict[str, Any]:

@@ -3,6 +3,12 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M3 feasibility probe — DONE.** Breeze's bar convention measured, not assumed: it is
+**OPEN-labelled**, so ingest adds one interval `[C-BAR-01]`. ADR-0001 updated with the
+evidence. Also found: untraded minutes are OMITTED not zero-filled, the vendor returns
+pre-open and post-close bars if the window allows, and 1-minute history goes back at least
+10 years. See `docs/reports/feasibility/breeze-bar-convention.md`.
+
 **M3.5 arb-vm deploy rail — DONE.** `[C-DEPLOY-01]` and `[G-DEPLOY-01]` both `enforced`, and
 all three Verify clauses demonstrated live (see `docs/reports/deploy-rail-demo.md`).
 **All three human items are cleared**: deploy key added, Breeze credentials working, main
