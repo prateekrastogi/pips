@@ -3,6 +3,10 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M4 Breeze ingest — code complete.** Fetch path, budgeter, backfill orchestrator and forward
+WS capture all landed and tested without a network. Remaining before M4 closes: a first real
+backfill run on arb-vm, which is a data-collection campaign rather than code.
+
 **M4 Breeze ingest — backfill DONE.** Fetch path, resumable budgeter and the backfill
 orchestrator are all ported and tested (cassettes and fakes; CI makes no live calls), with the
 runbook at `ops/runbooks/backfill.md`. Remaining for M4: forward WS capture, which has no donor

@@ -435,10 +435,13 @@
     method: "path sweep across all refs + git grep -i over every reachable commit"
   notes: >
     The one path hit in intraday is `logs/websocketLogs.log` — a runtime LOG, not capture
-    code, from a commit that later untracked Breeze runtime logs (550c3f0). It is still worth
-    reading once at M4: it is a real record of Breeze WS traffic shapes from this account.
-    The capture service itself is written from scratch. This is M4's "forward WS capture from
-    day one" requirement and it has no donor.
+    code, from a commit that later untracked Breeze runtime logs (550c3f0).
+    CORRECTED at M4: that log is ABSENT at every commit referencing it (checked with
+    `git cat-file -s` across all refs; the sibling apiLogs.log likewise). It was a tracked
+    empty path, never content, so it carries no traffic shapes either. The original note here
+    said it was "worth reading once at M4" — it is not, and saying so saves the next reader
+    the same five minutes. The NONE_FOUND is total.
+    Written from scratch at M4: python/pips/data/breeze/capture.py.
 
 - id: SAL-0026
   component: "NSE instrument master (token/symbol change history)"
