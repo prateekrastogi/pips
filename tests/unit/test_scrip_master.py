@@ -162,3 +162,21 @@ def test_the_required_columns_are_declared() -> None:
     assert "ISINCode" in REQUIRED_COLUMNS
     assert "ExchangeCode" in REQUIRED_COLUMNS
     assert "ShortName" in REQUIRED_COLUMNS
+
+
+def test_a_rejection_reason_names_what_was_actually_wrong() -> None:
+    """ "1 validation error for Instrument" is not a reason.
+
+    The reason field exists so a reader can decide whether a rejection is a vendor quirk to
+    accept or an ingest bug to fix, and the bare pydantic summary supports neither. The real
+    file made this concrete: it rejected `INEl48I07QA5` — an ISIN with a lowercase `l` where a
+    `1` belongs, a genuine typo in the vendor's data — and reported only that something failed.
+
+    Catching it at all is the uppercase rule doing its job: accepted, that string would have
+    become a second identity for a security that already has one.
+    """
+    result = parse(row(ISINCode="INEl48I07QA5"))
+    reason = result.rejected[0].reason  # type: ignore[attr-defined]
+    assert "isin" in reason.lower()
+    assert "INEl48I07QA5" in reason
+    assert "1 validation error" not in reason

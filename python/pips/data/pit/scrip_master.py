@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Final
 
+from pydantic import ValidationError
+
 from pips.core.money import rupees_to_paise
 from pips.data.pit.instruments import Instrument
 
@@ -123,6 +125,14 @@ def parse_nse_scrip_master(text: str) -> ParseResult:
                     vendor_code=vendor_code,
                 )
             )
+        except ValidationError as exc:
+            # The FIELD and the message, not pydantic's "1 validation error for Instrument".
+            # The reason exists so a reader can tell a vendor quirk from an ingest bug, and
+            # a bare count supports neither decision.
+            detail = "; ".join(
+                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+            )
+            rejected.append(RejectedRow(vendor_code, isin, detail))
         except (ValueError, ArithmeticError) as exc:
             rejected.append(RejectedRow(vendor_code, isin, str(exc).splitlines()[0]))
     return ParseResult(instruments=instruments, rejected=rejected)
