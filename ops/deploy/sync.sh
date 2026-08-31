@@ -35,8 +35,15 @@ LAST_GOOD="$STATE_DIR/last-good-sha"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
-ROLLING_SERVICES="research-runner backfill telemetry"
-TRADING_PATH_SERVICES="breeze-reader shadow-engine live-engine"
+# NO HARDCODED SERVICE LIST. The rail asks compose what exists and asks the guard how to
+# treat each one. An earlier version kept its own list and it drifted: sync.sh promoted
+# `research-runner`, then aborted on `backfill`, which the list named and compose did not
+# define. That left some services on the new SHA and some on the old — a PARTIAL promotion,
+# the exact outcome the donor's fourth safety property exists to prevent (SAL-0010).
+#
+# `research` is excluded from promotion on purpose: it is the build/CI container, run
+# on demand, not a long-running service to restart.
+NOT_PROMOTED="research"
 
 log()   { echo "[pips-deploy $(date -u +%FT%TZ)] $*"; }
 alert() { log "ALERT: $*"; "$REPO/ops/deploy/alert.sh" "$*" 2>/dev/null || true; }
@@ -73,6 +80,13 @@ log "built images tagged ${TARGET:0:12}"
 
 # --- promote, service by service, honouring the market-hours guard --------------------
 DEFERRED=""
+
+# Every service compose defines, minus the ones that are not long-running.
+services_to_promote() {
+  docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
+    | grep -vxF "$NOT_PROMOTED" | sort
+}
+
 promote() {
   local service="$1"
   local guard_args=("$service")
@@ -89,8 +103,18 @@ promote() {
   docker compose -f "$COMPOSE_FILE" up -d --no-deps "$service" || die "up -d failed for $service"
 }
 
-for s in $ROLLING_SERVICES;      do promote "$s"; done
-for s in $TRADING_PATH_SERVICES; do promote "$s"; done
+PROMOTABLE="$(services_to_promote)"
+[ -n "$PROMOTABLE" ] || die "compose defines no promotable services — refusing to continue"
+log "services to promote: $(echo $PROMOTABLE | tr '\n' ' ')"
+
+# VALIDATE THE WHOLE SET BEFORE TOUCHING ANYTHING. Discovering a problem mid-promotion is
+# what produces a half-deployed fleet; discovering it here costs one poll interval.
+for s in $PROMOTABLE; do
+  docker compose -f "$COMPOSE_FILE" config --services | grep -qxF "$s" \
+    || die "service '$s' vanished between listing and promotion — refusing to promote a partial set"
+done
+
+for s in $PROMOTABLE; do promote "$s"; done
 
 # --- health check, then auto-rollback on failure --------------------------------------
 if ! "$REPO/ops/deploy/healthcheck.sh"; then

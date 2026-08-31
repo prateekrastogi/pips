@@ -1,6 +1,26 @@
 # Breeze credential probe — 2026-08-31
 
-**Result: the credentials are well-formed but do NOT authenticate.** Recorded here rather than
+**RESOLVED 2026-08-31: the credentials authenticate.** The first attempt failed; the shape
+check below is what identified why, and the corrected token works. Both runs are kept — a
+report that only records the success would lose the diagnostic that produced it.
+
+## Second attempt — PASS
+
+```
+egress IP     80.225.251.163            (arb-vm)
+result        status 200, error None
+returned      commodity_allowed, exg_status, exg_trade_date, idirect_ORD_TYP,
+              idirect_lastlogin_time, segments_allowed, ...   (field NAMES only)
+RESULT        CREDENTIALS WORK
+```
+
+The fix was a **single missing character**: the token was 7 digits and should have been 8.
+Nothing else changed — same key, same secret, same IP. The shape table below is the only
+signal that was available without reading the values, and it was enough.
+
+## First attempt — FAIL, and the diagnostic that fixed it
+
+**The credentials were well-formed but did NOT authenticate.** Recorded here rather than
 retried silently, because a probe that fails and leaves no artifact is indistinguishable from
 a probe that was never run.
 
@@ -30,7 +50,13 @@ result        Exception: "Could not authenticate credentials. Please check sessi
 No stray whitespace, no quotes, nothing URL-encoded. So this is not a copy-paste mangling — the
 values are shaped correctly and the server is rejecting them.
 
-## The two likely causes, in order
+## The two causes considered, and which it was
+
+**It was neither of the ones ranked below — it was a truncated value**, caught by the length
+check rather than by either hypothesis. Worth recording: the shape table was added as a
+cheap sanity pass, and it turned out to carry the whole answer while the two "likely causes"
+were both wrong. The lesson is not that the ranking was bad but that a mechanical check on
+something observable beat two plausible stories about something unobservable.
 
 1. **The session token has expired.** SAL-0001's own docstring: *"Breeze's session token is
    interactive and DAILY (expires 24h/midnight)."* A token generated before today's midnight
@@ -49,6 +75,9 @@ values are shaped correctly and the server is rejecting them.
 3. While there, confirm `80.225.251.163` appears in the app's IP allow-list.
 
 Then re-run this probe. It is a read-only call and costs one API request.
+
+**Done — the corrected 8-character token authenticates from arb-vm's IP, which also confirms
+`80.225.251.163` is on the app's allow-list.**
 
 ## What this does not block
 
