@@ -15,6 +15,7 @@ commands:
   authority check [record]   report GATE-0 data-use authority [G-AUTH-0]
   deploy guard <service>     may the rail restart this service now? (§2.2)
   s1-smoke [fixtures]        run the S1 funnel end to end on fixtures (§6 M12)
+  backfill --symbols ...     Breeze historical campaign (§6 M4; runs on arb-vm)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -51,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.search.s1 import main as s1_main
 
         return s1_main(rest)
+    if command == "backfill":
+        from pips.data.breeze.campaign import main as backfill_main
+
+        return backfill_main(rest)
     if command == "fixtures" and rest[:1] == ["generate"]:
         from pips.fixtures.generate import main as fixtures_main
 
