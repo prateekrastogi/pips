@@ -1,7 +1,8 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · **Loop PAUSED** by the
-owner at the end of this tick, for a clean start tomorrow.
+**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · **Loop PAUSED** by the owner. The
+security-master download was approved and completed after the pause; see the OPEN QUESTION
+below, which is the first thing to settle tomorrow.
 
 > This file is a snapshot, not a log. It had accreted every finished milestone since M0 and
 > still named a branch we left and two owner-actions the owner had already cleared. The
@@ -69,7 +70,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 152 files · mypy --strict 152 files · 820 pytest · clippy clean · cargo test ok
+  ruff 157 files · mypy --strict 157 files · 844 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -149,7 +150,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **AWAITING OWNER: the security-master download** (asked eight ticks running). The seam is connected (symbol → as-of
+1. **SETTLE THE IDENTITY CLOCK (open question, written up in today's log).**
+   `InstrumentMaster.as_of(on)` uses `on` as BOTH `known_on` and `valid_on`. Correct for
+   corporate actions — an action recorded later must not explain an earlier jump, and a test
+   pins that. WRONG for identity: knowing today that RELIND was Reliance on 28 August is
+   reference data about the past, not lookahead, and valid time already answers which company
+   held the code then. As it stands historical QC can never resolve any instrument ingested
+   afterwards, which is every instrument. Deliberate modelling decision, deferred on purpose.
+
+2. **DONE — the security-master download** (approved and completed): The seam is connected (symbol → as-of
    instrument master → ISIN → action master → verdict) and tested end to end, but no real
    instruments are loaded, so it still resolves nothing and fails closed. Probing settled how
    to load them: `get_names` returns no ISIN, and the SDK's own master loader discards every
