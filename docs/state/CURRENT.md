@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M4 Breeze ingest — DONE, with real data on the VM.** First live campaign ran on arb-vm:
+6/6 symbol-days fetched (RELIND, ICIBAN over 2026-08-26..28), 492 KB of bronze at
+`/srv/pips/bronze`, 370 rows per session, and a resume that costs zero calls. Three
+infrastructure defects surfaced by *running* it, all fixed — see the log.
+
 **M4 Breeze ingest — code complete.** Fetch path, budgeter, backfill orchestrator and forward
 WS capture all landed and tested without a network. Remaining before M4 closes: a first real
 backfill run on arb-vm, which is a data-collection campaign rather than code.
