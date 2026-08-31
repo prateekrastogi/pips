@@ -16,7 +16,6 @@ members = [
     "rust/crates/sim-venue",
     "rust/crates/broker-protocol",
     "rust/crates/broker-flattrade",
-    "rust/crates/broker-zerodha",
     "rust/crates/oms",
     "rust/crates/risk",
     "rust/crates/accounting",

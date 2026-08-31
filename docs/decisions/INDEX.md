@@ -11,3 +11,4 @@
 | [ADR-0007](ADR-0007-task-runner-and-ci.md) | Plain Makefile + local Jenkins; no `just`, no GH Actions | accepted |
 | [ADR-0008](ADR-0008-unblock-protocol.md) | Blocks cleared by synthesized domain specialists | accepted |
 | [ADR-0009](ADR-0009-test-first.md) | Test-first (TDD) is a constitution rule, enforced in CI | accepted |
+| [ADR-0010](ADR-0010-single-execution-venue.md) | Flattrade is the sole execution venue; Zerodha deferred | accepted |

@@ -23,10 +23,6 @@ name = "broker-protocol"
 version = "0.1.0"
 
 [[package]]
-name = "broker-zerodha"
-version = "0.1.0"
-
-[[package]]
 name = "domain"
 version = "0.1.0"
 

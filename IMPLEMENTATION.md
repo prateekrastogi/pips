@@ -22,7 +22,8 @@ leaderboard of backtests. A Python research plant discovers and certifies at mos
 Pareto-diverse bundles through a staged funnel with multiplicity-honest statistics; a Rust
 execution plant loads bundles read-only and trades them under an independent risk layer.
 Capital < ₹10L across declared tiers (₹2L / ₹5L / ₹10L), **unlevered at launch**; data from
-ICICI Breeze (read-only plane); orders through Flattrade or Zerodha (separate order plane);
+ICICI Breeze (read-only plane); orders through Flattrade (separate order plane; single
+execution venue at launch, ADR-0010);
 horizons scalping→intraday with sub-minute claims quarantined until tick/depth data exists;
 **no generative AI in the trading loop**. The machine is allowed — expected — to conclude that
 some ideas produce *nothing* deployable; a defensible "no" is a valid output.
@@ -183,8 +184,10 @@ orders. ICICI's public FAQ language restricts Breeze to personal trading and pro
 third-party trading integration; it supports self-built code but publishes no explicit
 data-only carve-out for signals executed at another broker. Therefore: **before any live
 order**, obtain written ICICI clarification — or switch the certified signal feed to the
-execution broker's entitled feed (Kite Connect live+historical tier, currently ₹500/month, or
-Flattrade's free API subject to its terms). This is a release gate and an adapter swap, not an
+execution broker's entitled feed (Flattrade's free API, subject to its terms). **With Zerodha
+deferred (ADR-0010) this escape hatch has exactly one option**: if Flattrade's terms do not
+permit it, GATE-0 can only be cleared by the ICICI clarification or by reopening a second
+venue. That narrowing is a known cost of the single-venue decision. This is a release gate and an adapter swap, not an
 architecture change. Breeze data is never redistributed. Tracked as ledger gate `G-AUTH-0`.
 
 ### 2.2 Runtime topology and the deploy rail (arb-vm) `[C-DEPLOY-01]` `[G-DEPLOY-01]`
@@ -332,12 +335,13 @@ matrix (a sensitivity heuristic, not an exact correction — DSR is evaluated at
 `cost_rt_bps(broker, notional, aggression, symbol, ts, capital_tier)` = statutory (exact,
 effective-dated) + brokerage + spread·aggression + impact `κ(q/ADV_interval)^ψ` + latency +
 adverse-selection terms. **Golden tests (₹1,00,000/side, fees only, schedules as verified
-Aug 2026):** Flattrade buy ₹6.74 / sell ₹28.74 / RT **₹35.48 = 3.548 bps**; Zerodha buy
-₹30.34 / sell ₹52.34 / RT **₹82.68 = 8.268 bps**; Zerodha RT bps at 50k/2L/5L =
-10.63 / 5.91 / 4.49. Broker operational facts carried as data: Flattrade API **limit-only**
+Aug 2026):** Flattrade buy ₹6.74 / sell ₹28.74 / RT **₹35.48 = 3.548 bps**.
+**High-cost reference line** (the Zerodha schedule, retained as a stress line only — not a
+venue, ADR-0010): buy ₹30.34 / sell ₹52.34 / RT **₹82.68 = 8.268 bps**; RT bps at 50k/2L/5L
+= 10.63 / 5.91 / 4.49. Broker operational facts carried as data: Flattrade API **limit-only**
 (protected marketable-limit is the portable default order type everywhere); Flattrade rate
-10/s & 40/min; Kite 10/s, 400/min, 5,000 orders/day, 25 modifications/order; Zerodha MIS
-square-off ≈15:12 for CAS-eligible names / ≈15:25 otherwise; admin square-off ≈₹50+GST is an
+10/s & 40/min. MIS square-off ≈15:12 for CAS-eligible names / ≈15:25 otherwise — carried as
+broker_capability data per §3.4, never a constant; admin square-off ≈₹50+GST is an
 incident cost, never a baseline. If a verified rate change breaks goldens: update YAML +
 goldens + `verified_on` in one commit, and log a `D-COST-*` decision.
 
@@ -487,7 +491,7 @@ pips/
     bundles/     build, sign, validate
   rust/crates/  domain math-kernel math-python market-protocol market-breeze bars
                 feature-ir alpha-ir portfolio-ir strategy-bundle event-reducer sim-venue
-                broker-protocol broker-flattrade broker-zerodha oms risk accounting
+                broker-protocol broker-flattrade oms risk accounting
                 journal replay telemetry engine
   apps/         breeze-reader live-engine shadow-engine replay-engine backfill research-runner
   fixtures/     bars/ quotes/ orders/ costs/ golden_days/ leakage_canaries/
@@ -616,8 +620,8 @@ QC green; universe snapshots exist.
 
 ### Phase P2 — screening machinery
 
-- **M9 cost model**: `[C-COST-*]` goldens; effective-dated schedules; both brokers × three
-  capital tiers; session-dependent spread table. *Verify:* `pytest tests/unit/costs -q`.
+- **M9 cost model**: `[C-COST-*]` goldens; effective-dated schedules; the Flattrade line and the
+  high-cost reference line (ADR-0010) × three capital tiers; session-dependent spread table. *Verify:* `pytest tests/unit/costs -q`.
 - **M10 vectorized engine (F0/F1-lite)**: panel forward returns, portfolio wrappers
   (long/flat, top-k, tolerance-neutral), cost application. *Verify:* 3-day toy case to the
   paisa.
@@ -647,8 +651,9 @@ calibrated; multiplicity ledger populated.
   parameter heat maps. *Verify:* known-fragile toy fails, known-robust toy passes.
 - **M17 alpha wave 2**: A09–A11, A13–A18, A27, A29, A30 (as data permits). Same bar.
 
-**P3 gate:** ≥8 configs through stress with net SR ≥ 1.5 on the ₹0 line (≥1.0 on Zerodha
-line), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
+**P3 gate:** ≥8 configs through stress with net SR ≥ 1.5 on the ₹0 line (≥1.0 on the **high-cost
+reference line**, §3.7 — retained at full severity though Zerodha is not a venue,
+ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 
 ### Phase P4 — certification & bundles
 
@@ -671,7 +676,8 @@ line), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 
 **P4 gate (human):** 0–5 bundles; every certified one passes hard gates (integrity,
 feasibility incl. broker capability, evidence, DSR ≥ 0.95 at N = M and sane at N = M_erank,
-PBO ≤ 0.25, SPA p ≤ 0.10, cost/delay stress, plateau stability, concentration, lockbox);
+PBO ≤ 0.25, SPA p ≤ 0.10, cost/delay stress, plateau stability, concentration, lockbox; capital-tier robustness —
+cross-broker robustness is not assessable with one venue, ADR-0010);
 pairwise PnL corr ≤ 0.5.
 
 ### Phase P5 — Rust production plant
@@ -685,9 +691,11 @@ pairwise PnL corr ≤ 0.5.
 - **M23 OMS + risk + journal**: order state machines `[C-OMS-*]`, idempotency, throttles
   (shared 5/s token bucket), risk governor + state machine `[C-RISK-01]`, hash-chained
   journal `[C-JRNL-01]`, crash-replay + broker reconciliation, flatten scheduler from
-  capability snapshots. Broker adapter crates (`broker-flattrade`, `broker-zerodha`) are
+  capability snapshots. The broker adapter crate (`broker-flattrade`) is
   built harvest-first: port the auth flows, endpoint shapes, error taxonomies and quirks from
-  the `past/` clients named in the harvest map, citing donors in each crate's PROVENANCE.md.
+  the `past/` clients named in the harvest map, citing donors in the crate's PROVENANCE.md.
+  `broker-protocol` keeps the venue-agnostic seam, so adding a second adapter later is an
+  addition, not a rewrite (ADR-0010).
   **DRY_RUN only.** *Verify:* proptest on state machines; crash-mid-day
   replay reconstructs exactly.
 - **M24 chaos + release parity**: disconnects, duplicate acks, timeouts, unknown orders,
@@ -698,9 +706,11 @@ pairwise PnL corr ≤ 0.5.
 
 ### Phase P6 — shadow, live, operate
 
-- **M25 shadow on both brokers** (4–6 weeks minimum): real quotes, simulated orders; TCA
+- **M25 shadow on Flattrade** (4–6 weeks minimum): real quotes, simulated orders; TCA
   (implementation-shortfall decomposition); **contract-note reconciliation** finalizes the
-  production cost model; venue chosen by measured shortfall, not brochures. *Verify:*
+  production cost model. With one venue (ADR-0010) there is no venue selection to make, so
+  the measured shortfall is judged against the high-cost reference line instead: if realised
+  costs approach it, the single-venue decision is the thing to revisit. *Verify:*
   shortfall ≤ 30% of gross edge; slippage/reject/fill rates inside stress bands.
 - **M26 limited live**: unlevered, one champion bundle, challengers shadow-only; ramp
   10–20% → 25% → 50% → approved full allocation **by evidence, not elapsed days**; CUSUM
@@ -1023,7 +1033,8 @@ pipeline needs redesign, not a third rescue).
 - **ADR-0005** Alpha registry: A-catalogue (A01–A36) is canonical; v1 F-ids retained as
   aliases per the §5 mapping.
 - **ADR-0006** Signal-feed authority: Breeze pending GATE-0 written clarification; fallback =
-  execution-broker feed (Kite Connect tier or Flattrade API) via adapter swap.
+  the execution broker's entitled feed (Flattrade API) via adapter swap. Narrowed to a single
+  option by ADR-0010.
 - **ADR-0007** Task runner & CI: plain `Makefile` targets + native Jenkins declarative
   pipeline (local), no `just` (owner policy: no archived/abandoned tooling under a trading
   system) and no GitHub Actions; Jenkinsfile stages mirror the Make targets 1:1 inside the
@@ -1035,6 +1046,10 @@ pipeline needs redesign, not a third rescue).
 - **ADR-0009** Test-first (§7.1): TDD is constitution rule 16, not a preference —
   red→green→refactor with the red output recorded, enforced mechanically by `make tdd-check`
   `[G-TDD-01]` inside `make ci`; `TDD-Exempt: <reason>` is the only, deliberately loud, bypass.
+- **ADR-0010** Single execution venue at launch: **Flattrade only**; Zerodha/Kite deferred, not
+  rejected. `broker-protocol` keeps the seam. The Zerodha cost schedule is retained as the
+  **high-cost reference line** so no gate loses severity, and GATE-0's fallback narrows to one
+  option as a consequence.
 
 ### 10.6 LOOP.md — paste as the repo's LOOP.md (autonomous loop driver)
 

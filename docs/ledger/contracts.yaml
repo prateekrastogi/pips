@@ -71,12 +71,15 @@
   owner_milestone: M9
 
 - id: C-COST-02
-  title: "RT statutory cost, ₹1L, Zerodha = ₹82.68 (8.268 bps); 50k/2L/5L = 10.63/5.91/4.49"
+  title: "High-cost reference line, ₹1L = ₹82.68 (8.268 bps); 50k/2L/5L = 10.63/5.91/4.49"
   spec: "IMPLEMENTATION.md#37-cost-model"
   code: "python/pips/costs/brokerage.py"
   tests: []
   status: planned
   owner_milestone: M9
+  # Derived from the Zerodha schedule. ADR-0010 keeps it as a STRESS line, not a venue:
+  # the P3 gate's net SR >= 1.0 against it stays at full severity. Deleting it because we
+  # stopped trading there would have made the gate easier under cover of a scope cut.
 
 - id: C-COST-03
   title: "Effective-dated fee schedules carry source + verified_on + validity dates"

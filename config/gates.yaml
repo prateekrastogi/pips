@@ -18,7 +18,7 @@ stress:
 
 p3_gate:
   net_sharpe_min_zero_cost_line: 1.5
-  net_sharpe_min_zerodha_line: 1.0
+  net_sharpe_min_high_cost_line: 1.0   # [C-COST-02] stress line, not a venue (ADR-0010)
 
 governor:
   orders_per_second_max: 5   # engine cap; exchange registration-free limit is 10/s

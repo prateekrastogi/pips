@@ -11,13 +11,17 @@ plane, which is plausibly fine and not documented as fine.
 ## Decision
 Breeze remains the research/data plane through P0–P5. **Before any live order**, either
 written ICICI clarification is obtained, or the certified signal feed swaps to the
-execution broker's entitled feed (Kite Connect live+historical tier, or Flattrade's API
-subject to its terms). This is a release gate and an adapter swap, not an architecture
+execution broker's entitled feed (Flattrade's API, subject to its terms). This is a release gate and an adapter swap, not an architecture
 change. Breeze data is never redistributed.
 
 ## Alternatives
 - Assume it is permitted: an unbounded legal risk on the live path. Rejected.
 - Swap to the broker feed now: pays for and rebuilds against a feed we may not need. Deferred.
+
+> **Narrowed by ADR-0010.** This ADR originally offered two fallback feeds, Kite Connect or
+> Flattrade. With Zerodha deferred, only Flattrade remains: if its terms do not permit the
+> use, `[G-AUTH-0]` can be cleared only by the ICICI clarification or by reopening a second
+> venue.
 
 ## Consequences
 `G-AUTH-0` blocks the live flag chain. The data plane is written behind an adapter seam so

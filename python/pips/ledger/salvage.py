@@ -36,6 +36,9 @@ _SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
 # The infrastructure needs §1.2 requires an answer for. Each must be named by some row's
 # `covers_needs`, whether that row is a donor or a NONE_FOUND.
+# ADR-0010 removed "M23 broker-zerodha adapter": Flattrade is the sole venue. SAL-0024
+# stays in salvage.yaml as history — a NONE_FOUND that was true when it was written —
+# it simply no longer answers a live need.
 NEEDS_COVERAGE: tuple[str, ...] = (
     "M4 session-token flow",
     "M4 historical fetcher",
@@ -47,7 +50,6 @@ NEEDS_COVERAGE: tuple[str, ...] = (
     "M6 corporate actions",
     "M21 breeze reader",
     "M23 broker-flattrade adapter",
-    "M23 broker-zerodha adapter",
     "ops alerting",
 )
 

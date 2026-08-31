@@ -54,7 +54,7 @@ fails if any row here goes unanswered, so this table cannot silently rot.
 | M3.5 deploy rail | continuous deploy script | PORT | `convexity d7a733a:ops/deploy/autodeploy.sh` |
 | M21 breeze reader (Rust) | — | **NONE_FOUND** | no Rust in `../past`; SAL-0028 |
 | M23 broker-flattrade | — | **NONE_FOUND** | zero hits anywhere; SAL-0023 |
-| M23 broker-zerodha | — | **NONE_FOUND** | prose only; SAL-0024 |
+| ~~M23 broker-zerodha~~ | — | retired | need dropped by ADR-0010; SAL-0024 kept as history |
 | M23 reconciliation / risk / accounting | reconcile map, brake engine, accounting | PORT | `convexity 635b051`, `c13fccaf` |
 | ops alerting | fleet alert script | WRAP | `convexity eedf44f:scripts/fleet_alert.sh` |
 
