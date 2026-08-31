@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# pips pre-push gate — Jenkins CI must be green before anything leaves this machine.
+#
+# Install with `make install-hooks`.
+#
+# WHY A HOOK AND NOT A HABIT. `make ci` on a laptop and `pips-ci` in Jenkins are not the same
+# check, and the difference has already bitten twice: build #1 caught `.python-version` being
+# untracked, and build #9 caught `.gitignore` being excluded from the image. Both passed
+# locally and failed from a clean checkout. A local green says "it works here"; the Jenkins
+# green says "it works from what you actually pushed".
+#
+# Bypass with `git push --no-verify` — deliberately available, deliberately explicit, and it
+# should appear in the session log when used (constitution rule 10: never route around a gate
+# quietly).
+
+set -uo pipefail
+
+REMOTE="${1:-origin}"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+# Deleting a branch, or pushing nothing, needs no build.
+if [ -z "$(git rev-list "@{u}..HEAD" 2>/dev/null || git rev-list HEAD -1)" ]; then
+  echo "pre-push: nothing to build"
+  exit 0
+fi
+
+echo "pre-push: running the Jenkins gate for '$BRANCH' before pushing to $REMOTE"
+if ! command -v make >/dev/null 2>&1; then
+  echo "pre-push: make not found — cannot run the gate. Refusing (fail closed)." >&2
+  exit 1
+fi
+
+if make jenkins-build REF="$BRANCH"; then
+  echo "pre-push: pips-ci GREEN for '$BRANCH' — pushing"
+  exit 0
+fi
+
+cat >&2 <<'MSG'
+pre-push: pips-ci is RED — push blocked.
+
+Fix the build, do not weaken the check (constitution rule 10). If you must push anyway
+(e.g. to hand the branch to someone, or the controller itself is down), use:
+
+    git push --no-verify
+
+and record why in docs/state/log/<today>.md — a bypassed gate that leaves no trace is
+indistinguishable from a gate that never ran.
+MSG
+exit 1

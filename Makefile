@@ -86,7 +86,7 @@ JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
 JENKINS_URL ?= http://127.0.0.1:8081
 REF ?= main
 
-.PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build
+.PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build install-hooks
 
 jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)
 	PIPS_REPO=$(CURDIR) $(JENKINS_COMPOSE) up -d --build
@@ -100,3 +100,7 @@ jenkins-logs: ## Tail controller logs
 
 jenkins-build: ## Trigger the pips-ci job for REF=<branch> and wait for the verdict
 	@ops/jenkins/trigger.sh "$(REF)"
+
+install-hooks: ## Install the pre-push gate (Jenkins must be green before a push leaves)
+	@git config core.hooksPath ops/git-hooks
+	@echo "hooksPath -> ops/git-hooks; pre-push now runs pips-ci for the current branch"

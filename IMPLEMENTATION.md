@@ -204,11 +204,20 @@ and reports live on VM volumes (`/srv/pips/...`); dev containers mount fixtures 
 Dev image == prod image: `make ci` runs *inside* the same container locally, in Jenkins, and
 on the VM — "works on my machine" is structurally impossible.
 
-**Development flow (the only path to production):**
+**Development flow (the only path to production).** Commit and push *frequently* — small,
+verified increments. The gate is not a habit but a hook: `make install-hooks` points
+`core.hooksPath` at `ops/git-hooks`, whose `pre-push` runs `pips-ci` for the branch and
+refuses the push on red. A laptop `make ci` and a Jenkins build are not the same check —
+Jenkins builds from a clean checkout of what you actually pushed, and that difference has
+already caught an untracked `.python-version` and a `.gitignore` excluded from the image, both
+of which passed locally. `git push --no-verify` bypasses it; using it must be recorded in the
+session log, because a bypassed gate that leaves no trace is indistinguishable from a gate
+that never ran.
 
 ```
-edit locally  →  Jenkins (LOCAL, not GitHub Actions) runs the containerized `make ci`
-              →  push branch; merge to main on GitHub only if Jenkins is green
+edit locally  →  commit  →  Jenkins (LOCAL, not GitHub Actions) runs the containerized
+                 `make ci` as a PRE-PUSH GATE — the hook blocks the push on red
+              →  push branch (often); merge to main on GitHub only if Jenkins is green
               →  arb-vm deploy rail detects new main SHA (systemd-timer poller, ~1–2 min;
                  webhook optional later), then:
                    git fetch && hard-reset a dedicated build checkout to origin/main
@@ -944,9 +953,13 @@ DRY_RUN by default; launch unlevered; no generative AI in the trading loop.
 
 Environment: everything runs as Docker Compose services on arb-vm (SSH); ALL market data and
 runtime state live on VM volumes — laptop = code + fixtures only. CI is LOCAL JENKINS (root
-Jenkinsfile running the containerized `make ci`), not GitHub Actions; merge to main only on
-green; arb-vm's deploy rail auto-builds and runs every new main SHA (trading-path services
-never restart during market hours). Verify commands run inside the container:
+Jenkinsfile running the containerized `make ci`), not GitHub Actions. **JENKINS IS A PRE-PUSH
+GATE, not just pre-merge**: commit and push often, and every push runs `pips-ci` on the branch
+first (`make install-hooks`; `--no-verify` is the loud, logged bypass). A local `make ci` says
+"it works here"; the Jenkins green says "it works from what you actually pushed" — that
+difference has already caught two clean-checkout failures. Merge to main only on green;
+arb-vm's deploy rail auto-builds and runs every new main SHA (trading-path services never
+restart during market hours). Verify commands run inside the container:
 `docker compose run research make ci`.
 
 LOAD ORDER (strict, to protect context): docs/INDEX.md → docs/state/CURRENT.md → the active
@@ -1111,7 +1124,10 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
   blockers/awaiting). Append one line to docs/state/log/<today>.md — including the RED
   output you observed before the code went green (§7.1 evidence; green-only logs are not TDD).
 - Flip any ledger rows you completed. New decision → ADR shard. New block → BLK card.
-- Commit. End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
+- Commit, then PUSH — often, not at the end of a milestone. The pre-push hook runs the
+  Jenkins gate for the branch and blocks on red (`make install-hooks`); `--no-verify` is the
+  bypass and using it must be recorded in the log.
+- End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
 
 ## Hard rails (constitution §2 binds every tick)
 - Never create/enable anything on the live path: no PIPS_LIVE, no live flags, no real orders.

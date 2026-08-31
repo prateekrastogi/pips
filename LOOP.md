@@ -33,7 +33,10 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
   blockers/awaiting). Append one line to docs/state/log/<today>.md — including the RED
   output you observed before the code went green (§7.1 evidence; green-only logs are not TDD).
 - Flip any ledger rows you completed. New decision → ADR shard. New block → BLK card.
-- Commit. End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
+- Commit, then PUSH — often, not at the end of a milestone. The pre-push hook runs the
+  Jenkins gate for the branch and blocks on red (`make install-hooks`); `--no-verify` is the
+  bypass and using it must be recorded in the log.
+- End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
 
 ## Hard rails (constitution §2 binds every tick)
 - Never create/enable anything on the live path: no PIPS_LIVE, no live flags, no real orders.
