@@ -53,8 +53,11 @@
   code: "python/pips/data/pit"
   tests:
     - "tests/unit/test_pit.py"
+    - "tests/unit/test_instrument_master.py"
   # BUILDING, not enforced, and the distinction is deliberate. The bitemporal half is done and
-  # tested: valid_from/known_from, corrections as new versions, as-of reads that never move.
+  # tested: valid_from/known_from, corrections as new versions, as-of reads that never move,
+  # and now the instrument master on top of it (ISIN-keyed, symbol/token histories, ambiguity
+  # refused rather than guessed).
   # The ZONE half is not — bronze exists (breeze/backfill.py) and quarantine exists (qc), but
   # nothing promotes bronze to silver or silver to gold. Marking this enforced would claim a
   # promotion path that does not exist; the row goes to enforced when it does.

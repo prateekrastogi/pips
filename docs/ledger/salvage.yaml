@@ -457,6 +457,9 @@
     The `isin` content hits are incidental field names in unrelated code; no master loader or
     token/symbol history exists. intraday's conf/instruments.py is a 237-byte stub (see
     SAL-0009). M6 writes this from scratch, bitemporal from the start [C-DATA-01].
+    Written from scratch at M6: python/pips/data/pit/instruments.py — keyed on ISIN, with
+    symbol and exchange-token histories and an as-of resolver that REFUSES an ambiguous
+    symbol rather than picking the first match.
 
 - id: SAL-0027
   component: "NSE exchange calendar incl. CAS session windows"

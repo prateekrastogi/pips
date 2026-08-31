@@ -7,7 +7,7 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M6 PIT masters — bitemporal store and root-pinning landed; the masters themselves are next.**
+**M6 PIT masters — store, root-pinning and the instrument master landed; corporate actions next.**
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
 of the world) and `known_from` (when we knew it). The log is append-only in the literal sense —
@@ -27,9 +27,16 @@ ahead of the traffic, which is the right order, but it has not yet stopped anyth
 `[C-DATA-01]` stays **`building`**: bitemporal columns are done, the **zone** half is not —
 bronze exists, quarantine exists, nothing promotes bronze→silver→gold.
 
-Still unwritten for M6: the instrument master with token/symbol change history, corporate
-actions, ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV is the v0), and
-index membership. Two things already wait on it — the calendar's holiday list is still
+The **instrument master** now sits on the store (`pips/data/pit/instruments.py`, from scratch
+per SAL-0026 NONE_FOUND). Keyed on ISIN, with symbol and exchange-token histories, because a
+symbol is a label the exchange lends out rather than an identity: NSE frees it on delisting and
+can lend the same letters to a different company later, and a symbol-keyed join across that
+boundary splices two companies into one price series. An ambiguous resolution is refused, not
+guessed — guessing would usually be right, which is what makes it dangerous.
+
+Still unwritten for M6: corporate actions (SAL-0016 has a real donor — harvest before writing),
+ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV is the v0), and index
+membership. Two things wait on those — the calendar's holiday list is still
 `holidays_verified: false`, and QC quarantines every unexplained ratio jump because no
 corporate-action master exists to explain one.
 
@@ -45,7 +52,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 118 files · mypy --strict 118 files · 600 pytest · clippy clean · cargo test ok
+  ruff 119 files · mypy --strict 119 files · 619 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -64,6 +71,11 @@ deploy rail — TWO defects found by verifying a push (both fixed, see the log):
      Every poll then logged `already at 8aa1a61; nothing to do` — forever.
   2. `config --services` failed transiently and the rail reported it as
      `service 'breeze-reader' vanished` — a failed command read as a fact about the fleet.
+  Both fixed and deployed; the rail promoted 3205586 cleanly at 12:18 with no alerts.
+
+instrument-master mutation run — 4 mutations, 3 killed immediately, 1 SURVIVED:
+  gap fallback · ambiguity picks first · ISIN validation  -> killed
+  symbol_history dedup removed -> SURVIVED (untested claim; now covered, mutation caught)
 
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
@@ -71,25 +83,20 @@ make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (corre
 ```
 
 ## Next 3 actions
-1. **Instrument master on the PIT store** — token/symbol change history is the master the
-   rest of M6 rests on, and the one that makes a symbol-keyed join honest. It is also what
-   turns `snapshot_root` from a built gate into a used one, since a real master is the first
-   thing a run would pin a root over.
-2. **Corporate-action master** — QC currently quarantines *every* unexplained ratio jump
-   because nothing exists to explain one, so this directly unblocks a check that is firing
-   blind today.
+1. **Corporate-action master** — harvest SAL-0016 first (`convexity 790d7235b202:
+   src/convexity/breakout/data/corporate_actions.py`, deleted from HEAD, a shape reference
+   rather than a donor that closes the need). QC quarantines *every* unexplained ratio jump
+   today because nothing exists to explain one, so this unblocks a check firing blind.
+2. **Ingest a real instrument master on arb-vm** — the class exists and is tested; nothing has
+   loaded actual NSE instruments into it yet. That is also what turns `snapshot_root` from a
+   built gate into a used one.
 3. **Compute plugins for A05–A08 and A12** — the session-structure family plus the intraday
    seasonal. Exercises the M2 calendar and needs no credentials or data.
 
 ## Blockers / awaiting
-- **ACTION FOR THE OWNER — an orphaned compose project is running a duplicate fleet.**
-  arb-vm has TWO compose projects from the same file: `pips` (correct) and `checkout`, a
-  leftover from before `name: pips` landed, whose containers are still up on SHA `a7248c2`.
-  That means **two breeze-readers**, which doubles consumption against the 100k/day budget.
-  I did not remove them unilaterally — they are running services on your VM. To clear:
-  `ssh arb-vm 'docker compose -p checkout down'`. Say the word and I will run it.
-- None otherwise. All three original owner-actions (deploy key, Breeze token, merge to main)
-  are cleared.
+- None blocking. The orphaned `checkout` compose project was cleared with the owner's
+  go-ahead — one fleet on arb-vm now, one breeze-reader. All three original owner-actions
+  (deploy key, Breeze token, merge to main) remain cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
   `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank
   fields in `gate0-owner-attestation.md`.
