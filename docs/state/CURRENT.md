@@ -45,4 +45,6 @@ Fixture manifest root `eccc5e2f268b4ad125163f58815710a68a524943f8a34b79597199f07
 - **Human-only, not blocking yet:** `G-AUTH-0` (written ICICI data-use clarification) is filed
   at M3 and gates only the live path. Nothing in P0–P2 needs credentials, spend or paperwork.
 - `pandoc` is absent on the laptop, so `make refs-extract` runs in the research container
-  (pandoc is installed in the image). `docs/reference/_extracted/` is still empty.
+  (pandoc is in the image), via the dev override that mounts the tree. Done: all four
+  documents are cached under `docs/reference/_extracted/` (4,414 lines). Consult these by
+  section — never ingest one end to end (§9).
