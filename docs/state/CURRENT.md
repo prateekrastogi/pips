@@ -7,7 +7,7 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M15 nested walk-forward — DONE.** Purged/embargoed outer and inner folds, plateau-centroid
+**M16 stress battery — core landed.** M15 is DONE: Purged/embargoed outer and inner folds, plateau-centroid
 selection, and successive halving that counts every viewed trial (rule 4). M14 is
 complete: F1 state machine, flatten scheduler and F0/F1 reconciliation. M6's masters are complete
 except ASM/GSM/T2T and index membership; all nine T1 alphas have compute plugins.
@@ -68,7 +68,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 146 files · mypy --strict 146 files · 786 pytest · clippy clean · cargo test ok
+  ruff 148 files · mypy --strict 148 files · 798 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -101,6 +101,9 @@ QC runner wiring — 3 of 3 killed: adjacency guard, finding discarded, previous
 QC on real arb-vm data — control 0 findings; injected halving -> ratio_jump quarantined
   coverage now reported: 6 records, comparisons made 4, skipped 2 (each symbol's first
   session has no predecessor) — "0 findings" finally arrives with its own scope attached
+stress-battery mutation run — 6 of 6 killed. The drop-best-block fixture could NOT be
+  repaired by changing the fixture: any version spiky enough to matter fails the case under
+  both implementations. Asserted the operation directly instead.
 halving mutation run — 7 of 7 killed once run INDIVIDUALLY; a batched shell loop reported
   two false survivors by swallowing output. Second harness defect this session (after stale
   .pyc), same bias: towards false survivors. Rule now: one mutation at a time, output visible.
@@ -147,10 +150,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **M16 stress battery** — costs x1.5/x2, delay +1/+2 bars, fill degradation, universe
-   N±buffer, drop-best-month, concentration leave-outs, parameter heat maps. Its Verify is
-   "known-fragile toy fails, known-robust toy passes", which needs no market data — and it is
-   where the alphas' written falsifiers finally get APPLIED rather than only declared.
+3. **Bind falsifiers to the battery** — `alphas/spec.py` says the honest strengthening is to
+   require each falsifier to NAME the check that evaluates it, "a structural binding, not a
+   parse of English". The battery now exists, so that binding is finally buildable: a
+   pre-registered falsifier with no stress case behind it becomes visible instead of prose.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
