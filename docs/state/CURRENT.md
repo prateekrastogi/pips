@@ -7,7 +7,8 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M14 event engine — F1 state machine, flatten scheduler and F0/F1 reconciliation landed.** M6's masters are complete
+**M15 nested walk-forward — purged/embargoed outer and inner folds landed.** M14 is
+complete: F1 state machine, flatten scheduler and F0/F1 reconciliation. M6's masters are complete
 except ASM/GSM/T2T and index membership; all nine T1 alphas have compute plugins.
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
@@ -66,7 +67,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 140 files · mypy --strict 140 files · 748 pytest · clippy clean · cargo test ok
+  ruff 142 files · mypy --strict 142 files · 765 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -99,6 +100,11 @@ QC runner wiring — 3 of 3 killed: adjacency guard, finding discarded, previous
 QC on real arb-vm data — control 0 findings; injected halving -> ratio_jump quarantined
   coverage now reported: 6 records, comparisons made 4, skipped 2 (each symbol's first
   session has no predecessor) — "0 findings" finally arrives with its own scope attached
+M15 mutation run — found the embargo was DECORATION in a forward-only walk (it can never
+  bind when training is entirely in the past), which is what drove building the inner folds.
+  ALSO found a flaw in the mutation harness itself: fast write/restore cycles left stale
+  .pyc files, so pytest re-ran cached mutated modules against restored sources. Biases
+  towards FALSE SURVIVORS. The harness now clears __pycache__ before every run.
 F1 mutation run — 5 of 7 killed, 2 SURVIVED, both SLACK ASSERTIONS rather than code faults:
   a bound the wrong answer also satisfies is not a test (third time this session).
 verdict-seam mutation run — 3 of 4 killed, 1 SURVIVED:
@@ -134,11 +140,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **M15 nested walk-forward** — outer 21d / inner 21d / train 126d, purge = horizon, embargo
-   ≥ horizon + order duration. Its headline Verify is that the leakage canary DIES here, which
-   is the strongest single check in the project and needs no market data to demonstrate. The
-   NSE holiday list stays parked: it needs a source I cannot fetch, and its consequence is at
-   least no longer silent (QC reports its own skip count).
+3. **Finish M15** — successive halving and plateau-centroid selection over the fold geometry
+   that now exists. Needs no data. The NSE holiday list stays parked: it needs a source I
+   cannot fetch, and its consequence is at least no longer silent (QC reports its own skip
+   count).
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
