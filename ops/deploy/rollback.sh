@@ -34,7 +34,15 @@ export PIPS_SHA="$SHA"
 # a rebuild if they were pruned. Either way the tag is what the compose file resolves.
 docker compose -f "$COMPOSE_FILE" build 2>&1 | tail -5
 
-for service in research-runner backfill telemetry breeze-reader shadow-engine live-engine; do
+# Derived from compose, not a list — rollback.sh carried the same hardcoded set sync.sh did,
+# and it drifted the same way: it tried to restore `backfill` and `telemetry`, which compose
+# does not define. Benign here because rollback logs and continues rather than aborting, but
+# it is the same defect, and the test that caught it in sync.sh was too narrow to see it.
+SERVICES="$(COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
+  | grep -vxF research | sort)"
+[ -n "$SERVICES" ] || { log "compose defines no services to restore"; exit 1; }
+
+for service in $SERVICES; do
   guard_args=("$service"); [ "$FORCE" = "1" ] && guard_args+=("--force")
   if docker compose -f "$COMPOSE_FILE" run --rm --no-deps research \
        python -m pips.cli deploy guard "${guard_args[@]}"; then

@@ -128,16 +128,32 @@ def test_every_service_the_rail_promotes_exists_in_the_compose_file() -> None:
     The fix is to validate the whole set before touching anything, and this is the test that
     keeps the two files honest with each other.
     """
-    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
 
-    # The fix was structural: remove the second list. sync.sh must derive its service set
-    # from compose, so there is nothing left to drift.
-    assert "config --services" in sync, (
-        "sync.sh must ask compose which services exist rather than keeping its own list — "
-        "a second list is what drifted and caused the partial promotion"
-    )
-    for stale in ("ROLLING_SERVICES=", "TRADING_PATH_SERVICES="):
-        assert stale not in sync, f"sync.sh still hardcodes {stale} — that list will drift again"
+    # BOTH scripts, because the first version of this test checked only sync.sh — and
+    # rollback.sh carried the identical hardcoded list, drifted the identical way, and tried
+    # to restore services compose does not define. A guard that covers one of two copies of
+    # the same bug is a guard that will let the other one through.
+    #
+    # COMMENTS ARE STRIPPED FIRST. This is the second time a text-matching guard in this
+    # repository has fired on prose that DOCUMENTS the very thing it forbids — the
+    # Corwin-Schultz check did it, and was rewritten to scan the AST for the same reason.
+    # A guard that punishes writing down why something is forbidden teaches people to delete
+    # the explanation, so it must inspect code and ignore commentary.
+    def code_only(text: str) -> str:
+        return "\n".join(line for line in text.splitlines() if not line.strip().startswith("#"))
+
+    for name in ("sync.sh", "rollback.sh"):
+        script = code_only((ROOT / "ops" / "deploy" / name).read_text(encoding="utf-8"))
+        assert "config --services" in script, (
+            f"{name} must ask compose which services exist rather than keeping its own list"
+        )
+        for stale in ("ROLLING_SERVICES=", "TRADING_PATH_SERVICES="):
+            assert stale not in script, f"{name} still hardcodes {stale} — it will drift again"
+        assert "backfill" not in script and "telemetry" not in script, (
+            f"{name} names services compose does not define"
+        )
+
+    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
 
     # And it must validate the whole set before promoting any of it.
     promote_at = sync.index("for s in $PROMOTABLE; do promote")
