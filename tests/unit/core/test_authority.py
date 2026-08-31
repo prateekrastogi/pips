@@ -36,6 +36,7 @@ GRANTED: dict[str, Any] = {
     "response_summary": "ICICI confirmed data-only Breeze use with orders at another broker.",
     "evidence_paths": ["docs/reports/feasibility/gate0-icici-response.pdf"],
     "certified_signal_feed": "BREEZE",
+    "evidence_kind": "WRITTEN",
     "notes": "",
 }
 
@@ -136,10 +137,13 @@ def test_an_unfiled_record_cannot_claim_a_filing_date() -> None:
 def test_the_repo_record_is_valid_and_honest_about_its_state() -> None:
     rec = load_authority(ROOT / "docs" / "reports" / "feasibility" / "gate0-authority.yaml")
     assert rec.gate == "G-AUTH-0"
-    # Not yet filed — and the record must say so rather than being absent or optimistic.
-    assert rec.status is AuthorityStatus.UNFILED
-    assert rec.live_trading_permitted() is False
+    # Cleared by an owner-attested VERBAL confirmation from ICICI support. §2.1 asks for
+    # written clarification, so the record must still surface that as a caveat rather than
+    # reading as a clean written grant.
+    assert rec.status is AuthorityStatus.GRANTED
+    assert rec.live_trading_permitted() is True
     assert rec.certified_signal_feed is SignalFeed.BREEZE
+    assert len(rec.caveats()) == 1
 
 
 def test_the_question_template_the_record_points_at_exists() -> None:
@@ -147,3 +151,45 @@ def test_the_question_template_the_record_points_at_exists() -> None:
     assert (ROOT / rec.question_ref).exists(), (
         "the record points at a question template that is not in the repo"
     )
+
+
+# ------------------------------------------- evidence kind and its caveats --------------
+
+
+def test_a_cleared_gate_must_declare_how_it_was_evidenced() -> None:
+    from pips.core.authority import EvidenceKind
+
+    rec = record(evidence_kind="WRITTEN")
+    assert rec.evidence_kind is EvidenceKind.WRITTEN
+    assert rec.caveats() == []
+
+
+def test_a_verbal_attestation_clears_the_gate_but_carries_a_caveat() -> None:
+    # §2.1 asks for WRITTEN clarification. A verbal confirmation attested by the owner is
+    # the owner's call to accept, but it is weaker evidence and must stay visible — whoever
+    # reads this gate at M26 should not have to dig for that.
+    rec = record(evidence_kind="VERBAL_ATTESTATION")
+    assert rec.live_trading_permitted() is True
+    caveats = rec.caveats()
+    assert len(caveats) == 1
+    assert "verbal" in caveats[0].lower()
+    assert "written" in caveats[0].lower()
+
+
+def test_a_cleared_gate_without_an_evidence_kind_cannot_be_constructed() -> None:
+    payload = {k: v for k, v in GRANTED.items() if k != "evidence_kind"}
+    payload["evidence_kind"] = None
+    with pytest.raises(ValueError, match="evidence_kind"):
+        AuthorityRecord.model_validate(payload)
+
+
+def test_an_unfiled_gate_needs_no_evidence_kind() -> None:
+    rec = record(
+        status="UNFILED",
+        filed_on=None,
+        response_received_on=None,
+        response_summary=None,
+        evidence_paths=[],
+        evidence_kind=None,
+    )
+    assert rec.caveats() == []

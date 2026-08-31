@@ -12,3 +12,5 @@
 | [ADR-0008](ADR-0008-unblock-protocol.md) | Blocks cleared by synthesized domain specialists | accepted |
 | [ADR-0009](ADR-0009-test-first.md) | Test-first (TDD) is a constitution rule, enforced in CI | accepted |
 | [ADR-0010](ADR-0010-single-execution-venue.md) | Flattrade is the sole execution venue; Zerodha deferred | accepted |
+| [ADR-0011](ADR-0011-breeze-token-in-repo.md) | Breeze data-plane token tracked in `.env` (amends rule 14) | accepted |
+| [ADR-0012](ADR-0012-breeze-quota.md) | Breeze quota: 100k calls/day, 32 parallel fetches | accepted |

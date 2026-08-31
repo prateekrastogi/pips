@@ -157,7 +157,10 @@ build/test probes; fan out subagents if there are many repos.
     hold code and fixtures only; every service runs as a Docker Compose container on arb-vm
     (§2.2). Anything that needs real data (backfill, sweeps, capture, engines) executes on the
     VM. Images are immutable and SHA-tagged; data, journals, the registry and secrets live in
-    VM volumes/env files and are **never baked into an image** `[C-DEPLOY-01]`.
+    VM volumes/env files and are **never baked into an image** `[C-DEPLOY-01]`. *Amended by
+    ADR-0011:* the Breeze **data-plane** session token is tracked in `.env` in this private
+    repo, because it rotates daily. The image half is unchanged — it still never enters a
+    container — and order-plane credentials stay VM-side (rule 7). Market data remains VM-only.
 16. **Test-first (TDD), always.** Every behavioural change starts as a test that fails
     for the right reason. Write the test, watch it go red, record that red output in the
     session log and the PR body, then write the smallest code that turns it green, then
@@ -228,7 +231,8 @@ Deploy tooling lives in-repo: `docker/` (multi-stage Dockerfiles: `research`, `e
 `reader`), root `docker-compose.yml` + `docker-compose.dev.yml`, root `Jenkinsfile`
 (stages = the `make ci` ladder + image build), `ops/deploy/` (`sync.sh` poller,
 `rollback.sh <sha>`, systemd units, VM bootstrap runbook). Secrets stay in VM-side env files
-referenced by compose, never in git or images.
+referenced by compose and never in images; the one exception is the daily Breeze data-plane
+token, tracked in `.env` per ADR-0011.
 
 ---
 
@@ -340,8 +344,10 @@ Aug 2026):** Flattrade buy ₹6.74 / sell ₹28.74 / RT **₹35.48 = 3.548 bps**
 venue, ADR-0010): buy ₹30.34 / sell ₹52.34 / RT **₹82.68 = 8.268 bps**; RT bps at 50k/2L/5L
 = 10.63 / 5.91 / 4.49. Broker operational facts carried as data: Flattrade API **limit-only**
 (protected marketable-limit is the portable default order type everywhere); Flattrade rate
-10/s & 40/min. MIS square-off ≈15:12 for CAS-eligible names / ≈15:25 otherwise — carried as
-broker_capability data per §3.4, never a constant; admin square-off ≈₹50+GST is an
+10/s & 40/min. MIS square-off times are **per broker** and carried as
+broker_capability data per §3.4, never a constant — the ≈15:12 (CAS-eligible) / ≈15:25
+figures on record are **Zerodha's**, and Flattrade's are UNVERIFIED until the M3 probe, so
+the v0 snapshot ships a conservatively early placeholder that is marked unverified; admin square-off ≈₹50+GST is an
 incident cost, never a baseline. If a verified rate change breaks goldens: update YAML +
 goldens + `verified_on` in one commit, and log a `D-COST-*` decision.
 
@@ -596,9 +602,13 @@ human.
   WS capture write to VM volumes, never to a laptop; harvest-first: the harvest map's Breeze
   donors — token flow, fetchers, WS capture — are vendored/ported before any new connector
   code is written):
-  session-token bootstrap; historical v2 fetcher with resumable budgeter (≤75/min, ≤4,500/day, 1,000 candles/call; priority
-  campaign: 1m × U100/U150/U300 ≈ 28k–85k calls ≈ 6–17 quota-days for 3y; 1s only for a
-  predeclared liquid subset); **forward WS capture from day one** (ticks/quotes/depth →
+  session-token bootstrap; historical v2 fetcher with resumable budgeter reading
+  `config/breeze.yaml` (**100,000 calls/day, 32 parallel fetches** per ADR-0012; per-minute
+  throttle conservative until measured; 1,000 candles/call). The 1m priority campaign
+  (U100/U150/U300 ≈ 28k–85k calls for 3y) now fits **inside a single day's budget** rather
+  than the 6–17 quota-days originally planned, so it is bounded by wall-clock and politeness,
+  not quota — the budgeter is still required, because a fetch interrupted at call 60,000 must
+  resume, not restart. 1s only for a predeclared liquid subset; **forward WS capture from day one** (ticks/quotes/depth →
   bronze with receive timestamps, reconnect + gap log). *Verify:* recorded-cassette tests; no
   live calls in CI; backfill runbook.
 - **M5 QC + quarantine**: OHLC sanity, calendar gaps, spike/decimal detection, CA cross-check,
@@ -1050,6 +1060,12 @@ pipeline needs redesign, not a third rescue).
   rejected. `broker-protocol` keeps the seam. The Zerodha cost schedule is retained as the
   **high-cost reference line** so no gate loses severity, and GATE-0's fallback narrows to one
   option as a consequence.
+- **ADR-0011** Breeze data-plane token tracked in `.env` in this private repo (amends rule 14
+  and §2.2): it rotates daily, so rotation is a commit. Unchanged: it never enters an image,
+  order-plane credentials stay VM-side, and market data stays VM-only.
+- **ADR-0012** Breeze quota confirmed at **100,000 calls/day and 32 parallel fetches**; the
+  per-minute rate stays unmeasured and is not inferred from the daily cap. Re-plans the M4
+  campaign from 6–17 quota-days to a single day's budget.
 
 ### 10.6 LOOP.md — paste as the repo's LOOP.md (autonomous loop driver)
 

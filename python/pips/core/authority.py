@@ -25,7 +25,14 @@ from pydantic import Field, field_validator, model_validator
 
 from pips.core.config import PipsConfig, load_yaml
 
-__all__ = ["AuthorityRecord", "AuthorityStatus", "SignalFeed", "load_authority", "main"]
+__all__ = [
+    "AuthorityRecord",
+    "AuthorityStatus",
+    "EvidenceKind",
+    "SignalFeed",
+    "load_authority",
+    "main",
+]
 
 # ADR-0010 deferred Zerodha, so the fallback set has exactly one member. If that ever grows
 # again it is an ADR, and this constant is where the change lands.
@@ -40,6 +47,18 @@ class AuthorityStatus(StrEnum):
     GRANTED = "GRANTED"
     DENIED = "DENIED"
     RESOLVED_BY_FEED_SWAP = "RESOLVED_BY_FEED_SWAP"
+
+
+class EvidenceKind(StrEnum):
+    """How a cleared gate was evidenced.
+
+    §2.1 asks for *written* clarification. A verbal confirmation attested by the owner is
+    the owner's call to accept, but it is weaker, and the difference must stay visible
+    rather than being flattened into a plain "GRANTED" that reads like a signed letter.
+    """
+
+    WRITTEN = "WRITTEN"
+    VERBAL_ATTESTATION = "VERBAL_ATTESTATION"
 
 
 class SignalFeed(StrEnum):
@@ -60,6 +79,7 @@ class AuthorityRecord(PipsConfig):
     response_summary: str | None = None
     evidence_paths: list[str] = Field(default_factory=list)
     certified_signal_feed: SignalFeed = SignalFeed.BREEZE
+    evidence_kind: EvidenceKind | None = None
     notes: str = ""
 
     # PipsConfig is strict by design (no silent coercion at a schema boundary), and YAML
@@ -75,6 +95,11 @@ class AuthorityRecord(PipsConfig):
     @classmethod
     def _coerce_feed(cls, value: object) -> object:
         return SignalFeed(value) if isinstance(value, str) else value
+
+    @field_validator("evidence_kind", mode="before")
+    @classmethod
+    def _coerce_evidence_kind(cls, value: object) -> object:
+        return EvidenceKind(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def _a_cleared_gate_must_carry_its_evidence(self) -> AuthorityRecord:
@@ -94,6 +119,12 @@ class AuthorityRecord(PipsConfig):
                 raise ValueError(f"status {self.status} requires response_received_on")
             if not self.response_summary:
                 raise ValueError(f"status {self.status} requires a response_summary")
+
+        if self.status in cleared and self.evidence_kind is None:
+            raise ValueError(
+                f"status {self.status} requires an evidence_kind — a cleared gate must say "
+                "whether it rests on a written reply or a verbal attestation"
+            )
 
         if self.status in cleared and not self.evidence_paths:
             raise ValueError(
@@ -128,6 +159,25 @@ class AuthorityRecord(PipsConfig):
         ``live`` feature and ``PIPS_LIVE=1``. This one alone is never sufficient.
         """
         return self.status in {AuthorityStatus.GRANTED, AuthorityStatus.RESOLVED_BY_FEED_SWAP}
+
+    def caveats(self) -> list[str]:
+        """Weaknesses in a cleared gate that must stay visible at the point of use.
+
+        A cleared gate is not necessarily a strong one. Anything here is printed by
+        ``pips authority check`` so an operator sees it without going looking.
+        """
+        if not self.live_trading_permitted():
+            return []
+        if self.evidence_kind is EvidenceKind.VERBAL_ATTESTATION:
+            return [
+                "[G-AUTH-0] cleared on a VERBAL confirmation attested by the owner. §2.1 "
+                "asks for written clarification, so this is weaker evidence than the gate "
+                "was designed around: there is no artifact from ICICI to point at if the "
+                "position is ever questioned. Recommend obtaining the same answer in "
+                "writing (the letter in ops/runbooks/authority.md still serves) and "
+                "upgrading evidence_kind to WRITTEN."
+            ]
+        return []
 
     def blocking_reason(self) -> str | None:
         """Why live trading is blocked, phrased so the remedy is obvious. ``None`` if clear."""
@@ -177,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[{record.gate}] status={record.status.value} feed={record.certified_signal_feed.value}")
     if record.live_trading_permitted():
         print("  live trading: PERMITTED by this gate")
+        for caveat in record.caveats():
+            print(f"  CAVEAT: {caveat}")
         print("  (still gated by the rest of the live-flag chain: `live` feature, PIPS_LIVE=1,")
         print("   and i_understand_live_trading: true — rule 8)")
     else:

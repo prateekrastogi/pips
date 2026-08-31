@@ -15,7 +15,11 @@ Thumbs.db
 *~
 
 # ---- Secrets / credentials (two planes: Breeze + broker) ----
-.env
+# .env IS TRACKED, by owner decision under ADR-0011: the Breeze session token rotates daily
+# and lives in this private repository. Read that ADR before changing this — the risks were
+# weighed and accepted, and the mitigations (never in an image, private repo, daily rotation
+# limiting the window) are pinned by tests/unit/test_secrets_and_data_locality.py.
+# Everything else here stays ignored: the relaxation is the token, not secrets in general.
 .env.*
 !.env.example
 config/live.yaml

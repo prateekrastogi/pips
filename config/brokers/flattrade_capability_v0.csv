@@ -1,0 +1,24 @@
+# broker_capability v0 — Flattrade, NSE cash equity [C-DATA-01] (§3.4, M3).
+#
+# Per broker x product x instrument x side: eligibility, shortability, leverage, cutoff
+# times, order types, rate limits. SQUARE-OFF TIMES ARE DATA, NOT CONSTANTS (§3.4) — this
+# file is where pips.core.calendar.session_at() gets its broker cutoff.
+#
+# TWO VALUES HERE ARE UNVERIFIED PLACEHOLDERS, and both err in the safe direction:
+#   * square_off_time 15:00 — Flattrade's actual MIS cutoff is unknown. The ~15:12/~15:25
+#     figures on record in §3.7 are ZERODHA's. Flattening earlier than necessary costs a
+#     little edge; flattening later risks the broker's own auto-square-off, which §3.14
+#     calls a failure path. square_off_verified=false, and require_verified_square_off()
+#     refuses anything trading-path until the M3 probe confirms it.
+#   * max_leverage 1.00 — what Flattrade offers on MIS is unverified. 1.00 is both the
+#     conservative reading and the launch policy (ADR-0003, unlevered), so recording it
+#     costs nothing and cannot overstate the entitlement.
+#
+# VERIFIED from IMPLEMENTATION.md §3.7: the Flattrade API is limit-only (which is why
+# protected marketable-limit is the portable default order type), rate 10/s and 40/min.
+#
+# instrument_id "*" is the default row; a symbol-specific row overrides it.
+snapshot_date,broker,product,instrument_id,side,eligible,shortable,max_leverage,square_off_time,square_off_verified,order_types,rate_limit_per_second,rate_limit_per_minute,source,verified_on
+2026-08-01,FLATTRADE,MIS,*,BOTH,true,true,1.00,15:00:00,false,LIMIT,10,40,IMPLEMENTATION.md §3.7 (order types + rate limits); square-off is an unverified conservative placeholder,2026-08-31
+2026-08-01,FLATTRADE,MIS,YESBANK,SELL,true,false,1.00,15:00:00,false,LIMIT,10,40,Example of a name restricted for shorting (ASM/T2T-style); real restricted lists arrive with the M6 PIT masters,2026-08-31
+2026-08-01,FLATTRADE,CNC,*,BOTH,true,false,1.00,,false,LIMIT,10,40,Delivery product: no intraday square-off and no shorting,2026-08-31

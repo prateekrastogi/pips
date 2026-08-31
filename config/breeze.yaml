@@ -1,0 +1,36 @@
+# Breeze data-plane quota and connection limits [C-DATA-01] (ADR-0012).
+#
+# Effective-dated data, like a fee schedule (rule 6): every number carries where it came from
+# and when it was verified. The fetcher reads these; it does not hard-code them. An
+# entitlement that changed once will change again.
+
+schema_version: 1
+vendor: ICICI_BREEZE
+plane: DATA        # read-only. Order-plane limits live in broker_capability (§3.4).
+
+quota:
+  max_calls_per_day: 100000
+  max_parallel_fetches: 32
+  source: "Owner confirmation, 2026-08-31 (ADR-0012)"
+  verified_on: 2026-08-31
+
+  # NOT INFERRED FROM THE ABOVE. 100k/day averages ~70/min over 24h, but a daily cap says
+  # nothing about the instantaneous rate 32 parallel fetches may reach. The M3 probe measures
+  # it; until then the fetcher throttles conservatively. Being throttled costs minutes;
+  # being rate-limited mid-campaign costs a resumable-state bug hunt.
+  max_calls_per_minute: 75
+  max_calls_per_minute_verified: false
+  max_calls_per_minute_source: "CONSERVATIVE PLACEHOLDER — lower of the two conflicting public figures"
+
+fetch:
+  candles_per_call: 1000
+  candles_per_call_verified: false
+  candles_per_call_source: "IMPLEMENTATION.md §6 M4 planning figure — confirm at the M3 probe"
+
+# Everything the M3 probe must still measure, kept here so it cannot be forgotten.
+unverified:
+  - "sustained and burst per-minute rate, and the daily counter's reset boundary"
+  - "true history depth per symbol (3y vs 10y claims)"
+  - "bar-timestamp convention — feeds ADR-0001, normalize on ingest"
+  - "websocket subscription capacity (~2,000 scripts nominal)"
+  - "BSE support ambiguity"

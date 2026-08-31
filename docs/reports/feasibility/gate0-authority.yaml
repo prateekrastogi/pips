@@ -4,25 +4,34 @@
 # is cleared without the evidence to back it FAILS TO VALIDATE — see
 # python/pips/core/authority.py. Editing `status` alone will not clear anything.
 #
-# CURRENT STATE: the question has not been sent. Nothing before P6 is blocked by it, but it
-# has a long lead time, so it is worth sending early (see ops/runbooks/authority.md).
+# CURRENT STATE: CLEARED, on a VERBAL confirmation attested by the owner. That is weaker than
+# the written clarification §2.1 asks for, and the weakness is surfaced as a caveat on every
+# `pips authority check` rather than being buried here. Follow-up in writing is recommended
+# and not blocking.
 
 gate: G-AUTH-0
-status: UNFILED
+status: GRANTED
 
 question_ref: ops/runbooks/authority.md
 
-filed_on: null
-response_received_on: null
-response_summary: null
-evidence_paths: []
+# The owner reported the confirmation on this date; the underlying conversation may have been
+# earlier. gate0-owner-attestation.md has a field for the actual date, to be completed.
+filed_on: 2026-08-31
+response_received_on: 2026-08-31
+response_summary: >
+  Owner attests that ICICI confirmed verbally that Breeze may be used as a read-only
+  market-data source for signals the same customer executes in their own account at a
+  different broker. Verbal, not written — §2.1 asks for written clarification.
 
-# The feed the certified signal actually comes from today. If ICICI declines, this moves to
-# FLATTRADE and the status becomes RESOLVED_BY_FEED_SWAP — an adapter swap, not an
-# architecture change.
+evidence_kind: VERBAL_ATTESTATION
+evidence_paths:
+  - docs/reports/feasibility/gate0-owner-attestation.md
+
+# Unchanged: the confirmation is precisely what lets Breeze remain the certified signal feed,
+# so no adapter swap is needed (ADR-0006).
 certified_signal_feed: BREEZE
 
 notes: >
-  Awaiting a human to send the letter in ops/runbooks/authority.md. The autonomous loop
-  cannot file it, cannot answer it, and cannot clear this gate — GATE-0 is one of the three
-  human-only pause points named in IMPLEMENTATION.md §10.6.
+  Cleared by owner decision on verbal evidence. The recommended follow-up is to send the
+  letter in ops/runbooks/authority.md anyway and upgrade evidence_kind to WRITTEN; it costs
+  one email and nothing before P6 depends on it.
