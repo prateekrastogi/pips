@@ -52,10 +52,13 @@ make ci -> ci: green
   Add this as a **deploy key with write access OFF** at
   github.com/prateekrastogi/pips → Settings → Deploy keys:
   `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIUoCb9mUgkJTiF/7AA2s/gNI6k5U2xu2YO+kR2qvyvB pips-deploy@arb-vm (read-only)`
-- **ACTION FOR THE OWNER (2 of 2) — merge and push.** `main` on GitHub is still at the initial
-  commit `46fbdbd`; none of this work is pushed. The rail polls `origin/main`, so it has
-  nothing to deploy until `m/0-scaffold` lands there. Ten green `pips-ci` builds so far.
-  I have deliberately not merged or pushed.
+- **PUSHED.** `m/0-scaffold` is now on GitHub (14 green `pips-ci` builds). Pushing is now
+  gated: `ops/git-hooks/pre-push` runs `pips-ci` for the branch and blocks on red
+  (`make install-hooks`), so a push cannot outrun the gate.
+- **ACTION FOR THE OWNER — merge to main.** `main` is still at `46fbdbd`. The deploy rail
+  polls `origin/main`, so it has nothing to deploy until the branch lands there. I have not
+  merged: that is an outward, hard-to-reverse step and I would rather have it as an explicit
+  standing decision than assume it.
 - **ACTION FOR THE OWNER (3) — Breeze token** in `.env` (tracked, ADR-0011) for the M3 probe
   and M4. `ops/runbooks/breeze-token.md` is the daily procedure. I put no credential there.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
