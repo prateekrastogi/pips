@@ -178,7 +178,7 @@ def test_the_rail_reexecs_itself_after_updating_the_checkout() -> None:
     )
     # The re-exec must happen AFTER the merge and BEFORE anything is built or promoted.
     merge_at = sync.index("git merge --ff-only")
-    reexec_at = sync.index("PIPS_DEPLOY_REEXEC")
+    reexec_at = sync.index("PIPS_DEPLOY_REEXEC=1 exec")
     build_at = sync.index('docker compose -f "$COMPOSE_FILE" build')
     assert merge_at < reexec_at < build_at, (
         "the re-exec must sit between the fast-forward and the first build"
@@ -215,3 +215,32 @@ def test_no_one_shot_service_is_set_to_restart_forever() -> None:
                 f"{name} runs a one-shot command ({command!r}) but is set to "
                 f"restart={spec.get('restart')!r} — that is a crash-loop, not a service"
             )
+
+
+def test_the_reexec_does_not_skip_the_work_it_was_re_execed_to_do() -> None:
+    """After re-execing, the checkout is already at the target — so the "nothing to do"
+    early exit would fire and the deploy would never happen.
+
+    Observed live: the rail fast-forwarded, re-execed correctly, and the second process
+    reported "already at 481aafe; nothing to do" and finished cleanly having built nothing and
+    promoted nothing. It had fixed the self-modification hazard by never deploying — and
+    logged a successful-looking "Finished" while doing it. A silent no-op that reports success
+    is worse than the loud failure it replaced, because nothing prompts anyone to look.
+    """
+    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
+    lines = sync.splitlines()
+    early_exit = next(
+        (
+            i
+            for i, line in enumerate(lines)
+            if "nothing to do" in line and line.strip().startswith("log")
+        ),
+        None,
+    )
+    assert early_exit is not None, "sync.sh no longer has the up-to-date early exit"
+    # The guard must sit on the condition immediately above the log line.
+    window = "\n".join(lines[max(0, early_exit - 3) : early_exit + 1])
+    assert "PIPS_DEPLOY_REEXEC" in window, (
+        "the 'nothing to do' exit must be guarded by the re-exec flag, or a re-execed run "
+        "skips the very deploy it was re-execed to perform"
+    )

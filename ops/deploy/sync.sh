@@ -61,14 +61,26 @@ git fetch --quiet origin "$BRANCH" || die "git fetch failed"
 CURRENT="$(git rev-parse HEAD)"
 TARGET="$(git rev-parse "origin/$BRANCH")"
 
-[ "$CURRENT" = "$TARGET" ] && { log "already at ${TARGET:0:12}; nothing to do"; exit 0; }
+# A RE-EXECED RUN HAS ALREADY FAST-FORWARDED, so CURRENT == TARGET is expected there and
+# must NOT be read as "nothing to do". Without this guard the re-exec fixed the
+# self-modification hazard by never deploying at all — and logged a clean "Finished" while
+# building nothing and promoting nothing. A silent no-op that reports success is worse than
+# the loud failure it replaced, because nothing prompts anyone to look.
+if [ "$CURRENT" = "$TARGET" ] && [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
+  log "already at ${TARGET:0:12}; nothing to do"
+  exit 0
+fi
 
-if ! git merge-base --is-ancestor "$CURRENT" "$TARGET"; then
+if [ "$CURRENT" != "$TARGET" ] && ! git merge-base --is-ancestor "$CURRENT" "$TARGET"; then
   die "checkout has diverged from origin/$BRANCH (HEAD ${CURRENT:0:12} is not an ancestor of ${TARGET:0:12}). Refusing to force-reset — inspect $REPO by hand."
 fi
 
-log "new SHA on origin/$BRANCH: ${CURRENT:0:12} -> ${TARGET:0:12}"
-git merge --ff-only "origin/$BRANCH" --quiet || die "fast-forward failed"
+if [ "$CURRENT" != "$TARGET" ]; then
+  log "new SHA on origin/$BRANCH: ${CURRENT:0:12} -> ${TARGET:0:12}"
+  git merge --ff-only "origin/$BRANCH" --quiet || die "fast-forward failed"
+else
+  log "re-executed at ${TARGET:0:12}; continuing the deploy"
+fi
 
 # RE-EXEC, because we have just rewritten the file we are running from.
 #
@@ -79,8 +91,10 @@ git merge --ff-only "origin/$BRANCH" --quiet || die "fast-forward failed"
 # new version had already removed. The benign outcome was a failed deploy; the general case is
 # arbitrary corruption, because the offset lands wherever it lands.
 #
-# The guard flag makes this exactly one re-exec: the second invocation sees the checkout
-# already at TARGET and takes the "nothing to do" path if it re-enters here at all.
+# The guard flag makes this exactly one re-exec. The second invocation finds the checkout
+# already at TARGET — which is why the up-to-date early exit above is ALSO guarded by this
+# flag: without that, the re-execed run would report "nothing to do" and skip the deploy it
+# was re-execed to perform.
 if [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
   log "checkout updated; re-executing the new sync.sh before building"
   flock -u 9 2>/dev/null || true
