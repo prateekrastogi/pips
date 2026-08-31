@@ -71,7 +71,9 @@ def ingest_instruments(
             "run over no data, which reads exactly like a successful one."
         )
 
-    current = {i.isin: i for i in master.as_of(known_from)}
+    # Both clocks at the ingest date: an ingest compares against what the master holds NOW,
+    # and "now" for a snapshotter is the date it is snapshotting.
+    current = {i.isin: i for i in master.as_of(known_from, known_on=known_from)}
     added = changed = unchanged = 0
     changed_isins: list[str] = []
     for instrument in instruments:

@@ -74,8 +74,14 @@ def test_a_reused_symbol_resolves_to_the_right_company_on_each_date(
     master.delist("INE001A01036", known_from=D(2026, 6, 1))
     master.upsert(instrument("INE999A01018", "ACME", token="900"), known_from=D(2026, 8, 1))
 
-    assert resolved(master.resolve_symbol("ACME", on=D(2026, 3, 1))).isin == "INE001A01036"
-    assert resolved(master.resolve_symbol("ACME", on=D(2026, 9, 1))).isin == "INE999A01018"
+    assert (
+        resolved(master.resolve_symbol("ACME", on=D(2026, 3, 1), known_on=None)).isin
+        == "INE001A01036"
+    )
+    assert (
+        resolved(master.resolve_symbol("ACME", on=D(2026, 9, 1), known_on=None)).isin
+        == "INE999A01018"
+    )
 
 
 def test_a_symbol_resolves_to_nothing_in_the_gap(master: InstrumentMaster) -> None:
@@ -84,7 +90,7 @@ def test_a_symbol_resolves_to_nothing_in_the_gap(master: InstrumentMaster) -> No
     master.upsert(instrument("INE001A01036", "ACME"), known_from=D(2026, 1, 1))
     master.delist("INE001A01036", known_from=D(2026, 6, 1))
     master.upsert(instrument("INE999A01018", "ACME"), known_from=D(2026, 8, 1))
-    assert master.resolve_symbol("ACME", on=D(2026, 7, 1)) is None
+    assert master.resolve_symbol("ACME", on=D(2026, 7, 1), known_on=None) is None
 
 
 def test_two_live_claims_on_one_symbol_are_refused_not_guessed(master: InstrumentMaster) -> None:
@@ -96,7 +102,7 @@ def test_two_live_claims_on_one_symbol_are_refused_not_guessed(master: Instrumen
     master.upsert(instrument("INE001A01036", "ACME", token="100"), known_from=D(2026, 1, 1))
     master.upsert(instrument("INE999A01018", "ACME", token="900"), known_from=D(2026, 2, 1))
     with pytest.raises(AmbiguousSymbolError) as excinfo:
-        master.resolve_symbol("ACME", on=D(2026, 3, 1))
+        master.resolve_symbol("ACME", on=D(2026, 3, 1), known_on=None)
     # BOTH claimants named. An ambiguity error that does not say who is ambiguous leaves the
     # reader to go and find them, which is the work the error was in a position to do.
     assert "INE001A01036" in str(excinfo.value)
@@ -110,9 +116,15 @@ def test_a_rename_keeps_the_isin_so_a_join_survives_it(master: InstrumentMaster)
     master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=D(2026, 1, 1))
     master.rename("INE002A01018", symbol="RELIND", known_from=D(2026, 5, 1))
 
-    assert resolved(master.resolve_symbol("RELIANCE", on=D(2026, 3, 1))).isin == "INE002A01018"
-    assert resolved(master.resolve_symbol("RELIND", on=D(2026, 6, 1))).isin == "INE002A01018"
-    assert master.resolve_symbol("RELIANCE", on=D(2026, 6, 1)) is None
+    assert (
+        resolved(master.resolve_symbol("RELIANCE", on=D(2026, 3, 1), known_on=None)).isin
+        == "INE002A01018"
+    )
+    assert (
+        resolved(master.resolve_symbol("RELIND", on=D(2026, 6, 1), known_on=None)).isin
+        == "INE002A01018"
+    )
+    assert master.resolve_symbol("RELIANCE", on=D(2026, 6, 1), known_on=None) is None
 
 
 def test_the_symbol_history_is_readable_with_its_dates(master: InstrumentMaster) -> None:
@@ -130,16 +142,25 @@ def test_an_exchange_token_change_is_tracked_too(master: InstrumentMaster) -> No
     master.upsert(instrument("INE467B01029", "TCS", token="11536"), known_from=D(2026, 1, 1))
     master.retoken("INE467B01029", exchange_token="22222", known_from=D(2026, 5, 1))
 
-    assert resolved(master.resolve_token("11536", on=D(2026, 3, 1))).isin == "INE467B01029"
-    assert resolved(master.resolve_token("22222", on=D(2026, 6, 1))).isin == "INE467B01029"
-    assert master.resolve_token("11536", on=D(2026, 6, 1)) is None
+    assert (
+        resolved(master.resolve_token("11536", on=D(2026, 3, 1), known_on=None)).isin
+        == "INE467B01029"
+    )
+    assert (
+        resolved(master.resolve_token("22222", on=D(2026, 6, 1), known_on=None)).isin
+        == "INE467B01029"
+    )
+    assert master.resolve_token("11536", on=D(2026, 6, 1), known_on=None) is None
 
 
 def test_a_reassigned_token_resolves_to_the_new_holder(master: InstrumentMaster) -> None:
     master.upsert(instrument("INE467B01029", "TCS", token="11536"), known_from=D(2026, 1, 1))
     master.retoken("INE467B01029", exchange_token="22222", known_from=D(2026, 5, 1))
     master.upsert(instrument("INE075A01022", "WIPRO", token="11536"), known_from=D(2026, 6, 1))
-    assert resolved(master.resolve_token("11536", on=D(2026, 7, 1))).isin == "INE075A01022"
+    assert (
+        resolved(master.resolve_token("11536", on=D(2026, 7, 1), known_on=None)).isin
+        == "INE075A01022"
+    )
 
 
 def test_amending_an_unknown_isin_is_refused(master: InstrumentMaster) -> None:
@@ -155,10 +176,19 @@ def test_amending_an_unknown_isin_is_refused(master: InstrumentMaster) -> None:
 
 
 def test_the_master_reads_as_of_a_past_date(master: InstrumentMaster) -> None:
+    """Both clocks pinned to the same date on purpose: this test is about KNOWLEDGE time.
+
+    An instrument first known in July must be absent from a July-knowledge read of March.
+    Stated explicitly now that `known_on` has no default — a read with `known_on=None` would
+    correctly include it, and would be answering a different question.
+    """
     master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=D(2026, 1, 1))
     master.upsert(instrument("INE009A01021", "LATER"), known_from=D(2026, 7, 1))
-    assert [i.isin for i in master.as_of(D(2026, 3, 1))] == ["INE002A01018"]
-    assert [i.isin for i in master.as_of(D(2026, 8, 1))] == ["INE002A01018", "INE009A01021"]
+    assert [i.isin for i in master.as_of(D(2026, 3, 1), known_on=D(2026, 3, 1))] == ["INE002A01018"]
+    assert [i.isin for i in master.as_of(D(2026, 8, 1), known_on=D(2026, 8, 1))] == [
+        "INE002A01018",
+        "INE009A01021",
+    ]
 
 
 def test_a_past_read_does_not_move_when_the_master_grows(master: InstrumentMaster) -> None:
@@ -174,8 +204,8 @@ def test_a_past_read_does_not_move_when_the_master_grows(master: InstrumentMaste
 def test_a_delisted_name_is_still_readable_before_its_delisting(master: InstrumentMaster) -> None:
     master.upsert(instrument("INE001A01036", "ACME"), known_from=D(2026, 1, 1))
     master.delist("INE001A01036", known_from=D(2026, 6, 1))
-    assert [i.isin for i in master.as_of(D(2026, 3, 1))] == ["INE001A01036"]
-    assert master.as_of(D(2026, 7, 1)) == []
+    assert [i.isin for i in master.as_of(D(2026, 3, 1), known_on=D(2026, 3, 1))] == ["INE001A01036"]
+    assert master.as_of(D(2026, 7, 1), known_on=D(2026, 7, 1)) == []
 
 
 # ------------------------------------------------------- shape -------------------------
@@ -238,4 +268,38 @@ def test_a_delisted_instrument_can_be_relisted_by_upsert(master: InstrumentMaste
     master.upsert(instrument("INE001A01036", "ACME"), known_from=D(2026, 1, 1))
     master.delist("INE001A01036", known_from=D(2026, 6, 1))
     master.upsert(instrument("INE001A01036", "ACME2"), known_from=D(2026, 9, 1))
-    assert resolved(master.resolve_symbol("ACME2", on=D(2026, 10, 1))).isin == "INE001A01036"
+    assert (
+        resolved(master.resolve_symbol("ACME2", on=D(2026, 10, 1), known_on=None)).isin
+        == "INE001A01036"
+    )
+
+
+def test_a_rename_takes_effect_when_it_happens_not_when_the_name_was_listed(
+    master: InstrumentMaster,
+) -> None:
+    """A rename is a NEW FACT about the world, not a correction of an old one.
+
+    `rename` went through the store's `correct`, which inherits the amended version's
+    `valid_from` — right for "we recorded this wrong and it was always X", wrong here. A
+    symbol changed in May then read as valid since January, so a full-knowledge read of March
+    returned the NEW name for a month it did not yet have.
+
+    Invisible while identity used one date for both clocks, because the new version only
+    surfaced once its knowledge date had passed. It is the same defect the closure tombstone
+    had, and the capability master flagged the same inheritance a week earlier.
+    """
+    master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=D(2026, 1, 1))
+    master.rename("INE002A01018", symbol="RELIND", known_from=D(2026, 5, 1))
+
+    march = master.resolve_symbol("RELIANCE", on=D(2026, 3, 1), known_on=None)
+    assert march is not None, "in March the symbol was still RELIANCE, whatever we know now"
+    assert master.resolve_symbol("RELIND", on=D(2026, 3, 1), known_on=None) is None
+
+
+def test_a_rename_can_be_announced_before_it_takes_effect(master: InstrumentMaster) -> None:
+    master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=D(2026, 1, 1))
+    master.rename(
+        "INE002A01018", symbol="RELIND", known_from=D(2026, 5, 1), valid_from=D(2026, 9, 1)
+    )
+    assert master.resolve_symbol("RELIANCE", on=D(2026, 6, 1), known_on=None) is not None
+    assert master.resolve_symbol("RELIND", on=D(2026, 10, 1), known_on=None) is not None

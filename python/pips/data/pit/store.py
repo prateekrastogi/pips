@@ -187,14 +187,24 @@ class PitStore:
             )
         )
 
-    def close(self, table: str, key: str, known_from: date) -> None:
-        """Record that the key left the master, as of this knowledge date."""
-        current = self._require_latest(table, key)
+    def close(self, table: str, key: str, known_from: date, valid_from: date | None = None) -> None:
+        """Record that the key left the master, learned on one date and effective on another.
+
+        ``valid_from`` defaults to ``known_from`` — a closure takes effect when it happens.
+        It must NOT inherit the closed version's ``valid_from``, which is what it did: a
+        security listed in 2020 and delisted in 2026 produced a tombstone valid from 2020,
+        reading under valid-time filtering as though it had never existed.
+
+        That was invisible while identity used one date for both clocks, because the tombstone
+        only surfaced once its knowledge date had passed and its valid_from was never
+        consulted on its own. Separating the clocks surfaced it at once.
+        """
+        self._require_latest(table, key)
         self.append(
             PitRecord(
                 table=table,
                 key=key,
-                valid_from=current.valid_from,
+                valid_from=known_from if valid_from is None else valid_from,
                 known_from=known_from,
                 op=PitOp.CLOSE,
             )

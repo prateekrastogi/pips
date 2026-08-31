@@ -60,8 +60,16 @@ def jump_explainer(pit_root: Path) -> JumpExplainer | None:
         # master" — and QC could not show it, because a run with no ratio jumps never calls
         # the explainer at all.
         try:
-            by_vendor = instruments.resolve_vendor_code(symbol, on=day)
-            by_symbol = instruments.resolve_symbol(symbol, on=day)
+            # known_on=None — CURRENT knowledge of a PAST date. QC audits historical bronze
+            # today, and "which security was this record about" is a question about the world,
+            # not about what we believed on the bar's own date. Pinning knowledge to `day`
+            # made every historical record unresolvable, because a master is always ingested
+            # after some of the bars it describes.
+            #
+            # The ACTION lookup below keeps its own clock at `day` — identity is reference
+            # data, but an action recorded later must never explain an earlier jump.
+            by_vendor = instruments.resolve_vendor_code(symbol, on=day, known_on=None)
+            by_symbol = instruments.resolve_symbol(symbol, on=day, known_on=None)
         except AmbiguousSymbolError as exc:
             # Two live claims on one identifier. Refusing to guess here is the same refusal
             # the master makes, carried through to QC instead of swallowed into a verdict.

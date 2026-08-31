@@ -438,3 +438,52 @@ def test_a_future_dated_version_does_not_mask_the_one_in_force(store: PitStore) 
         "the announcement must not displace the rule actually in force"
     )
     assert [r.payload["at"] for r in store.as_of("rules", known_on=D(2026, 9, 2))] == ["15:10"]
+
+
+def test_a_closure_takes_effect_when_it_happens_not_when_the_key_was_created(
+    store: PitStore,
+) -> None:
+    """A tombstone must not inherit the valid_from of the version it closes.
+
+    `close` copied `valid_from` from the current version, so a security listed in 2020 and
+    delisted in 2026 produced a CLOSE record valid from 2020 — reading, under valid-time
+    filtering, as though it had never existed at all.
+
+    The collapsed identity clock hid this completely: while knowledge and valid time were the
+    same date, the tombstone only ever surfaced once its knowledge date had passed, and its
+    valid_from was never consulted independently. Separating the clocks surfaced it
+    immediately, in a test about something else.
+    """
+    store.append(
+        PitRecord(
+            table="instruments",
+            key="1",
+            valid_from=D(2020, 1, 1),
+            known_from=D(2020, 1, 1),
+            payload={"symbol": "OLD"},
+        )
+    )
+    store.close("instruments", "1", known_from=D(2026, 6, 1))
+
+    # It existed in 2021 — reading with everything we know now must still say so.
+    live = store.as_of("instruments", known_on=D(9999, 12, 31), valid_on=D(2021, 1, 1))
+    assert [r.key for r in live] == ["1"], "delisting in 2026 did not un-list it in 2021"
+    assert store.as_of("instruments", known_on=D(9999, 12, 31), valid_on=D(2027, 1, 1)) == []
+
+
+def test_a_closure_can_be_announced_before_it_takes_effect(store: PitStore) -> None:
+    # The same split the capability master needed: learned on one date, effective on another.
+    store.append(
+        PitRecord(
+            table="instruments",
+            key="1",
+            valid_from=D(2020, 1, 1),
+            known_from=D(2020, 1, 1),
+            payload={"symbol": "OLD"},
+        )
+    )
+    store.close("instruments", "1", known_from=D(2026, 6, 1), valid_from=D(2026, 9, 1))
+
+    known_everything = D(9999, 12, 31)
+    assert store.as_of("instruments", known_on=known_everything, valid_on=D(2026, 7, 1))
+    assert store.as_of("instruments", known_on=known_everything, valid_on=D(2026, 10, 1)) == []

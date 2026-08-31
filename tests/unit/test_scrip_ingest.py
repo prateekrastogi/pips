@@ -53,7 +53,7 @@ def test_a_first_ingest_records_every_instrument(master: InstrumentMaster) -> No
     result = ingest_instruments(master, [instrument()], known_from=D(2026, 8, 31))
     assert result.added == 1
     assert result.unchanged == 0
-    assert len(master.as_of(D(2026, 8, 31))) == 1
+    assert len(master.as_of(D(2026, 8, 31), known_on=D(2026, 8, 31))) == 1
 
 
 def test_re_ingesting_the_same_file_records_nothing_new(master: InstrumentMaster) -> None:
@@ -78,8 +78,8 @@ def test_a_changed_field_becomes_a_new_version_dated_by_the_ingest(
     result = ingest_instruments(master, [instrument(symbol="RELIND")], known_from=D(2026, 9, 1))
 
     assert result.changed == 1
-    assert master.resolve_symbol("RELIANCE", on=D(2026, 8, 31)) is not None
-    assert master.resolve_symbol("RELIND", on=D(2026, 9, 1)) is not None
+    assert master.resolve_symbol("RELIANCE", on=D(2026, 8, 31), known_on=None) is not None
+    assert master.resolve_symbol("RELIND", on=D(2026, 9, 1), known_on=None) is not None
     assert master.symbol_history("INE002A01018") == [
         (D(2026, 8, 31), "RELIANCE"),
         (D(2026, 9, 1), "RELIND"),

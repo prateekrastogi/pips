@@ -34,6 +34,10 @@ __all__ = ["AmbiguousSymbolError", "Instrument", "InstrumentMaster", "validate_i
 
 TABLE: Final = "instruments"
 
+# Stands in for "every version we have", so `known_on=None` needs no separate code path in the
+# store. Far past any real knowledge date and never written anywhere.
+_FAR_FUTURE: Final = date(9999, 12, 31)
+
 # Country code + 9 alphanumeric + check digit. Uppercase only: an ISIN is a printed
 # identifier, and accepting mixed case would let "ine002a01018" and "INE002A01018" become two
 # instruments with two price histories and no complaint from anything.
@@ -115,30 +119,75 @@ class InstrumentMaster:
             )
         )
 
-    def rename(self, isin: str, symbol: str, known_from: date) -> None:
-        """Record a symbol change. The ISIN does not move, so joins on it survive."""
-        self._amend(isin, known_from, symbol=symbol)
+    def rename(
+        self, isin: str, symbol: str, known_from: date, valid_from: date | None = None
+    ) -> None:
+        """Record a symbol change. The ISIN does not move, so joins on it survive.
 
-    def retoken(self, isin: str, exchange_token: str, known_from: date) -> None:
+        A rename is a NEW FACT about the world, not a correction of an old one, so it takes
+        effect when it happens — ``valid_from`` defaults to ``known_from``. Inheriting the
+        previous version's ``valid_from`` (which is what going through the store's ``correct``
+        did) made a May rename read as valid since January, and a full-knowledge read of March
+        returned a name the security did not yet have.
+        """
+        self._amend(isin, known_from, valid_from, symbol=symbol)
+
+    def retoken(
+        self, isin: str, exchange_token: str, known_from: date, valid_from: date | None = None
+    ) -> None:
         """Record an exchange-token change.
 
         Tokens are the broker's handle and get reassigned. A token->symbol map built once and
         cached is the same splice as the symbol case, in a different field.
         """
-        self._amend(isin, known_from, exchange_token=exchange_token)
+        self._amend(isin, known_from, valid_from, exchange_token=exchange_token)
 
-    def delist(self, isin: str, known_from: date) -> None:
-        """Record that the instrument left the master. Its symbol is now free."""
-        self._require(isin)
-        self.store.close(TABLE, isin, known_from=known_from)
+    def correct(self, isin: str, known_from: date, **changes: str) -> None:
+        """Record that a FIELD WAS ALWAYS WRONG — a correction, not a change in the world.
 
-    def _amend(self, isin: str, known_from: date, **changes: str) -> None:
+        The counterpart to :meth:`rename`, and they differ in exactly one way. A rename says
+        the symbol changed on a date; a correction says we had recorded it wrongly all along.
+        So this inherits the amended version's ``valid_from`` and only advances knowledge time
+        (§3.4), which is what makes "what did the master say on the day" answerable: a run
+        made before the correction saw the wrong value, and must still see it.
+
+        Both exist because both happen. Using one for the other is how a correction quietly
+        rewrites when a change took effect, or a change quietly rewrites the past.
+        """
         current = self._require(isin)
         self.store.correct(
             TABLE,
             isin,
             known_from=known_from,
             payload=current.model_copy(update=changes).model_dump(mode="json"),
+        )
+
+    def delist(self, isin: str, known_from: date, valid_from: date | None = None) -> None:
+        """Record that the instrument left the master. Its symbol is now free.
+
+        ``valid_from`` defaults to ``known_from``: a delisting takes effect when it happens.
+        The split exists for the announced-in-advance case, exactly as elsewhere.
+        """
+        self._require(isin)
+        self.store.close(TABLE, isin, known_from=known_from, valid_from=valid_from)
+
+    def _amend(self, isin: str, known_from: date, valid_from: date | None, **changes: str) -> None:
+        """Append a new version with its OWN effective date.
+
+        Deliberately not ``PitStore.correct``, which inherits the amended version's
+        ``valid_from``. That is right for a true correction — "this value was always X" — and
+        wrong for every change recorded here, which are things that happened on a date. The
+        capability master reached the same conclusion for the same reason.
+        """
+        current = self._require(isin)
+        self.store.append(
+            PitRecord(
+                table=TABLE,
+                key=isin,
+                valid_from=known_from if valid_from is None else valid_from,
+                known_from=known_from,
+                payload=current.model_copy(update=changes).model_dump(mode="json"),
+            )
         )
 
     def _require(self, isin: str) -> Instrument:
@@ -162,29 +211,56 @@ class InstrumentMaster:
 
     # ------------------------------------------------------------- reading ----------
 
-    def as_of(self, on: date) -> list[Instrument]:
-        """Every live instrument as the master knew it on that date, in ISIN order."""
+    def as_of(self, on: date, *, known_on: date | None) -> list[Instrument]:
+        """Every live instrument, on two clocks that are NOT the same question.
+
+        ``on`` is VALID time — the date in the world being asked about. ``known_on`` is
+        KNOWLEDGE time — whose understanding to use, with ``None`` meaning everything we know
+        now.
+
+        **There is no default, deliberately.** The two questions are different and both are
+        legitimate:
+
+        *"Which security was RELIND on 28 August?"* is about the world. Valid time answers it,
+        and asking today with a master downloaded on the 31st is not lookahead — it is
+        reference data about the past. Pass ``known_on=None``.
+
+        *"Which security did we BELIEVE RELIND was on 28 August?"* is about us, and is what
+        reproducing a historical run needs: if the master was wrong that day, the run saw the
+        wrong answer. Pass the run's date.
+
+        Collapsing them made the second the silent default, and a QC pass over August bronze
+        then resolved NOTHING, because the master's knowledge began on the 31st. Neither
+        mistake announces itself — one resolves nothing, the other silently uses today — so
+        the choice is typed at the call site rather than inherited from a default.
+        """
         return [
             from_payload(Instrument, r.payload)
-            for r in self.store.as_of(TABLE, known_on=on, valid_on=on)
+            for r in self.store.as_of(TABLE, known_on=known_on or _FAR_FUTURE, valid_on=on)
         ]
 
-    def resolve_symbol(self, symbol: str, on: date) -> Instrument | None:
+    def resolve_symbol(self, symbol: str, on: date, *, known_on: date | None) -> Instrument | None:
         """The instrument holding ``symbol`` on ``on``. ``None`` if nobody held it.
 
         ``None`` in the gap between a delisting and a reassignment is the load-bearing case:
         falling back to "the most recent holder" is exactly how one price series ends up
         containing two companies.
         """
-        matches = [i for i in self.as_of(on) if i.symbol == symbol]
+        matches = [i for i in self.as_of(on, known_on=known_on) if i.symbol == symbol]
         return self._exactly_one(matches, f"symbol {symbol!r}", on)
 
-    def resolve_token(self, exchange_token: str, on: date) -> Instrument | None:
+    def resolve_token(
+        self, exchange_token: str, on: date, *, known_on: date | None
+    ) -> Instrument | None:
         """The instrument holding ``exchange_token`` on ``on``."""
-        matches = [i for i in self.as_of(on) if i.exchange_token == exchange_token]
+        matches = [
+            i for i in self.as_of(on, known_on=known_on) if i.exchange_token == exchange_token
+        ]
         return self._exactly_one(matches, f"token {exchange_token!r}", on)
 
-    def resolve_vendor_code(self, vendor_code: str, on: date) -> Instrument | None:
+    def resolve_vendor_code(
+        self, vendor_code: str, on: date, *, known_on: date | None
+    ) -> Instrument | None:
         """The instrument the DATA VENDOR called ``vendor_code`` on ``on``.
 
         Separate from :meth:`resolve_symbol` because the two identifiers are separate. pips'
@@ -192,7 +268,11 @@ class InstrumentMaster:
         a vendor code through the symbol path would silently miss every name whose two codes
         differ, which is most of them.
         """
-        matches = [i for i in self.as_of(on) if i.vendor_code and i.vendor_code == vendor_code]
+        matches = [
+            i
+            for i in self.as_of(on, known_on=known_on)
+            if i.vendor_code and i.vendor_code == vendor_code
+        ]
         return self._exactly_one(matches, f"vendor code {vendor_code!r}", on)
 
     @staticmethod
@@ -232,5 +312,11 @@ class InstrumentMaster:
         return out
 
     def snapshot_root(self, on: date) -> str:
-        """Merkle root of the master as of a date [C-DATA-02] — what a run pins."""
+        """Merkle root of the master as of a date [C-DATA-02] — what a run pins.
+
+        BOTH clocks stay pinned to ``on`` here, and that is not an oversight. A snapshot root
+        is precisely "what we knew then"; letting it float with current knowledge would make
+        it change every time the master is updated, which is the one thing a manifest root
+        must never do.
+        """
         return self.store.snapshot_root(TABLE, known_on=on, valid_on=on)
