@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M4 Breeze ingest — backfill DONE.** Fetch path, resumable budgeter and the backfill
+orchestrator are all ported and tested (cassettes and fakes; CI makes no live calls), with the
+runbook at `ops/runbooks/backfill.md`. Remaining for M4: forward WS capture, which has no donor
+(SAL-0025 NONE_FOUND).
+
 **M4 Breeze ingest — fetch path DONE.** Response classification and bar normalization ported
 from SAL-0002/0003, tested against **recorded cassettes** (CI makes no live calls), plus a
 resumable call budgeter reading `config/breeze.yaml`. Remaining for M4: the backfill

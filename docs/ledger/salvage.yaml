@@ -87,6 +87,13 @@
     real quota. Options-specific parts (expiry widening, ATM strike bands) are dropped:
     pips is cash equity.
 
+    PORTED at M4 into python/pips/data/breeze/backfill.py. The F&O expiry-discovery half
+    was dropped (pips is cash equity); what ported is the orchestration skeleton — a
+    persisted manifest for zero-call resume, transient errors never marked done, empty
+    days self-skipping, and a clean budget stop. pips adds one distinction the donor
+    could not draw: a RATE-LIMITED reply is never marked done either, because Breeze
+    sends it as HTTP 200 and marking it would write a permanent hole that looks exactly
+    like a holiday.
 - id: SAL-0005
   component: "Breeze adapter test suite (cassette-style)"
   repo: intraday

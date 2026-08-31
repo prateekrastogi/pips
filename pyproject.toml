@@ -9,6 +9,9 @@ dependencies = [
     "numpy>=2.1",
     "polars>=1.9",
     "duckdb>=1.1",
+    # The Breeze data plane. Present in the research image so the backfill can run on
+    # arb-vm; CI never calls it (§6 M4 — the fetch path is tested against cassettes).
+    "breeze-connect>=1.0",
 ]
 
 [project.scripts]
@@ -47,7 +50,8 @@ warn_unreachable = true
 files = ["python/pips", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["yaml", "numpy", "numpy.*"]
+# breeze_connect ships no type information; it is a vendor SDK, not our code.
+module = ["yaml", "numpy", "numpy.*", "breeze_connect"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
