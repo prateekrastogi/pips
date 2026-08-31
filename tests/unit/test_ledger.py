@@ -67,3 +67,21 @@ def test_ledger_check_also_enforces_the_harvest_map(tmp_path: Path) -> None:
     )
     failures = check_ledger(tmp_path)
     assert any("salvage" in f or "no salvage row covers" in f for f in failures), failures
+
+
+def test_collectability_is_answered_by_pytest_not_by_parsing_its_summary() -> None:
+    """A real node id collects; a bogus one does not.
+
+    The first version of this check scanned `pytest --collect-only -q` stdout for the node id
+    as a substring. Under pytest 9 that output is a per-file COUNT summary, not a list of node
+    ids — so a file-path reference matched by accident while a real `path::test` reference
+    could never match. Asking pytest to collect the id is version-independent and answers the
+    actual question.
+    """
+    from pips.ledger.check import uncollectable_nodes
+
+    real = "tests/unit/test_ledger.py::test_repo_ledger_is_green"
+    bogus = "tests/unit/test_ledger.py::test_this_does_not_exist"
+    assert uncollectable_nodes(ROOT, [real]) == []
+    assert uncollectable_nodes(ROOT, [bogus]) == [bogus]
+    assert uncollectable_nodes(ROOT, []) == []

@@ -73,16 +73,23 @@
   spec: "IMPLEMENTATION.md#37-cost-model"
   source_refs: ["reference/cg-meta §8.2", "reference/blueprint Appendix A"]
   code: "python/pips/costs/statutory.py"
-  tests: []
-  status: planned
+  tests: ["tests/unit/costs/test_golden.py::test_flattrade_1l_rt"]
+  status: enforced
   owner_milestone: M9
+  # The rate set was DERIVED from §3.7's goldens, not copied: sell-buy = Rs22 at Rs1L fixes
+  # STT(0.025%, sell-only) less stamp(0.003%, buy-only), and Flattrade's Rs6.74 at zero
+  # brokerage fixes exchange+IPFT+SEBI = Rs3.17. It then reproduces all five goldens across
+  # two brokers and four notionals, including tiers where the brokerage cap binds and where
+  # it does not. Production still requires contract-note reconciliation (M25).
 
 - id: C-COST-02
   title: "High-cost reference line, ₹1L = ₹82.68 (8.268 bps); 50k/2L/5L = 10.63/5.91/4.49"
   spec: "IMPLEMENTATION.md#37-cost-model"
-  code: "python/pips/costs/brokerage.py"
-  tests: []
-  status: planned
+  code: "python/pips/costs/schedule.py"
+  tests:
+    - "tests/unit/costs/test_golden.py::test_high_cost_line_1l_rt"
+    - "tests/unit/costs/test_golden.py::test_high_cost_line_across_capital_tiers"
+  status: enforced
   owner_milestone: M9
   # Derived from the Zerodha schedule. ADR-0010 keeps it as a STRESS line, not a venue:
   # the P3 gate's net SR >= 1.0 against it stays at full severity. Deleting it because we
@@ -91,9 +98,11 @@
 - id: C-COST-03
   title: "Effective-dated fee schedules carry source + verified_on + validity dates"
   spec: "IMPLEMENTATION.md#37-cost-model"
-  code: "config/costs"
-  tests: []
-  status: planned
+  code: "python/pips/costs/schedule.py"
+  tests:
+    - "tests/unit/costs/test_golden.py::test_the_schedule_carries_a_source_and_a_verification_date"
+    - "tests/unit/costs/test_golden.py::test_a_trade_date_outside_the_schedule_validity_is_refused"
+  status: enforced
   owner_milestone: M9
 
 - id: C-COST-04

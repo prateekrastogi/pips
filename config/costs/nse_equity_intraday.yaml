@@ -1,0 +1,66 @@
+# NSE cash-equity INTRADAY charge schedule [C-COST-01..03] (§3.7).
+#
+# Costs are effective-dated DATA, not constants (rule 6). Every schedule carries a source, a
+# verification date and a validity window, and applying it outside that window is refused —
+# silently using today's rates for a 2023 trade would make every historical backtest quietly
+# wrong in the direction that flatters it.
+#
+# HOW THESE RATES WERE OBTAINED. They were DERIVED from the goldens §3.7 pins, then
+# cross-checked against four independent data points, rather than copied from memory:
+#   * sell - buy = Rs22.00 at Rs1L for BOTH brokers  ->  STT(sell-only) - stamp(buy-only)
+#                                                    ->  0.025% - 0.003% = 25 - 3 = 22
+#   * Flattrade buy Rs6.74 at zero brokerage         ->  (E+IPFT+SEBI) x 1.18 + 3.00 = 6.74
+#                                                    ->  E+IPFT+SEBI = Rs3.17 at Rs1L
+#                                                    ->  0.00297% + 0.0001% + 0.0001% exactly
+# The resulting set then reproduces all five §3.7 goldens exactly, across two brokers and
+# four notionals, including the tiers where the brokerage cap binds and where it does not.
+# That cross-check is the evidence; the tests in tests/unit/costs/ are where it lives.
+#
+# STILL REQUIRED BEFORE PRODUCTION (§3.7): reconciliation against a REAL CONTRACT NOTE. A
+# derivation that matches published totals is strong, but a contract note is the ground truth,
+# and the production cost freeze is gated on it (M25).
+
+schema_version: 1
+market: NSE
+segment: CASH_EQUITY
+product: MIS               # intraday. Delivery (CNC) has a different STT rate and no
+                           # intraday square-off — a separate schedule when M9 needs it.
+source: >
+  Derived from the goldens pinned in IMPLEMENTATION.md §3.7 (verified Aug 2026) and
+  cross-checked against all five of them. Component rates are the standard NSE cash-equity
+  intraday stack; the transaction/IPFT split reflects the revision effective 1 Mar 2026
+  referenced in constitution rule 6.
+verified_on: 2026-08-31
+
+# The window this schedule applies to. NSE revised the transaction/IPFT split effective
+# 1 Mar 2026 (rule 6), which is why validity starts there rather than open-ended.
+valid_from: 2026-03-01
+valid_to: null             # null = still in force; set it when a successor schedule lands
+
+statutory:
+  # Securities Transaction Tax — SELL side only for intraday equity.
+  stt_sell_rate: "0.00025"          # 0.025%
+  # NSE transaction charge, post the 1 Mar 2026 split.
+  exchange_txn_rate: "0.0000297"    # 0.00297%
+  # Investor Protection Fund Trust levy, separated out by the same revision.
+  ipft_rate: "0.000001"             # 0.0001%
+  # SEBI turnover fee: Rs10 per crore.
+  sebi_turnover_rate: "0.000001"    # 0.0001%
+  # Stamp duty — BUY side only.
+  stamp_buy_rate: "0.00003"         # 0.003%
+  # GST applies to the SERVICE component only: brokerage + exchange + IPFT + SEBI.
+  # Applying it to STT or stamp duty would be a tax on a tax and would inflate every cost
+  # estimate in the funnel. Pinned by a test.
+  gst_rate: "0.18"
+
+brokers:
+  FLATTRADE:
+    # Zero brokerage. §3.7 also records the API as limit-only and rate 10/s & 40/min; those
+    # are broker_capability facts (§3.4), not cost facts, and live in the capability snapshot.
+    brokerage_rate: "0"
+    brokerage_cap_paise: 0
+  HIGH_COST_REFERENCE:
+    # Derived from the Zerodha schedule and RETAINED AS A STRESS LINE, not a venue (ADR-0010).
+    # The P3 gate's net SR >= 1.0 is measured against it at full severity.
+    brokerage_rate: "0.0003"        # 0.03% ...
+    brokerage_cap_paise: 2000       # ...or Rs20 per order, whichever is lower

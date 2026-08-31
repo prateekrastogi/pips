@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M9 cost model — statutory stack DONE** (`[C-COST-01/02/03]` all `enforced`; all five §3.7
+goldens reproduce exactly). Taken out of §6 order because M4 is blocked on the Breeze token and
+M9 needs no data at all. Remaining for M9: `[C-COST-04]` — impact, spread·aggression, latency
+and adverse selection, which has its own donors (SAL-0013, SAL-0014).
+
 **M3.5 arb-vm deploy rail — built and VM-bootstrapped; end-to-end verify blocked on two human
 items.** arb-vm now has Docker 29.7.2 + Compose v5.5.0 running, `/srv/pips` with all data
 zones and a 0700 secrets dir, and a read-only deploy keypair. The rail (`sync.sh`,
@@ -11,6 +16,11 @@ market-hours guard is tested. M0, M0.5, M1, M2 done; M3 done except the Breeze p
 
 ## Last verify output
 ```
+M9 Verify (§6) — pytest tests/unit/costs -q -> 15 passed
+  Flattrade  Rs1L: buy 6.74 / sell 28.74 / RT 35.48 = 3.548 bps      <- §3.7 golden, exact
+  High-cost  Rs1L: buy 30.34 / sell 52.34 / RT 82.68 = 8.268 bps     <- §3.7 golden, exact
+  High-cost RT bps at 50k / 2L / 5L: 10.63 / 5.91 / 4.49             <- §3.7 goldens, exact
+
 arb-vm    Docker 29.7.2 · Compose v5.5.0 · daemon active · docker usable as ubuntu
           /srv/pips/{bronze,silver,gold,quarantine,snapshots,universes,deploy} owned by ubuntu
           /srv/pips/secrets 0700 · deploy.env 0600 · deploy keypair generated (private stays there)
@@ -20,8 +30,8 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 65 files · mypy --strict 65 files · 255 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (20/2/4)
+  ruff 68 files · mypy --strict 68 files · 271 pytest · clippy clean (21 crates) ·
+  cargo test ok · determinism bit-identical · ledger-check 26 rows (17/2/7)
 ```
 
 ## Next 3 actions
@@ -31,8 +41,10 @@ make ci -> ci: green
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **M6 masters** or **M9 cost model** — both have donors and neither needs credentials, so
-   either is available if M4 stays blocked.
+3. **`[C-COST-04]`** — the non-statutory cost terms (impact κ(q/ADV)^ψ, spread·aggression,
+   latency, adverse selection), porting SAL-0013 (`spread_impact.py`) and SAL-0014
+   (Corwin–Schultz with its rejection rules). Needs no credentials, so it stays available
+   while M4 is blocked.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private

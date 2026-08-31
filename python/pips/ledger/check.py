@@ -26,7 +26,7 @@ from pathlib import Path
 from pips.ledger.model import Ledger, Status, load_ledger
 from pips.ledger.salvage import check_salvage
 
-__all__ = ["check_ledger", "cited_ids", "heading_slugs", "main"]
+__all__ = ["check_ledger", "cited_ids", "heading_slugs", "main", "uncollectable_nodes"]
 
 _RANGE_RE = re.compile(r"\b([CG]-[A-Z0-9]+)-(\d+)…(\d+)\b")
 _GLOB_RE = re.compile(r"\b([CG]-[A-Z0-9]+)-\*")
@@ -56,19 +56,33 @@ def cited_ids(prose: str, known_ids: list[str]) -> set[str]:
     return cited
 
 
-def _collectable_pytest(root: Path, node_ids: list[str]) -> list[str]:
-    """Return the node ids pytest does *not* collect."""
-    if not node_ids:
-        return []
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+def _collects(root: Path, node_ids: list[str]) -> bool:
+    """Whether pytest can collect every id in one go."""
+    probe = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "--no-header", *node_ids],
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
     )
-    collected = result.stdout
-    return [n for n in node_ids if n not in collected]
+    return probe.returncode == 0
+
+
+def uncollectable_nodes(root: Path, node_ids: list[str]) -> list[str]:
+    """Return the node ids pytest cannot collect.
+
+    Asks pytest to collect them rather than scanning its output. An earlier version searched
+    ``--collect-only -q`` stdout for the id as a substring, but under pytest 9 that output is
+    a per-file COUNT summary -- so a bare file path matched by accident while a real
+    ``path::test`` node id could never match, and an ``enforced`` row pointing at a specific
+    test would have been reported as broken. Asking is version-independent.
+    """
+    if not node_ids:
+        return []
+    if _collects(root, node_ids):
+        return []
+    # The batch failed; find out which ones, so the message names them.
+    return [n for n in node_ids if not _collects(root, [n])]
 
 
 def _rust_test_present(root: Path, ref: str) -> bool:
@@ -120,7 +134,7 @@ def check_ledger(root: Path) -> list[str]:
                 else:
                     pytest_nodes.append(ref)
 
-    failures += [f"pytest does not collect: {n}" for n in _collectable_pytest(root, pytest_nodes)]
+    failures += [f"pytest does not collect: {n}" for n in uncollectable_nodes(root, pytest_nodes)]
 
     # The harvest map is part of the normative layer: rule 13 makes consulting it a
     # precondition for every connector, so an unanswered need is a gate failure, not a note.
