@@ -42,7 +42,14 @@ from pips.data.qc.checks import (
     check_unexplained_ratio_jump,
 )
 
-__all__ = ["CORRUPTIONS", "QcReport", "main", "run_qc", "seed_corrupt_bronze"]
+__all__ = [
+    "CORRUPTIONS",
+    "QcReport",
+    "main",
+    "run_qc",
+    "seed_corrupt_bronze",
+    "seed_two_sessions",
+]
 
 CORRUPTIONS: Final = frozenset(
     {"bar_sanity", "label_order", "spike", "decimal_shift", "session_coverage", "empty"}
@@ -324,7 +331,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"qc: WARNING no manifest at {manifest_path} — every session will be reported")
         print("    as unfetched, because nothing else can distinguish a hole from a quiet day.")
 
-    report = run_qc(bronze, quarantine, fetched)
+    # THE CALENDAR IS NOT OPTIONAL HERE. Without it `run_qc` cannot establish that two
+    # sessions are adjacent, so the overnight-ratio check is skipped — silently. That is how
+    # a QC pass over the real archive reported "6 records, 0 findings" while the check it had
+    # just been given never ran: the number was true and meant nothing.
+    calendar_path = Path("config/calendars/nse_equity.yaml")
+    if not calendar_path.exists():
+        print(f"qc: WARNING no calendar at {calendar_path} — the overnight-ratio check needs")
+        print("    one to tell adjacent sessions from a gap, and will be SKIPPED without it.")
+    report = run_qc(
+        bronze, quarantine, fetched, calendar_path=calendar_path if calendar_path.exists() else None
+    )
     print(report.describe())
     by_check: dict[str, int] = {}
     for finding in report.findings:

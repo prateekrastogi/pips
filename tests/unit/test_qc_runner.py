@@ -19,7 +19,13 @@ from pathlib import Path
 import pytest
 
 from pips.data.qc import runner as runner_module
-from pips.data.qc.runner import CORRUPTIONS, run_qc, seed_corrupt_bronze, seed_two_sessions
+from pips.data.qc.runner import (
+    CORRUPTIONS,
+    main,
+    run_qc,
+    seed_corrupt_bronze,
+    seed_two_sessions,
+)
 
 
 @pytest.fixture
@@ -225,3 +231,23 @@ def test_a_jump_across_a_gap_is_not_treated_as_overnight(tmp_path: Path) -> None
         calendar_path=Path("config/calendars/nse_equity.yaml"),
     )
     assert not any(f.check == "ratio_jump" for f in report.findings)
+
+
+def test_the_cli_path_actually_reaches_the_ratio_check(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """`make qc` must exercise every check, not just `run_qc` in a test.
+
+    Found by running QC on the real VM archive: 6 records, 0 findings — and the number meant
+    nothing, because `main()` called `run_qc` WITHOUT a calendar and the ratio check is
+    skipped when adjacency cannot be established. The check had moved from "never called" to
+    "called only from tests", which is the same vacuous green one layer up.
+
+    So this goes through `main()`, exactly as the Make target does.
+    """
+    seed_two_sessions(tmp_path / "bronze", first_close_paise=100_000, second_open_paise=50_000)
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "backfill-manifest.json").write_text(
+        json.dumps({"outcomes": {"CLEAN:2026-08-27": "OK", "CLEAN:2026-08-28": "OK"}}),
+        encoding="utf-8",
+    )
+    assert main([str(tmp_path)]) == 1
+    assert "ratio_jump" in capsys.readouterr().out
