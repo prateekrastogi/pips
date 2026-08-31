@@ -28,8 +28,20 @@ the daily error at ~170 calls.
 ```bash
 ssh arb-vm
 cd /srv/pips/checkout
-docker compose run --rm research python -m pips.cli backfill --symbols U100 --from 2023-09-01 --to 2026-08-31
+
+# Always cost the plan first. It opens no session and spends nothing.
+docker compose run --rm --no-deps research python -m pips.cli backfill \
+  --symbols RELIND,ICIBAN --from 2026-08-26 --to 2026-08-28 --dry-run
+
+# Then run it.
+docker compose run --rm --no-deps research python -m pips.cli backfill \
+  --symbols RELIND,ICIBAN --from 2026-08-26 --to 2026-08-28
 ```
+
+`docker compose run` resolves `pips/research:current`, which the deploy rail republishes after
+every successful deploy. If you ever need a specific build, set `PIPS_SHA=<sha>` — but check
+`docker images pips/research` first, because an image tag that nobody refreshes is how you end
+up running last hour's code against this hour's data.
 
 Writes to `/srv/pips/bronze/<symbol>/<date>/<received_at_ns>.json` — the exact payload, the
 receive timestamp, and the request that produced it (§3.4). Append-only: a second observation

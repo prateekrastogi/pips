@@ -159,6 +159,15 @@ if ! "$REPO/ops/deploy/healthcheck.sh"; then
   exit 1
 fi
 
+# Republish the fallback tag compose resolves to when PIPS_SHA is unset. Without this a
+# manual `docker compose run` on the VM silently executes whatever stale image last carried
+# the tag — observed live: an hour-old build from before the invoked command existed.
+for image in research engine reader; do
+  docker image inspect "pips/$image:$TARGET" >/dev/null 2>&1 \
+    && docker tag "pips/$image:$TARGET" "pips/$image:current"
+done
+log "republished :current -> ${TARGET:0:12}"
+
 echo "$TARGET" > "$LAST_GOOD"
 if [ -n "$DEFERRED" ]; then
   log "deployed ${TARGET:0:12}; DEFERRED (will retry next poll):$DEFERRED"

@@ -7,13 +7,19 @@
 # trading-path services (breeze-reader, shadow-engine, live-engine) are held by
 # ops/deploy/sync.sh until after the 15:35 close or before 08:45.
 
+# The fallback tag is `current`, not `dev`, and the deploy rail republishes it after every
+# successful deploy. `dev` was silently stale: a manual `docker compose run` on the VM resolved
+# to an hour-old image from before the command being invoked existed, and for a data campaign
+# that means bronze written by an outdated normalizer. Pinned by a test so the two files cannot
+# drift apart.
+
 services:
   research:
     build:
       context: .
       dockerfile: docker/research.Dockerfile
       target: research
-    image: pips/research:${PIPS_SHA:-dev}
+    image: pips/research:${PIPS_SHA:-current}
     environment:
       PIPS_ENV: ${PIPS_ENV:-dev}
       PIPS_DATA_ROOT: /srv/pips
@@ -39,7 +45,7 @@ services:
       context: .
       dockerfile: docker/reader.Dockerfile
       target: reader
-    image: pips/reader:${PIPS_SHA:-dev}
+    image: pips/reader:${PIPS_SHA:-current}
     env_file: [/srv/pips/secrets/breeze.env]   # data-plane credentials ONLY (rule 7)
     volumes:
       - pips-data:/srv/pips
@@ -52,7 +58,7 @@ services:
       context: .
       dockerfile: docker/engine.Dockerfile
       target: engine
-    image: pips/engine:${PIPS_SHA:-dev}
+    image: pips/engine:${PIPS_SHA:-current}
     environment:
       PIPS_MODE: shadow          # simulated orders against real quotes
       PIPS_LIVE: "0"             # the live chain is never enabled from this file

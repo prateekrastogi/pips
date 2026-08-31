@@ -260,3 +260,36 @@ def test_the_reexec_does_not_skip_the_work_it_was_re_execed_to_do() -> None:
         "the 'nothing to do' exit must be guarded by the re-exec flag, or a re-execed run "
         "skips the very deploy it was re-execed to perform"
     )
+
+
+def test_the_compose_fallback_tag_is_the_one_the_rail_publishes() -> None:
+    """A manual `docker compose run` must not resolve to a stale image.
+
+    Found by following our own runbook: `docker compose run research ...` on the VM resolved
+    to `pips/research:dev`, an hour-old build from before the command being invoked existed.
+    The rail publishes SHA-tagged images, so nothing was refreshing the fallback tag — an
+    operator gets old code, silently, and for a data campaign that means bronze written by an
+    outdated normalizer.
+
+    The fix is structural rather than a runbook note: the rail republishes the fallback tag
+    after a successful deploy. This test keeps the two files from drifting apart, which is the
+    same failure the service-list guard above exists for.
+    """
+    import re
+
+    import yaml
+
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    images = [s.get("image", "") for s in compose["services"].values() if s.get("image")]
+    fallbacks = {
+        m.group(1) for image in images if (m := re.search(r"\$\{PIPS_SHA:-([^}]+)\}", image))
+    }
+    assert fallbacks, "compose must give PIPS_SHA a fallback tag"
+
+    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
+    for tag in fallbacks:
+        assert f":{tag}" in sync, (
+            f"compose falls back to ':{tag}' but sync.sh never publishes it — a manual "
+            "`docker compose run` would resolve to whatever stale image happens to carry "
+            "that tag"
+        )
