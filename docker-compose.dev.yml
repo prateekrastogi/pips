@@ -1,0 +1,16 @@
+# Dev override: mount the working tree and the fixtures instead of VM data volumes, so a
+# laptop can run the entire funnel with zero API access and zero market data (§4).
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml run research make ci
+
+services:
+  research:
+    volumes:
+      - .:/app
+      - ./fixtures:/srv/pips/fixtures:ro
+      - pips-dev-venv:/app/.venv
+    environment:
+      PIPS_ENV: dev
+      PIPS_DATA_ROOT: /srv/pips
+
+volumes:
+  pips-dev-venv:

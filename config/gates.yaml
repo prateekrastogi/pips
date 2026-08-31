@@ -1,0 +1,24 @@
+# config/gates.yaml — numeric thresholds the funnel enforces.
+# Every value here has a matching row in docs/ledger/gates.yaml. Changing a number means
+# editing this file + the enforcing code + an ADR, in one reviewable commit (§8.2).
+# Populated as each gate's milestone lands; empty values are not defaults, they are gaps.
+
+schema_version: 1
+
+s4_certification:
+  dsr_min: 0.95              # [G-S4-DSR] evaluated at N=M; reported at N=M_erank
+  pbo_max: 0.25
+  spa_p_max: 0.10
+  min_test_trades: 400
+  pairwise_pnl_corr_max: 0.5
+
+stress:
+  cost_multipliers: [1.0, 1.5, 2.0]
+  delay_bars: [0, 1, 2]
+
+p3_gate:
+  net_sharpe_min_zero_cost_line: 1.5
+  net_sharpe_min_zerodha_line: 1.0
+
+governor:
+  orders_per_second_max: 5   # engine cap; exchange registration-free limit is 10/s

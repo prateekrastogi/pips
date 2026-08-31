@@ -124,3 +124,8 @@ docker-compose.override.yml
 
 # ---- Claude Code local state ----
 .claude/settings.local.json
+
+# ---- keep the empty zone/state directories in the tree ----
+!data/**/.gitkeep
+!docs/state/gates/.gitkeep
+!docs/state/blocks/.gitkeep

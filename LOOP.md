@@ -19,19 +19,23 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
    the next phase; else re-run the phase's headline Verify (regression watch), update
    CURRENT.md, stop.
 5. Otherwise → advance the active milestone (or start the next per §6 order): plan briefly,
-   implement ONE coherent chunk, run that milestone's Verify commands
-   (`docker compose run research make ci` or the milestone-specific target), commit on
-   m/<id>-<slug>.
+   then TDD ONE coherent chunk — write the failing test FIRST, run it, keep the red output;
+   write the least code that turns it green; refactor under green. Then run that milestone's
+   Verify commands (`docker compose run research make ci` or the milestone-specific target)
+   and commit on m/<id>-<slug>.
 
 ## 2 · Close the tick (mandatory, even for "nothing to do")
 - Overwrite docs/state/CURRENT.md (active item, last verify output, next 3 actions,
-  blockers/awaiting). Append one line to docs/state/log/<today>.md.
+  blockers/awaiting). Append one line to docs/state/log/<today>.md — including the RED
+  output you observed before the code went green (§7.1 evidence; green-only logs are not TDD).
 - Flip any ledger rows you completed. New decision → ADR shard. New block → BLK card.
 - Commit. End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
 
 ## Hard rails (constitution §2 binds every tick)
 - Never create/enable anything on the live path: no PIPS_LIVE, no live flags, no real orders.
 - Never weaken tests/goldens/gates/ledger to go green. Never touch ../past except read-only.
+- Never write production code before a failing test (rule 16). `make tdd-check` refuses the
+  branch; a `TDD-Exempt: <reason>` trailer is the only bypass and it must state a real reason.
 - Never merge to main with red CI; never proceed past a phase gate without its approved-file.
 - Milestone Verify failing after ~3 distinct attempts, or any Jenkins/compose/arb-vm/deploy
   boundary issue → STOP grinding, write the block card, dispatch the specialist (§10.4).

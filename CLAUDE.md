@@ -14,10 +14,13 @@ LOAD ORDER (strict, to protect context): docs/INDEX.md → docs/state/CURRENT.md
 milestone section of IMPLEMENTATION.md → its ledger rows. Everything else on demand only.
 Reference docs in docs/reference/ are consulted by section, never ingested.
 
-Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · ledger-check ·
-s1-smoke · backtest-smoke · parity DAY=<day> · qc
+Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · tdd-check ·
+ledger-check · s1-smoke · backtest-smoke · parity DAY=<day> · qc
 
-Constitution (full text IMPLEMENTATION.md §2): determinism; causality = F_t-measurability
+Constitution (full text IMPLEMENTATION.md §2): TEST-FIRST — every behavioural change starts
+as a failing test (red→green→refactor); never write production code before its test, record
+the red output in the session log + PR body (rule 16 / §7.1; `make tdd-check` enforces it,
+`TDD-Exempt: <reason>` is the only, loud, bypass); determinism; causality = F_t-measurability
 (AsOf view; bars close-labeled; no full-day fields intraday; no smoothed states); bitemporal
 append-only evidence; every viewed trial counts; falsifiers before search; costs are
 effective-dated data; two planes/two credentials/two processes; ≤5 orders/s governor;

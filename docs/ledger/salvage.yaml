@@ -1,0 +1,18 @@
+# ledger/salvage.yaml — SAL-* rows produced by M1 (§1.2 harvest audit).
+# EMPTY UNTIL M1 RUNS. Constitution rule 13: before writing any connector, adapter,
+# session/token flow, instrument master, downloader or calendar, consult this file.
+# A from-scratch implementation requires a row with decision: NONE_FOUND naming the
+# refs and keywords searched — "I didn't look" is not valid provenance.
+#
+# Row shape:
+#   - id: SAL-0001
+#     component: "breeze session-token bootstrap"
+#     repo: convexity            # ../past/<repo>
+#     path: "src/breeze/auth.py"
+#     commit: "<source SHA — often NOT head>"
+#     ref: "<branch or tag it was found on>"
+#     found_at_head: false
+#     decision: VENDOR | PORT | WRAP | SKIP | NONE_FOUND
+#     covers_needs: ["M4 session-token flow"]
+#     notes: "<why this donor, what changes on vendor/port>"
+[]

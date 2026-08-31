@@ -1,0 +1,8 @@
+[package]
+name = "feature-ir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]

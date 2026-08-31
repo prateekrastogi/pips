@@ -1,0 +1,39 @@
+# pips Rust execution plant — cargo workspace (§4).
+[workspace]
+resolver = "2"
+members = [
+    "rust/crates/domain",
+    "rust/crates/math-kernel",
+    "rust/crates/math-python",
+    "rust/crates/market-protocol",
+    "rust/crates/market-breeze",
+    "rust/crates/bars",
+    "rust/crates/feature-ir",
+    "rust/crates/alpha-ir",
+    "rust/crates/portfolio-ir",
+    "rust/crates/strategy-bundle",
+    "rust/crates/event-reducer",
+    "rust/crates/sim-venue",
+    "rust/crates/broker-protocol",
+    "rust/crates/broker-flattrade",
+    "rust/crates/broker-zerodha",
+    "rust/crates/oms",
+    "rust/crates/risk",
+    "rust/crates/accounting",
+    "rust/crates/journal",
+    "rust/crates/replay",
+    "rust/crates/telemetry",
+    "rust/crates/engine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+
+[workspace.lints.clippy]
+all = "deny"
+
+[profile.release]
+lto = true
+codegen-units = 1

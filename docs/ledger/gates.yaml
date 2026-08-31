@@ -1,0 +1,48 @@
+# ledger/gates.yaml — one row per promotion/release gate (§8.2).
+# Changing a threshold = edit this file + the enforcing code + an ADR, in one commit.
+
+- id: G-AUTH-0
+  title: "Data-use authority: written ICICI clarification, or swap to the broker feed"
+  spec: "IMPLEMENTATION.md#21-gate-0"
+  source_refs: ["reference/cg-blueprint GATE-0", "ADR-0006"]
+  threshold: {written_clarification: true, or_broker_feed_swap: true}
+  enforced_by: "ops/runbooks/authority.md"
+  evidence: "docs/reports/feasibility/gate0-authority.md"
+  code: null
+  tests: []
+  status: planned
+  owner_milestone: M3
+
+- id: G-DEPLOY-01
+  title: "Deploy rail: main SHA reaches arb-vm; failed health check auto-rolls back"
+  spec: "IMPLEMENTATION.md#22-runtime-topology"
+  threshold: {poll_interval_minutes_max: 2, auto_rollback: true, market_hours_guard: true}
+  enforced_by: "ops/deploy/sync.sh"
+  evidence: "docs/reports/deploy-rail-demo.md"
+  code: null
+  tests: []
+  status: planned
+  owner_milestone: M3.5
+
+- id: G-S4-DSR
+  title: "Deflated Sharpe >= 0.95 at N=M (report N=M_erank)"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  threshold: {dsr_min: 0.95}
+  enforced_by: "python/pips/search/funnel.py::gate_s4"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: null
+  tests: []
+  status: planned
+  owner_milestone: M18
+
+- id: G-TDD-01
+  title: "Test-first: no commit adds production code before a covering test"
+  spec: "IMPLEMENTATION.md#71-test-first-protocol"
+  source_refs: ["IMPLEMENTATION.md §2 rule 16"]
+  threshold: {code_before_test_commits_max: 0, exemption_requires_reason: true}
+  enforced_by: "python/pips/ledger/tdd.py::evaluate"
+  evidence: "docs/state/log/<date>.md"
+  code: "python/pips/ledger/tdd.py"
+  tests: ["tests/unit/test_tdd.py"]
+  status: enforced
+  owner_milestone: M0

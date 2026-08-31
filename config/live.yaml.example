@@ -1,0 +1,18 @@
+# config/live.yaml.example — template ONLY.
+#
+# The live-flag chain (constitution rule 8) needs ALL THREE, independently:
+#   1. the engine binary compiled with the `live` cargo feature,
+#   2. PIPS_LIVE=1 in the environment, set by a human on arb-vm,
+#   3. this file present as config/live.yaml with the acknowledgement below.
+#
+# The autonomous loop may never create, enable or modify any of them. Copying this file
+# to config/live.yaml is a human act, gated on: the P5 gate signed off, GATE-0 authority
+# resolved [G-AUTH-0], a completed 2-week dry run, and a completed 4–6 week shadow (M25).
+
+i_understand_live_trading: false   # a human sets this to true, on the VM, never here
+
+broker: flattrade                  # flattrade | zerodha — chosen by measured shortfall (M25)
+capital_tier: "2L"                 # 2L | 5L | 10L
+leverage: 1.0                      # unlevered at launch (ADR-0003); any other value needs its own cycle
+bundle_id: ""                      # exactly one champion bundle; challengers stay shadow-only
+max_orders_per_second: 5           # engine governor; never raised above the shared token bucket

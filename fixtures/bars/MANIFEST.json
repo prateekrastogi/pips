@@ -1,0 +1,35 @@
+{
+  "files": {
+    "bars/1m/SMOKEA_2026-06-01.json": "0c2bb49342df9505007fa9a5225ea43893da0a037b877f4eca3101a411904c65",
+    "bars/1m/SMOKEA_2026-06-02.json": "ff38aa69f32686de3e6d8aee08b2c63f8727ae597a8dfec4b56aa9401edab60c",
+    "bars/1m/SMOKEA_2026-06-03.json": "ac408de7ef9159dd41536de90dc77d873c28dbeedba52d56ece340e8223610c3",
+    "bars/1m/SMOKEA_2026-06-04.json": "cabcbe4e388ab3082edad99f55ba2d310f963e035cfedbeba0ec21333a74e096",
+    "bars/1m/SMOKEA_2026-06-05.json": "b69a4b9ee5fec4e2d9512f7aa0d66e633dd37e40d8938d013c34754c396a3c71",
+    "bars/1m/SMOKEB_2026-06-01.json": "fd54a13461d7590af42af14e1656a40a214167f70d0a6066f7b4df4d4eab6637",
+    "bars/1m/SMOKEB_2026-06-02.json": "681515ddd2bc4dd3548b4dd973e1b42d82f0bd6468c0625548f13ea611a1929d",
+    "bars/1m/SMOKEB_2026-06-03.json": "21ca13a00841771733ac11a0798dc04de4eb6a7b142ecf04277c123278d1cf1e",
+    "bars/1m/SMOKEB_2026-06-04.json": "0b1bc17c52d4e2e320ff29b74fdd75455c1be89345200e6ab634461e18af3421",
+    "bars/1m/SMOKEB_2026-06-05.json": "9ce967822a68d2f1fc79f26b9abea074731540cebc7a9f0ad5448d55a389a517",
+    "bars/1s/SMOKEA_2026-06-05.json": "5a3c53eb4358364dfe68c3c1d62f24aed7813614a44129da35e3705fe004a260"
+  },
+  "manifest_hash": "eccc5e2f268b4ad125163f58815710a68a524943f8a34b79597199f07bda44b4",
+  "spec": {
+    "days": [
+      "2026-06-01",
+      "2026-06-02",
+      "2026-06-03",
+      "2026-06-04",
+      "2026-06-05"
+    ],
+    "second_bar_day": "2026-06-05",
+    "second_bar_symbol": "SMOKEA",
+    "seed": 20260831,
+    "start_price_paise": 250000,
+    "symbols": [
+      "SMOKEA",
+      "SMOKEB"
+    ],
+    "tick_paise": 5
+  },
+  "spec_hash": "ae63d0eb8192522434ca01d9503fb3380f2878d3a69a46df22e41161e79633f8"
+}

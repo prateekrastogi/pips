@@ -157,6 +157,17 @@ build/test probes; fan out subagents if there are many repos.
     (§2.2). Anything that needs real data (backfill, sweeps, capture, engines) executes on the
     VM. Images are immutable and SHA-tagged; data, journals, the registry and secrets live in
     VM volumes/env files and are **never baked into an image** `[C-DEPLOY-01]`.
+16. **Test-first (TDD), always.** Every behavioural change starts as a test that fails
+    for the right reason. Write the test, watch it go red, record that red output in the
+    session log and the PR body, then write the smallest code that turns it green, then
+    refactor under green. **No production code may be committed ahead of a test that
+    covers it** — `make tdd-check` `[G-TDD-01]` walks the branch and refuses it. Pure
+    renames and mechanical refactors whose behaviour is already pinned may carry a
+    `TDD-Exempt: <reason>` commit trailer; the reason is printed by CI and reviewed, and
+    an empty reason is not an exemption. "The test is obvious" is not a reason, and a
+    milestone's Verify command passing is never a substitute for having watched the test
+    fail. Full protocol in §7.1.
+
 15. **Blocks are cleared by fresh, dynamically generated specialist agents, not by grinding.**
     When the current item is blocked (definition and protocol in §10.4), the working session
     writes a block card and spawns a *new* agent whose role is synthesized for that specific
@@ -444,11 +455,11 @@ Python 3.12 via `uv`; `ruff`, `mypy --strict` on `core/` + `schemas/`; `pytest` 
 Polars + DuckDB; cvxpy only inside `portfolio/optimizer.py`; Optuna inner-fold only. Rust
 stable cargo workspace; `clippy -D warnings`; `proptest`; PyO3 for the kernel binding. Task
 entry points are a plain **`Makefile`** (ADR-0007 — no `just`, no archived/abandoned
-tooling): targets `setup test lint typecheck ci determinism ledger-check s1-smoke
+tooling): targets `setup test lint typecheck ci determinism tdd-check ledger-check s1-smoke
 backtest-smoke parity DAY=<day> qc`, each a thin wrapper over the real command.
 **CI is native Jenkins, run locally** (root `Jenkinsfile`, declarative; no GitHub Actions):
-stages = lint → typecheck → py tests → rust tests → fixture parity → determinism →
-**ledger-check** → image build, all executed inside the project's own Docker image so the
+stages = lint → typecheck → **tdd-check** → py tests → rust tests → fixture parity →
+determinism → **ledger-check** → image build, all executed inside the project's own Docker image so the
 Jenkins result certifies exactly what arb-vm will run (§2.2). Merging to main requires a
 green Jenkins build; main is what the arb-vm deploy rail ships.
 
@@ -531,7 +542,8 @@ its absence means the loop holds at the gate and only re-verifies). Ledger rows 
 ### Phase P0 — foundation & authority
 
 - **M0 scaffold**: §4 tree, CI, Makefile, schemas/ stubs, fixtures generator, docs shards
-  (§10.1) seeded, ledger tooling `pips ledger check`; **populate `docs/reference/` with the
+  (§10.1) seeded, ledger tooling `pips ledger check`, test-first tooling `pips tdd check`
+  `[G-TDD-01]`; **populate `docs/reference/` with the
   four companion documents** (copy from `../deliverables/`; ask the human if absent) and cache
   their pandoc extractions under `docs/reference/_extracted/`. *Verify:* `make ci`;
   `docs/reference/` holds all four files.
@@ -735,6 +747,36 @@ without estimand/mechanism/null/falsifier · elaborate model admitted for elabor
 
 ---
 
+### 7.1 Test-first protocol (TDD) `[G-TDD-01]`
+
+Constitution rule 16 in operational form. The unit of work is one red→green→refactor
+cycle, never "implement, then test":
+
+1. **Red.** Write the smallest failing test that expresses the next increment — an
+   AlphaSpec falsifier, a cost golden, a state-machine transition, a parity byte-check,
+   a leakage canary. Run it. It must fail *for the reason you expect*: a test that errors
+   on an import or a typo has not been observed to fail. Record the red output.
+2. **Green.** Write the least code that passes it. Nothing speculative, nothing "while
+   I'm here".
+3. **Refactor.** Clean up with the suite green — behaviour is now pinned.
+
+**Evidence.** The red output goes into `docs/state/log/<date>.md` and the PR body, beside
+the green run. A milestone whose log shows only green output did not do TDD.
+
+**Enforcement.** `make tdd-check` walks every commit on the branch oldest-first and fails
+any commit that adds production code (`python/pips/`, `rust/crates/`, `schemas/`,
+`apps/`) without a test landing in that commit or an earlier one. It runs inside
+`make ci`, so Jenkins refuses the branch and the deploy rail never sees it. Docs, `ops/`
+and `config/` changes are not production code and are not forced to carry tests. The
+`TDD-Exempt: <reason>` trailer is the only bypass, and it is loud by construction.
+
+**Ordering, not sincerity.** The machine can see ordering; only the recorded red output
+proves the test was capable of failing. Both are required. Writing a test that cannot
+fail, or back-dating an exemption, is the same offence as weakening a golden (rule 10) —
+a human conversation plus an ADR, not an edit.
+
+---
+
 ## 8. The doc layer: sharded state, decisions, and the ledger
 
 **Problem this solves:** a single growing STATE/DECISIONS file eventually eats every context
@@ -891,10 +933,13 @@ LOAD ORDER (strict, to protect context): docs/INDEX.md → docs/state/CURRENT.md
 milestone section of IMPLEMENTATION.md → its ledger rows. Everything else on demand only.
 Reference docs in docs/reference/ are consulted by section, never ingested.
 
-Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · ledger-check ·
-s1-smoke · backtest-smoke · parity DAY=<day> · qc
+Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · tdd-check ·
+ledger-check · s1-smoke · backtest-smoke · parity DAY=<day> · qc
 
-Constitution (full text IMPLEMENTATION.md §2): determinism; causality = F_t-measurability
+Constitution (full text IMPLEMENTATION.md §2): TEST-FIRST — every behavioural change starts
+as a failing test (red→green→refactor); never write production code before its test, record
+the red output in the session log + PR body (rule 16 / §7.1; `make tdd-check` enforces it,
+`TDD-Exempt: <reason>` is the only, loud, bypass); determinism; causality = F_t-measurability
 (AsOf view; bars close-labeled; no full-day fields intraday; no smoothed states); bitemporal
 append-only evidence; every viewed trial counts; falsifiers before search; costs are
 effective-dated data; two planes/two credentials/two processes; ≤5 orders/s governor;
@@ -987,6 +1032,9 @@ pipeline needs redesign, not a third rescue).
   domain-specialist agents working from block cards, with cross-boundary reach (Jenkins,
   containers, arb-vm) under the full constitution; recurring block domains trigger redesign,
   not repeated rescues.
+- **ADR-0009** Test-first (§7.1): TDD is constitution rule 16, not a preference —
+  red→green→refactor with the red output recorded, enforced mechanically by `make tdd-check`
+  `[G-TDD-01]` inside `make ci`; `TDD-Exempt: <reason>` is the only, deliberately loud, bypass.
 
 ### 10.6 LOOP.md — paste as the repo's LOOP.md (autonomous loop driver)
 
@@ -1018,19 +1066,23 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
    the next phase; else re-run the phase's headline Verify (regression watch), update
    CURRENT.md, stop.
 5. Otherwise → advance the active milestone (or start the next per §6 order): plan briefly,
-   implement ONE coherent chunk, run that milestone's Verify commands
-   (`docker compose run research make ci` or the milestone-specific target), commit on
-   m/<id>-<slug>.
+   then TDD ONE coherent chunk — write the failing test FIRST, run it, keep the red output;
+   write the least code that turns it green; refactor under green. Then run that milestone's
+   Verify commands (`docker compose run research make ci` or the milestone-specific target)
+   and commit on m/<id>-<slug>.
 
 ## 2 · Close the tick (mandatory, even for "nothing to do")
 - Overwrite docs/state/CURRENT.md (active item, last verify output, next 3 actions,
-  blockers/awaiting). Append one line to docs/state/log/<today>.md.
+  blockers/awaiting). Append one line to docs/state/log/<today>.md — including the RED
+  output you observed before the code went green (§7.1 evidence; green-only logs are not TDD).
 - Flip any ledger rows you completed. New decision → ADR shard. New block → BLK card.
 - Commit. End with a one-line status: DONE <what> | BLOCKED BLK-#### | AWAITING P<k> gate.
 
 ## Hard rails (constitution §2 binds every tick)
 - Never create/enable anything on the live path: no PIPS_LIVE, no live flags, no real orders.
 - Never weaken tests/goldens/gates/ledger to go green. Never touch ../past except read-only.
+- Never write production code before a failing test (rule 16). `make tdd-check` refuses the
+  branch; a `TDD-Exempt: <reason>` trailer is the only bypass and it must state a real reason.
 - Never merge to main with red CI; never proceed past a phase gate without its approved-file.
 - Milestone Verify failing after ~3 distinct attempts, or any Jenkins/compose/arb-vm/deploy
   boundary issue → STOP grinding, write the block card, dispatch the specialist (§10.4).

@@ -1,0 +1,185 @@
+# ledger/contracts.yaml — one row per pinned contract (§8.2).
+# status: planned → building → enforced. `pips ledger check` (make ledger-check) verifies
+# every row against IMPLEMENTATION.md, the code tree and the test suites.
+# Never soften a row to go green (constitution rule 10).
+
+- id: C-ID-01
+  title: "Config → identity: canonical hash over sorted keys / normalized floats"
+  spec: "IMPLEMENTATION.md#31-config"
+  source_refs: ["reference/alphaforge §schemas", "reference/blueprint §lineage"]
+  code: "python/pips/core/ids.py"
+  tests: ["tests/unit/core/test_ids.py"]
+  status: building
+  owner_milestone: M2
+
+- id: C-SPEC-01
+  title: "AlphaSpec pre-registration object (H, I_t, T_h, φ_θ, C, E, N, F)"
+  spec: "IMPLEMENTATION.md#32-alphaspec"
+  source_refs: ["reference/alphaforge Part II"]
+  code: "schemas/alpha_spec"
+  tests: []
+  status: planned
+  owner_milestone: M12
+
+- id: C-FCST-01
+  title: "Forecast contract: comparable economics independent of order logic"
+  spec: "IMPLEMENTATION.md#33-forecast-contract"
+  code: "schemas/forecast"
+  tests: []
+  status: planned
+  owner_milestone: M12
+
+- id: C-DATA-01
+  title: "Data zones bronze/silver/gold/quarantine with bitemporal PIT columns"
+  spec: "IMPLEMENTATION.md#34-data-plane"
+  code: "python/pips/data/pit"
+  tests: []
+  status: planned
+  owner_milestone: M6
+
+- id: C-DATA-02
+  title: "Snapshot manifests are Merkle-rooted; experiments pin snapshot_root"
+  spec: "IMPLEMENTATION.md#34-data-plane"
+  code: "python/pips/data/pit"
+  tests: []
+  status: planned
+  owner_milestone: M6
+
+- id: C-BAR-01
+  title: "Bars close-labelled; boundary trade joins the bar ending at t; watermark rule"
+  spec: "IMPLEMENTATION.md#35-bar-builder"
+  code: "rust/crates/bars"
+  tests: []
+  status: planned
+  owner_milestone: M21
+
+- id: C-REG-01
+  title: "Append-only experiment registry + multiplicity ledger (M and M_erank)"
+  spec: "IMPLEMENTATION.md#36-experiment-registry"
+  code: "python/pips/search/registry.py"
+  tests: []
+  status: planned
+  owner_milestone: M11
+
+- id: C-COST-01
+  title: "RT statutory cost, ₹1L, Flattrade = ₹35.48 (3.548 bps)"
+  spec: "IMPLEMENTATION.md#37-cost-model"
+  source_refs: ["reference/cg-meta §8.2", "reference/blueprint Appendix A"]
+  code: "python/pips/costs/statutory.py"
+  tests: []
+  status: planned
+  owner_milestone: M9
+
+- id: C-COST-02
+  title: "RT statutory cost, ₹1L, Zerodha = ₹82.68 (8.268 bps); 50k/2L/5L = 10.63/5.91/4.49"
+  spec: "IMPLEMENTATION.md#37-cost-model"
+  code: "python/pips/costs/brokerage.py"
+  tests: []
+  status: planned
+  owner_milestone: M9
+
+- id: C-COST-03
+  title: "Effective-dated fee schedules carry source + verified_on + validity dates"
+  spec: "IMPLEMENTATION.md#37-cost-model"
+  code: "config/costs"
+  tests: []
+  status: planned
+  owner_milestone: M9
+
+- id: C-COST-04
+  title: "Impact κ(q/ADV)^ψ + spread·aggression + latency + adverse selection terms"
+  spec: "IMPLEMENTATION.md#37-cost-model"
+  code: "python/pips/costs/impact.py"
+  tests: []
+  status: planned
+  owner_milestone: M9
+
+- id: C-FILL-01
+  title: "Fill-fidelity tiers F0–F3; every result stamped; cross-tier comparison refused"
+  spec: "IMPLEMENTATION.md#38-fill-fidelity-tiers"
+  code: "python/pips/sim/fills"
+  tests: []
+  status: planned
+  owner_milestone: M14
+
+- id: C-BNDL-01
+  title: "StrategyBundle: signed, content-hashed, registered-IR-only, golden boot check"
+  spec: "IMPLEMENTATION.md#39-strategybundle"
+  code: "schemas/strategy_bundle"
+  tests: []
+  status: planned
+  owner_milestone: M20
+
+- id: C-OMS-01
+  title: "OrderIntent / ExecutionEvent schemas with idempotency keys"
+  spec: "IMPLEMENTATION.md#310-order-plane"
+  code: "schemas/order_intent"
+  tests: []
+  status: planned
+  owner_milestone: M23
+
+- id: C-OMS-02
+  title: "Order state machine: monotone cumulative fill, absorbing terminal states"
+  spec: "IMPLEMENTATION.md#310-order-plane"
+  code: "rust/crates/oms"
+  tests: []
+  status: planned
+  owner_milestone: M23
+
+- id: C-OMS-03
+  title: "Unknown state reconciles before acting; failover blocked until reconciled"
+  spec: "IMPLEMENTATION.md#310-order-plane"
+  code: "rust/crates/oms"
+  tests: []
+  status: planned
+  owner_milestone: M23
+
+- id: C-NUM-01
+  title: "Integer boundary types; f64 confined to the kernel; half-to-even; zero tolerance"
+  spec: "IMPLEMENTATION.md#311-numeric-boundary-semantics"
+  code: "python/pips/core/money.py"
+  tests: []
+  status: planned
+  owner_milestone: M21
+
+- id: C-PAR-01
+  title: "Bundle-crossing primitives live once in Rust math-kernel; PyO3 binding; parity"
+  spec: "IMPLEMENTATION.md#312-kernel"
+  source_refs: ["ADR-0002"]
+  code: "rust/crates/math-kernel"
+  tests: []
+  status: planned
+  owner_milestone: M21
+
+- id: C-JRNL-01
+  title: "Hash-chained live journal; replay by journal_seq; checkpoints bind state hash"
+  spec: "IMPLEMENTATION.md#313-live-journal"
+  code: "rust/crates/journal"
+  tests: []
+  status: planned
+  owner_milestone: M23
+
+- id: C-RISK-01
+  title: "Risk state machine; hard halt needs human reactivation; independent flatten"
+  spec: "IMPLEMENTATION.md#314-risk-state-machine"
+  code: "rust/crates/risk"
+  tests: []
+  status: planned
+  owner_milestone: M23
+
+- id: C-SESS-01
+  title: "Six session states incl. CAS; eligibility from the daily capability snapshot"
+  spec: "IMPLEMENTATION.md#315-session"
+  source_refs: ["ADR-0004"]
+  code: "config/calendars"
+  tests: []
+  status: planned
+  owner_milestone: M2
+
+- id: C-DEPLOY-01
+  title: "Immutable SHA-tagged images; data/secrets in VM volumes, never baked in"
+  spec: "IMPLEMENTATION.md#22-runtime-topology"
+  code: "docker-compose.yml"
+  tests: []
+  status: building
+  owner_milestone: M3.5

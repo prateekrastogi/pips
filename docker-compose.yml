@@ -1,0 +1,63 @@
+# pips — production topology on arb-vm (§2.2). Every service is a container; ALL market
+# data and runtime state live on VM volumes under /srv/pips, never inside an image
+# [C-DEPLOY-01]. Images are SHA-tagged by the deploy rail; secrets come from VM-side env
+# files referenced here and are never committed or baked in.
+#
+# Restart policy is service-aware: research/data services roll on every main update;
+# trading-path services (breeze-reader, shadow-engine, live-engine) are held by
+# ops/deploy/sync.sh until after the 15:35 close or before 08:45.
+
+services:
+  research:
+    build:
+      context: .
+      dockerfile: docker/research.Dockerfile
+      target: research
+    image: pips/research:${PIPS_SHA:-dev}
+    environment:
+      PIPS_ENV: ${PIPS_ENV:-dev}
+      PIPS_DATA_ROOT: /srv/pips
+    volumes:
+      - pips-data:/srv/pips
+    working_dir: /app
+    command: ["make", "ci"]
+
+  research-runner:
+    extends:
+      service: research
+    command: ["python", "-m", "pips.cli", "--help"]
+    restart: unless-stopped
+    profiles: ["vm"]
+
+  breeze-reader:
+    build:
+      context: .
+      dockerfile: docker/reader.Dockerfile
+      target: reader
+    image: pips/reader:${PIPS_SHA:-dev}
+    env_file: [/srv/pips/secrets/breeze.env]   # data-plane credentials ONLY (rule 7)
+    volumes:
+      - pips-data:/srv/pips
+      - pips-sock:/run/pips
+    restart: unless-stopped
+    profiles: ["vm"]
+
+  shadow-engine:
+    build:
+      context: .
+      dockerfile: docker/engine.Dockerfile
+      target: engine
+    image: pips/engine:${PIPS_SHA:-dev}
+    environment:
+      PIPS_MODE: shadow          # simulated orders against real quotes
+      PIPS_LIVE: "0"             # the live chain is never enabled from this file
+    volumes:
+      - pips-data:/srv/pips
+      - pips-sock:/run/pips
+    depends_on: [breeze-reader]
+    restart: unless-stopped
+    profiles: ["vm"]
+
+volumes:
+  pips-data:
+  pips-sock:
