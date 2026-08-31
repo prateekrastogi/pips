@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M3.5 arb-vm deploy rail — DONE.** `[C-DEPLOY-01]` and `[G-DEPLOY-01]` both `enforced`, and
+all three Verify clauses demonstrated live (see `docs/reports/deploy-rail-demo.md`).
+**All three human items are cleared**: deploy key added, Breeze credentials working, main
+merged and deploying. main is now the live branch and the rail ships every green SHA.
+
 **M13 S1 runner — mostly DONE.** BH-FDR within family×universe, Newey-West HAC t, half-life,
 monotonicity, coverage, and **null-search calibration** — which caught a real 7x over-rejection
 in the statistics chain. Remaining: compute plugins for A02-A08/A12, and the first real sweep
@@ -82,13 +87,9 @@ make s1-smoke -> the S1 funnel ran end to end on fixtures
   Add this as a **deploy key with write access OFF** at
   github.com/prateekrastogi/pips → Settings → Deploy keys:
   `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIUoCb9mUgkJTiF/7AA2s/gNI6k5U2xu2YO+kR2qvyvB pips-deploy@arb-vm (read-only)`
-- **PUSHED.** `m/0-scaffold` is now on GitHub (14 green `pips-ci` builds). Pushing is now
-  gated: `ops/git-hooks/pre-push` runs `pips-ci` for the branch and blocks on red
-  (`make install-hooks`), so a push cannot outrun the gate.
-- **ACTION FOR THE OWNER — merge to main.** `main` is still at `46fbdbd`. The deploy rail
-  polls `origin/main`, so it has nothing to deploy until the branch lands there. I have not
-  merged: that is an outward, hard-to-reverse step and I would rather have it as an explicit
-  standing decision than assume it.
+- **MERGED AND DEPLOYING.** `main` carries everything and the rail ships each green SHA to
+  arb-vm within one 2-minute poll. Pushing is gated by `ops/git-hooks/pre-push`, which runs
+  `pips-ci` and blocks on red, so nothing reaches main untested.
 - **ACTION FOR THE OWNER (3) — Breeze token** in `.env` (tracked, ADR-0011) for the M3 probe
   and M4. `ops/runbooks/breeze-token.md` is the daily procedure. I put no credential there.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to

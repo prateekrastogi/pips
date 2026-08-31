@@ -244,9 +244,9 @@
   tests:
     - "tests/unit/test_deploy_guard.py"
     - "tests/unit/test_secrets_and_data_locality.py"
-  status: building
+  status: enforced
   owner_milestone: M3.5
-  # NOT enforced yet, and the gap is honest: the "data/secrets never baked into an image"
-  # half IS tested, but "immutable SHA-tagged images reaching the VM" cannot be demonstrated
-  # until main carries the rail and arb-vm can read the private repo. Both are human items
-  # (a merge decision and a deploy key), recorded in CURRENT.md.
+  # Both halves now hold. "Secrets never baked into an image" is tested; "immutable SHA-tagged
+  # images reaching the VM" was demonstrated live — see docs/reports/deploy-rail-demo.md,
+  # which records the journal excerpts and the four defects the exercise found that reading
+  # the code had not.
