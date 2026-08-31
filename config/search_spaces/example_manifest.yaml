@@ -17,6 +17,10 @@ experiment:
       factor_window: 60d
       z_window: 30m
   data:
+    # A NAME, despite the `_sha256` suffix — transcribed verbatim from the reference's
+    # Appendix B, so the value stays as written. The actual Merkle root of the data a run
+    # read is pinned on the RUN, as `RunRecord.snapshot_root` [C-DATA-02]; a name can be
+    # rebuilt and still answer to itself, which is why the two are separate fields.
     snapshot: nse_cash_1m_2026q3_sha256
     tier: T1
     asof_policy: strict

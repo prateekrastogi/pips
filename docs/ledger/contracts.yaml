@@ -67,11 +67,19 @@
   code: "python/pips/data/pit"
   tests:
     - "tests/unit/test_pit.py"
-  # Same split. Merkle-rooted manifests exist, are second-preimage-safe on odd levels, and are
-  # pinned by golden vectors. "Experiments pin snapshot_root" does not: the search registry
-  # records no root today, so a result cannot yet be tied to the data it was computed on.
-  # That wiring is the next M6 unit and it is what promotes this row.
-  status: building
+    - "tests/unit/test_snapshot_pinning.py"
+  # ENFORCED, and precisely: the mechanism is complete and unbypassable. Manifests are
+  # Merkle-rooted (second-preimage-safe on odd levels, pinned by golden vectors), and a run
+  # CANNOT be recorded without a validated 64-hex root — the field is required, so there is
+  # no code path that writes an unpinned trial. `PitStore.verify_pinned_root` checks a pin
+  # against the store that produced it, catching the real failure: a snapshot that moved
+  # while keeping its name.
+  #
+  # What is NOT yet demonstrated, stated so nobody reads more into the label: no runner
+  # writes RunRecords yet, so the constraint holds by construction rather than by
+  # observation, and nothing calls verify_pinned_root in a pipeline. The gate is built ahead
+  # of the traffic, which is the right order — but it has not yet stopped anything.
+  status: enforced
   owner_milestone: M6
 
 - id: C-BAR-01

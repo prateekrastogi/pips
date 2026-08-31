@@ -7,7 +7,7 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M6 PIT masters — bitemporal store landed; masters and pinning still to come.**
+**M6 PIT masters — bitemporal store and root-pinning landed; the masters themselves are next.**
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
 of the world) and `known_from` (when we knew it). The log is append-only in the literal sense —
@@ -17,13 +17,15 @@ is **byte-identical** before and after later snapshots, corrections and delistin
 survivorship audit names what disappeared between two dates. `MerkleTree` roots the snapshot
 manifests and is pinned by golden vectors, not just by structural properties.
 
-Both M6 ledger rows are `building` rather than `enforced`, and the gap is the point:
+`[C-DATA-02]` is now **`enforced`**: a run cannot be recorded without a validated 64-hex
+`snapshot_root`, so no code path writes an unpinned trial, and `verify_pinned_root` checks a
+pin against the store that produced it. Stated precisely, because the label invites more than
+it means — no runner writes RunRecords yet, so the constraint holds *by construction rather
+than by observation*, and nothing calls `verify_pinned_root` in a pipeline. The gate is built
+ahead of the traffic, which is the right order, but it has not yet stopped anything.
 
-- `[C-DATA-01]` — bitemporal columns done. The **zone** half is not: bronze exists, quarantine
-  exists, nothing promotes bronze→silver→gold.
-- `[C-DATA-02]` — Merkle manifests done. **"Experiments pin `snapshot_root`"** is not: the
-  search registry records no root, so a result still cannot be tied to the data it was
-  computed on.
+`[C-DATA-01]` stays **`building`**: bitemporal columns are done, the **zone** half is not —
+bronze exists, quarantine exists, nothing promotes bronze→silver→gold.
 
 Still unwritten for M6: the instrument master with token/symbol change history, corporate
 actions, ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV is the v0), and
@@ -43,8 +45,8 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 116 files · mypy --strict 116 files · 590 pytest · clippy clean · cargo test ok
-  determinism bit-identical · ledger-check 26 rows (planned=10 building=3 enforced=13)
+  ruff 118 files · mypy --strict 118 files · 600 pytest · clippy clean · cargo test ok
+  determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
   Merkle duplicates odd node       -> killed (test_every_index_proves_against_the_root[9])
@@ -53,17 +55,22 @@ M6 mutation run — 5 deliberate breaks, 4 killed by tests:
   CLOSE tombstone ignored          -> killed (test_the_survivorship_audit_names_what…)
   leaf/node domain separation off  -> SURVIVED  ->  golden vectors added, see the log
 
+snapshot-pinning mutation run — 3 of 3 killed:
+  root validator removed · verify_pinned_root always true · open-time drift raise removed
+
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
 make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (correctly no promotion)
 ```
 
 ## Next 3 actions
-1. **Pin `snapshot_root` in the search registry** — the second half of `[C-DATA-02]`, and the
-   smallest remaining step that promotes a row. A trial record gains the root of the data
-   snapshot it read, so a result can be re-derived years later against the same bytes.
-2. **Instrument master on the PIT store** — token/symbol change history is the master that
-   makes the rest of M6 possible, and the one that makes a symbol-keyed join honest.
+1. **Instrument master on the PIT store** — token/symbol change history is the master the
+   rest of M6 rests on, and the one that makes a symbol-keyed join honest. It is also what
+   turns `snapshot_root` from a built gate into a used one, since a real master is the first
+   thing a run would pin a root over.
+2. **Corporate-action master** — QC currently quarantines *every* unexplained ratio jump
+   because nothing exists to explain one, so this directly unblocks a check that is firing
+   blind today.
 3. **Compute plugins for A05–A08 and A12** — the session-structure family plus the intraday
    seasonal. Exercises the M2 calendar and needs no credentials or data.
 

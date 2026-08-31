@@ -34,7 +34,11 @@ def record(**over: object) -> RunRecord:
         "session_mask": "MID",
         "capital_tier": "2L",
         "broker": "FLATTRADE",
-        "data_snapshot": "b" * 64,
+        # A NAME and a ROOT, deliberately unlike each other. This helper used to set
+        # data_snapshot to "b" * 64, which reads as a hash and is not one — the very
+        # conflation `snapshot_root` was added to end [C-DATA-02].
+        "data_snapshot": "nifty100-1m-2026H1",
+        "snapshot_root": "b" * 64,
         "cost_model": "c" * 64,
         "fill_tier": "F1",
         "seed": 7,

@@ -226,6 +226,22 @@ class PitStore:
             [r.leaf() for r in self.as_of(table, known_on=known_on, valid_on=valid_on)]
         )
 
+    def verify_pinned_root(
+        self, table: str, known_on: date, pinned: str, valid_on: date | None = None
+    ) -> bool:
+        """Whether the store still produces ``pinned`` for that as-of date.
+
+        The failure this catches is not a missing snapshot — that announces itself. It is a
+        snapshot that MOVED while keeping its name: someone re-ingests a range, a row lands
+        with a ``known_from`` inside an already-pinned window, and every name-based reference
+        still resolves. Only a root over bytes notices.
+
+        Ordinary forward progress must not trip it, or it gets switched off. It does not:
+        appending at a later knowledge date leaves every earlier snapshot untouched, which is
+        the byte-identity guarantee this method is the consumer of.
+        """
+        return self.snapshot_root(table, known_on=known_on, valid_on=valid_on) == pinned
+
     def survivorship_audit(self, table: str, earlier: date, later: date) -> SurvivorshipAudit:
         """Which keys readable at ``earlier`` are gone by ``later`` (§6 M6 Verify)."""
         if earlier > later:

@@ -27,7 +27,7 @@ from pydantic import Field, field_validator, model_validator
 
 from pips.core.config import PipsConfig
 
-__all__ = ["STAGE_RANKS", "VALID_STATUSES", "Registry", "RunRecord"]
+__all__ = ["STAGE_RANKS", "VALID_STATUSES", "Registry", "RunRecord", "missing_run_columns"]
 
 # S1=1, S2V=2, S2E=3, S3=4, S4=5, S5=6, S6=7 (§3.6). The rank orders the funnel, so a rank
 # that contradicts its stage would silently reorder it.
@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS runs (
   run_id INTEGER PRIMARY KEY, config_hash TEXT NOT NULL, stage TEXT NOT NULL,
   stage_rank INTEGER NOT NULL,
   family TEXT, universe_id TEXT, session_mask TEXT, capital_tier TEXT, broker TEXT,
-  data_snapshot TEXT NOT NULL, cost_model TEXT NOT NULL, fill_tier TEXT NOT NULL,
+  data_snapshot TEXT NOT NULL, snapshot_root TEXT NOT NULL,
+  cost_model TEXT NOT NULL, fill_tier TEXT NOT NULL,
   seed INTEGER NOT NULL, git_sha TEXT NOT NULL, metrics TEXT NOT NULL, n_trades INTEGER,
   daily_returns_ref TEXT,
   status TEXT NOT NULL,
@@ -77,6 +78,13 @@ class RunRecord(PipsConfig):
     stage: str
     stage_rank: int
     data_snapshot: str
+    snapshot_root: str
+    """Merkle root of the data actually read [C-DATA-02].
+
+    Distinct from ``data_snapshot``, which is a NAME. A name can be rebuilt, extended or
+    corrected and still answer to itself; the root cannot. Both are kept because they answer
+    different questions -- which shelf the data was on, and which bytes were on it.
+    """
     cost_model: str
     fill_tier: str
     seed: int
@@ -90,6 +98,17 @@ class RunRecord(PipsConfig):
     broker: str | None = None
     n_trades: int | None = None
     daily_returns_ref: str | None = None
+
+    @field_validator("snapshot_root")
+    @classmethod
+    def _is_a_root(cls, value: str) -> str:
+        if len(value) != 64 or not all(c in "0123456789abcdef" for c in value):
+            raise ValueError(
+                f"snapshot_root {value!r} is not a lowercase 64-hex Merkle root. A truncated "
+                "hash, an uppercase one or a short id records something that LOOKS like "
+                "provenance and cannot be checked against a store (§6 M6)."
+            )
+        return value
 
     @field_validator("status")
     @classmethod
@@ -114,6 +133,20 @@ class RunRecord(PipsConfig):
         return self
 
 
+def missing_run_columns(connection: sqlite3.Connection) -> list[str]:
+    """RunRecord fields with no column in ``runs``, in declaration order.
+
+    The DDL above and the model above it are two hand-maintained lists of the same thing, and
+    they drift the moment someone edits one. Naming the drift beats the ``OperationalError``
+    it would otherwise surface as, from inside an INSERT, after the caller has done the work.
+    """
+    # Positional, not by name: this must work on ANY connection, including one a caller
+    # opened without `row_factory = sqlite3.Row`. PRAGMA table_info yields
+    # (cid, name, type, notnull, dflt_value, pk), so column 1 is the name either way.
+    present = {row[1] for row in connection.execute("PRAGMA table_info(runs)")}
+    return [name for name in RunRecord.model_fields if name not in present]
+
+
 class Registry:
     """The append-only trial store."""
 
@@ -124,6 +157,18 @@ class Registry:
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(_SCHEMA)
         self.connection.commit()
+        missing = missing_run_columns(self.connection)
+        if missing:
+            # Fail at OPEN, not at the first insert. `CREATE TABLE IF NOT EXISTS` is silent on
+            # a table that already exists, so a database written before a field was added
+            # accepts the connection and then rejects the write with `no such column` from
+            # inside an INSERT -- losing whatever the caller was midway through recording.
+            # Rule 4 says a viewed trial must be counted, so losing the write loses evidence.
+            raise ValueError(
+                f"registry at {path} is missing column(s) {', '.join(missing)} — its schema "
+                "predates the current RunRecord. Migrate it deliberately; do not let the "
+                "insert discover this."
+            )
 
     # -- writing ----------------------------------------------------------------------
     def record(self, run: RunRecord) -> int:
