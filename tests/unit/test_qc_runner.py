@@ -233,7 +233,9 @@ def test_a_jump_across_a_gap_is_not_treated_as_overnight(tmp_path: Path) -> None
     assert not any(f.check == "ratio_jump" for f in report.findings)
 
 
-def test_the_cli_path_actually_reaches_the_ratio_check(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+def test_the_cli_path_actually_reaches_the_ratio_check(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """`make qc` must exercise every check, not just `run_qc` in a test.
 
     Found by running QC on the real VM archive: 6 records, 0 findings — and the number meant
@@ -251,3 +253,67 @@ def test_the_cli_path_actually_reaches_the_ratio_check(tmp_path: Path, capsys) -
     )
     assert main([str(tmp_path)]) == 1
     assert "ratio_jump" in capsys.readouterr().out
+
+
+# ------------------------------------------------- the check's own coverage -------------
+
+
+def test_the_report_says_how_many_ratio_comparisons_it_actually_made(tmp_path: Path) -> None:
+    """ "0 findings" is not a result unless you know what was examined.
+
+    The overnight-ratio check only runs between GENUINELY adjacent sessions, which is correct
+    — comparing last week's close to today's open yields a meaningless ratio. But the skips
+    were invisible, so a run that compared nothing at all reported exactly the same clean
+    line as one that compared everything.
+
+    This matters more than it looks, because the holiday list is empty and unverified. With
+    no holidays, `is_trading_day` calls every weekday a trading day — so two sessions really
+    separated by a holiday compute as NON-adjacent, and their comparison is skipped. A
+    genuine overnight jump across a holiday goes unexamined, in the flattering direction,
+    and nothing in the output hints at it.
+    """
+    seed_two_sessions(tmp_path / "bronze", first_close_paise=100_000, second_open_paise=99_900)
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-27", "CLEAN:2026-08-28"},
+        calendar_path=Path("config/calendars/nse_equity.yaml"),
+    )
+    assert report.ratio_checks_run == 1
+    assert report.ratio_checks_skipped == 1, "the first session of a symbol has no predecessor"
+
+
+def test_a_non_adjacent_pair_is_counted_as_skipped_not_as_examined(tmp_path: Path) -> None:
+    seed_two_sessions(
+        tmp_path / "bronze",
+        first_close_paise=100_000,
+        second_open_paise=50_000,
+        first_day=date(2026, 8, 20),
+    )
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-20", "CLEAN:2026-08-28"},
+        calendar_path=Path("config/calendars/nse_equity.yaml"),
+    )
+    assert report.ratio_checks_run == 0
+    assert report.ratio_checks_skipped == 2
+    assert not any(f.check == "ratio_jump" for f in report.findings)
+
+
+def test_the_cli_reports_coverage_and_warns_about_the_unverified_holiday_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed_two_sessions(tmp_path / "bronze", first_close_paise=100_000, second_open_paise=99_900)
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "backfill-manifest.json").write_text(
+        json.dumps({"outcomes": {"CLEAN:2026-08-27": "OK", "CLEAN:2026-08-28": "OK"}}),
+        encoding="utf-8",
+    )
+    assert main([str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "overnight-ratio comparisons" in out
+    assert "holiday list" in out, (
+        "an unverified holiday list makes real adjacent sessions look non-adjacent, so the "
+        "run must say so rather than presenting its coverage as complete"
+    )

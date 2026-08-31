@@ -67,11 +67,18 @@ class QcReport:
     checked: int = 0
     quarantined: int = 0
     findings: list[Finding] = field(default_factory=list)
+    # COVERAGE OF THE OVERNIGHT-RATIO CHECK, counted rather than assumed. "0 findings" is not
+    # a result unless you know what was examined: a run that compared nothing prints the same
+    # clean line as one that compared everything. See `_previous_trading_day`.
+    ratio_checks_run: int = 0
+    ratio_checks_skipped: int = 0
 
     def describe(self) -> str:
         return (
             f"qc: checked {self.checked} record(s), quarantined {self.quarantined}, "
-            f"{len(self.findings)} finding(s)"
+            f"{len(self.findings)} finding(s); "
+            f"overnight-ratio comparisons made {self.ratio_checks_run}, "
+            f"skipped {self.ratio_checks_skipped}"
         )
 
 
@@ -260,18 +267,26 @@ def run_qc(
         # it. Needs a calendar to establish adjacency; without one the check is skipped.
         if bars:
             prior = previous_session.get(symbol)
-            if prior is not None and calendar is not None:
-                prior_day, prior_close = prior
-                if prior_day == _previous_trading_day(calendar, day):
-                    findings += check_unexplained_ratio_jump(
-                        previous_close_paise=prior_close,
-                        first_open_paise=bars[0].open_paise,
-                        verdict=(
-                            explain_jump(symbol, day, prior_close, bars[0].open_paise)
-                            if explain_jump
-                            else None
-                        ),
-                    )
+            adjacent = (
+                prior is not None
+                and calendar is not None
+                and prior[0] == _previous_trading_day(calendar, day)
+            )
+            if adjacent:
+                report.ratio_checks_run += 1
+            else:
+                report.ratio_checks_skipped += 1
+            if adjacent and prior is not None:
+                prior_close = prior[1]
+                findings += check_unexplained_ratio_jump(
+                    previous_close_paise=prior_close,
+                    first_open_paise=bars[0].open_paise,
+                    verdict=(
+                        explain_jump(symbol, day, prior_close, bars[0].open_paise)
+                        if explain_jump
+                        else None
+                    ),
+                )
             previous_session[symbol] = (day, bars[-1].close_paise)
 
         if findings:
@@ -361,6 +376,15 @@ def main(argv: list[str] | None = None) -> int:
         calendar_path=calendar_path if calendar_path.exists() else None,
         explain_jump=explain,
     )
+    if calendar_path.exists():
+        from pips.core.calendar import load_calendar
+
+        if not load_calendar(calendar_path).holidays_verified:
+            print("qc: WARNING the holiday list is EMPTY and UNVERIFIED, so every weekday counts")
+            print("    as a trading day. Two sessions really separated by a holiday therefore")
+            print("    compute as NON-adjacent and their overnight-ratio comparison is SKIPPED —")
+            print("    a genuine jump across a holiday goes unexamined. The skip count below is")
+            print("    the honest measure of this check's coverage.")
     print(report.describe())
     by_check: dict[str, int] = {}
     for finding in report.findings:
