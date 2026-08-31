@@ -9,7 +9,7 @@ implementations rather than a genuine contradiction between two hypotheses.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import StrEnum
@@ -25,9 +25,11 @@ __all__ = [
     "EventStatus",
     "EventStatusSource",
     "SessionBars",
+    "average_true_range",
     "build_forecast",
     "closes_by_symbol",
     "cross_sectional_residuals",
+    "require_high_low",
     "returns_by_symbol",
     "robust_z",
     "stdev",
@@ -176,11 +178,18 @@ EventStatusSource = Callable[[str], EventStatus | None]
 
 @dataclass(frozen=True)
 class SessionBars:
-    """One symbol's bars for one trading session, in order."""
+    """One symbol's bars for one trading session, in order.
+
+    ``highs``/``lows`` are empty when the panel carries no such columns. That is a
+    CONFIGURATION state, not a data gap, and callers that need them say so by calling
+    :func:`require_high_low` rather than quietly producing no signal.
+    """
 
     day: object
     closes: list[int]
     volumes: list[int]
+    highs: list[int] = field(default_factory=list)
+    lows: list[int] = field(default_factory=list)
 
     @property
     def first_close(self) -> int:
@@ -189,6 +198,50 @@ class SessionBars:
     @property
     def last_close(self) -> int:
         return self.closes[-1]
+
+
+def require_high_low(view: AsOfPanelView) -> None:
+    """Refuse a panel with no high/low columns, loudly.
+
+    A per-symbol missing ATR is a data gap the specs answer with "no signal". A panel that has
+    no high/low columns AT ALL is a different thing: every name silently produces nothing, and
+    a disabled alpha reports as a working one that found no opportunities. The two must not
+    share a code path.
+    """
+    missing = [c for c in ("high_paise", "low_paise") if c not in view.frame.columns]
+    if missing:
+        raise ValueError(
+            f"panel has no {', '.join(missing)} column(s), so no true range can be computed. "
+            "This is a misconfigured panel, not an absence of signal — every name would "
+            "silently produce nothing and the alpha would look like it had simply found no "
+            "opportunities."
+        )
+
+
+def average_true_range(session: SessionBars) -> Decimal | None:
+    """Mean true range over a completed session, in fractional terms. ``None`` if unmeasurable.
+
+    ``None`` and zero are different answers and the specs treat them differently: A07's
+    `volatility_buffer` node says *"no ATR estimate => no buffer, and therefore no signal"*.
+    A zero buffer is not the absence of a buffer — it is the widest possible signal.
+    """
+    if len(session.closes) < 2 or not session.highs or not session.lows:
+        return None
+    ranges: list[Decimal] = []
+    for i in range(1, len(session.closes)):
+        prior_close = session.closes[i - 1]
+        if prior_close == 0:
+            continue
+        true_range = max(
+            session.highs[i] - session.lows[i],
+            abs(session.highs[i] - prior_close),
+            abs(session.lows[i] - prior_close),
+        )
+        ranges.append(Decimal(true_range) / Decimal(prior_close))
+    if not ranges:
+        return None
+    atr = sum(ranges) / Decimal(len(ranges))
+    return None if atr <= 0 else atr
 
 
 def sessions_by_symbol(view: AsOfPanelView) -> dict[str, list[SessionBars]]:
@@ -203,19 +256,31 @@ def sessions_by_symbol(view: AsOfPanelView) -> dict[str, list[SessionBars]]:
     out: dict[str, list[SessionBars]] = {}
     for symbol in sorted(set(visible["symbol"].to_list())):
         rows = visible.filter(pl.col("symbol") == symbol).sort("close_ts_ns")
-        buckets: dict[object, tuple[list[int], list[int]]] = {}
-        for ts, close, volume in zip(
+        has_hl = {"high_paise", "low_paise"} <= set(rows.columns)
+        if has_hl:
+            view.accessed_fields.update({"high_paise", "low_paise"})
+        highs = rows["high_paise"].to_list() if has_hl else [0] * rows.height
+        lows = rows["low_paise"].to_list() if has_hl else [0] * rows.height
+
+        buckets: dict[object, tuple[list[int], list[int], list[int], list[int]]] = {}
+        for ts, close, volume, high, low in zip(
             rows["close_ts_ns"].to_list(),
             rows["close_paise"].to_list(),
             rows["volume"].to_list(),
+            highs,
+            lows,
             strict=True,
         ):
             day = datetime.fromtimestamp(ts / 1e9, IST).date()
-            closes, volumes = buckets.setdefault(day, ([], []))
-            closes.append(int(close))
-            volumes.append(int(volume))
+            bucket = buckets.setdefault(day, ([], [], [], []))
+            bucket[0].append(int(close))
+            bucket[1].append(int(volume))
+            if has_hl:
+                bucket[2].append(int(high))
+                bucket[3].append(int(low))
         out[symbol] = [
-            SessionBars(day=day, closes=c, volumes=v) for day, (c, v) in sorted(buckets.items())
+            SessionBars(day=day, closes=c, volumes=v, highs=h, lows=lo)
+            for day, (c, v, h, lo) in sorted(buckets.items())
         ]
     return out
 
