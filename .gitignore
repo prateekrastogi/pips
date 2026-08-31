@@ -46,7 +46,12 @@ wheels/
 .venv/
 venv/
 env/
-.python-version
+.python-version.local
+# .python-version IS tracked: here it is a project toolchain PIN, the same class as
+# rust-toolchain.toml, and docker/research.Dockerfile COPYs it. Ignoring it (the pyenv
+# convention for a user-local preference) made the container build succeed on the machine
+# that had the file and fail from a clean clone — which is exactly what the first Jenkins
+# build caught, and what a laptop-only "green" would never have shown.
 uv.lock.bak
 
 # tooling caches
