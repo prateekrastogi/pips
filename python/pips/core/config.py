@@ -17,6 +17,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict
 from pips.core.ids import ShortId, content_hash, short_id
 
 __all__ = [
+    "DecimalFromNumber",
     "DecimalFromStr",
     "PipsConfig",
     "config_hash",
@@ -30,6 +31,24 @@ def _decimal(value: object) -> object:
     return Decimal(value) if isinstance(value, str) else value
 
 
+def _decimal_from_number(value: object) -> object:
+    """Accept a str, int or float and produce an exact Decimal.
+
+    Via ``str()`` for floats, so ``1.5`` becomes ``Decimal("1.5")`` rather than the binary
+    expansion. Used where the SOURCE DOCUMENT writes numbers unquoted and we must accept its
+    form rather than making the document fit the schema -- the reference's Appendix B
+    manifest writes ``stress: [1.0, 1.5, 2.0]``, and a schema that rejected it would be
+    testing itself instead of the document.
+    """
+    if isinstance(value, str):
+        return Decimal(value)
+    if isinstance(value, bool):
+        raise TypeError("a bool is not a number here")
+    if isinstance(value, int | float):
+        return Decimal(str(value))
+    return value
+
+
 DecimalFromStr = Annotated[Decimal, BeforeValidator(_decimal)]
 """A ``Decimal`` that accepts a quoted YAML string.
 
@@ -40,6 +59,9 @@ string form needs an explicit conversion -- and it must attach to the FIELD, not
 wildcard validator, or it tries to parse prose fields like ``source`` as numbers. That was
 a real failure, not a hypothetical one.
 """
+
+DecimalFromNumber = Annotated[Decimal, BeforeValidator(_decimal_from_number)]
+"""A ``Decimal`` that also accepts an unquoted YAML number. See :func:`_decimal_from_number`."""
 
 
 class PipsConfig(BaseModel):

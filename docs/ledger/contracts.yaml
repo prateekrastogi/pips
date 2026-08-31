@@ -64,9 +64,20 @@
   title: "Append-only experiment registry + multiplicity ledger (M and M_erank)"
   spec: "IMPLEMENTATION.md#36-experiment-registry"
   code: "python/pips/search/registry.py"
-  tests: []
-  status: planned
+  tests:
+    - "tests/unit/test_registry.py::test_update_is_refused_by_the_database"
+    - "tests/unit/test_registry.py::test_delete_is_refused_by_the_database"
+    - "tests/unit/test_registry.py::test_deletion_does_not_un_count_a_trial"
+    - "tests/unit/test_registry.py::test_erank_of_identical_trials_collapses_to_one"
+    - "tests/unit/test_registry.py::test_erank_of_independent_trials_is_the_trial_count"
+    - "tests/unit/test_manifest.py::test_the_appendix_b_example_parses"
+  status: enforced
   owner_milestone: M11
+  # Append-only is enforced by SQLite TRIGGERS, not by the application declining to write an
+  # UPDATE. §3.6 says "application code has no UPDATE/DELETE", but that is a property of
+  # today's application; a trigger also refuses a sqlite3 shell, a stray migration and a
+  # future contributor fixing one row. The holdout lockbox records a second unlock attempt
+  # BEFORE refusing it — refusing and forgetting would hide that someone tried.
 
 - id: C-COST-01
   title: "RT statutory cost, ₹1L, Flattrade = ₹35.48 (3.548 bps)"

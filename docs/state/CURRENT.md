@@ -3,6 +3,10 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M11 registry + multiplicity ledger — DONE** (`[C-REG-01]` `enforced`). Append-only is
+enforced by SQLite triggers, M counts every status, M_erank collapses to 1 on clones and
+rises to N on independent trials, and the Appendix B experiment manifest parses.
+
 **M9 cost model — DONE.** All four `[C-COST-*]` rows are `enforced`: the statutory stack
 reproduces all five §3.7 goldens exactly, and the execution-friction terms enforce the
 *structure* reference §10.2-§10.3 specifies (additive, monotone in aggression, square-root
@@ -30,8 +34,8 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 71 files · mypy --strict 71 files · 283 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (16/2/8)
+  ruff 76 files · mypy --strict 76 files · 318 pytest · clippy clean (21 crates) ·
+  cargo test ok · determinism bit-identical · ledger-check 26 rows (15/2/9)
 ```
 
 ## Next 3 actions
@@ -41,10 +45,9 @@ make ci -> ci: green
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **M10 vectorized engine (F0/F1-lite)** or **M11 registry** `[C-REG-01]` — both are pure
-   engineering on fixtures and need no credentials, so the loop keeps moving while M4 is
-   blocked. M11 is the better next step: the append-only registry and the M/M_erank
-   multiplicity ledger are what make every later trial count (rule 4).
+3. **M10 vectorized engine (F0/F1-lite)** — panel forward returns, portfolio wrappers
+   (long/flat, top-k, tolerance-neutral), cost application, verified to the paisa on a 3-day
+   toy case. Pure engineering on fixtures; the cost model it applies is already enforced.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private

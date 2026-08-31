@@ -1,0 +1,41 @@
+# Experiment manifest — the PRE-REGISTRATION of a search (§6 M11, reference Appendix B).
+#
+# Written BEFORE the search runs. Its hash is what ties a declared experiment to the trials it
+# produced, so a result can be checked against what was proposed rather than against whatever
+# turned out well. `status: PROPOSED` is a claim about the future; every other status is a
+# claim about the past, and conflating them after the fact is the whole failure this guards.
+#
+# This file is the Appendix B example, carried verbatim in content so the schema is exercised
+# by the document's own case rather than by one written to fit the schema.
+
+experiment:
+  protocol: nested_purged_wfo_v2
+  alpha:
+    id: A04
+    version: "1.0.0"
+    params:
+      factor_window: 60d
+      z_window: 30m
+  data:
+    snapshot: nse_cash_1m_2026q3_sha256
+    tier: T1
+    asof_policy: strict
+  universe:
+    policy: liquidity_ranked
+    n: 150
+    lookback_days: 60
+    refresh: weekly
+  session: MID
+  broker_context: flattrade
+  capital_inr: 500000
+  costs:
+    version: costs_2026_08_28
+    stress: [1.0, 1.5, 2.0]
+  validation:
+    outer: 21d
+    inner: 21d
+    train: 126d
+    purge: horizon
+    embargo: 1d
+  seed: 1407
+  status: PROPOSED
