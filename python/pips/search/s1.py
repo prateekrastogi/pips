@@ -26,10 +26,36 @@ from pips.core.asof import AsOfPanelView
 from pips.validation.fdr import benjamini_hochberg
 from pips.validation.nulls import rank_ic, shuffled_future_control
 
-__all__ = ["apply_family_fdr", "enumerate_specs", "main", "run_s1_smoke"]
+__all__ = [
+    "apply_family_fdr",
+    "enumerate_specs",
+    "main",
+    "run_s1_smoke",
+    "specs_with_plugins",
+]
 
 NS = 1_000_000_000
 _SPEC = Path("config/search_spaces/A01_residual_momentum.yaml")
+
+
+def specs_with_plugins() -> set[str]:
+    """Spec ids that have a compute plugin, DERIVED from the package rather than listed.
+
+    This was a hardcoded ``{"A01", "A02", "A03", "A04"}``. A hand-maintained list beside the
+    thing it describes is the drift that has already been caught twice in this repository —
+    once between the registry's DDL and its model, once between the deploy rail's service list
+    and compose. The smoke report's headline claim is *which alphas can actually run*, and a
+    stale list makes that claim wrong in the more flattering direction.
+    """
+    import pkgutil
+
+    import pips.alphas.t1 as t1_package
+
+    return {
+        module.name.upper()
+        for module in pkgutil.iter_modules(t1_package.__path__)
+        if not module.name.startswith("_")
+    }
 
 
 def enumerate_specs(spec_dir: Path) -> list[AlphaSpec]:
@@ -70,6 +96,9 @@ def _load_panel(fixtures: Path) -> pl.DataFrame:
                     "close_ts_ns": int(bar["close_ts_ns"]),
                     "symbol": str(bar["symbol"]),
                     "close_paise": int(bar["close_paise"]),
+                    # Carried because the session-structure family (A05-A08) needs it. The
+                    # fixtures always had it; this loader was dropping it on the floor.
+                    "volume": int(bar["volume"]),
                 }
             )
     if not rows:
@@ -111,7 +140,7 @@ def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
             outcomes.append((nxt - here) / here)
 
     registered = enumerate_specs(spec_path.parent)
-    with_plugin = {"A01", "A02", "A03", "A04"}  # compute plugins implemented so far
+    with_plugin = specs_with_plugins()
     report: dict[str, object] = {
         "specs_registered": len(registered),
         "specs_with_a_compute_plugin": sorted(with_plugin),
