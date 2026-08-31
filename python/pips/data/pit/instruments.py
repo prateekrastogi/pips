@@ -66,10 +66,21 @@ class Instrument(PipsConfig):
     isin: str
     exchange_token: str
     symbol: str
+    """The EXCHANGE's symbol (NSE `ExchangeCode`), e.g. RELIANCE."""
+
     name: str
     series: str
     lot_size: int
     tick_size_paise: int
+    vendor_code: str = ""
+    """The DATA VENDOR's own code (ICICI `ShortName`), e.g. RELIND.
+
+    A separate identifier, not a synonym. pips' bronze records are keyed by this code, while a
+    broker order will carry the exchange symbol — so a master storing one of them and calling
+    it "the symbol" makes every join silently wrong for the other. Defaulted to empty rather
+    than required, because instruments recorded before the scrip master existed genuinely have
+    no vendor code and inventing one would be worse than leaving it absent.
+    """
 
     @field_validator("isin")
     @classmethod
@@ -172,6 +183,17 @@ class InstrumentMaster:
         """The instrument holding ``exchange_token`` on ``on``."""
         matches = [i for i in self.as_of(on) if i.exchange_token == exchange_token]
         return self._exactly_one(matches, f"token {exchange_token!r}", on)
+
+    def resolve_vendor_code(self, vendor_code: str, on: date) -> Instrument | None:
+        """The instrument the DATA VENDOR called ``vendor_code`` on ``on``.
+
+        Separate from :meth:`resolve_symbol` because the two identifiers are separate. pips'
+        bronze is keyed by the vendor code, so this is the lookup QC actually needs; resolving
+        a vendor code through the symbol path would silently miss every name whose two codes
+        differ, which is most of them.
+        """
+        matches = [i for i in self.as_of(on) if i.vendor_code and i.vendor_code == vendor_code]
+        return self._exactly_one(matches, f"vendor code {vendor_code!r}", on)
 
     @staticmethod
     def _exactly_one(matches: list[Instrument], what: str, on: date) -> Instrument | None:
