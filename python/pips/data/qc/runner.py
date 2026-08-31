@@ -65,8 +65,13 @@ class QcReport:
         )
 
 
-def _rows(minutes: int = 30) -> list[dict[str, Any]]:
-    """A clean minute series. Prices in rupees, as the vendor sends them."""
+def _rows(minutes: int = _EXPECTED_MINUTES) -> list[dict[str, Any]]:
+    """A clean minute series. Prices in rupees, as the vendor sends them.
+
+    A FULL session by default, because the coverage check measures against a real session and
+    a 30-minute fixture would be flagged as truncated — correctly. A fixture that does not
+    look like the data is a fixture that tests something else.
+    """
     return [
         {
             "datetime": f"2026-08-28 {9 + (15 + i) // 60:02d}:{(15 + i) % 60:02d}:00",
@@ -125,12 +130,22 @@ def seed_corrupt_bronze(bronze_root: Path, corruption: str | None) -> Path:
     return path
 
 
-def run_qc(bronze_root: Path, quarantine_root: Path, fetched_keys: set[str]) -> QcReport:
+def run_qc(
+    bronze_root: Path,
+    quarantine_root: Path,
+    fetched_keys: set[str],
+    calendar_path: Path | None = None,
+) -> QcReport:
     """Check every bronze record; quarantine what fails, with reasons.
 
     ``fetched_keys`` comes from the backfill manifest -- ``"SYMBOL:YYYY-MM-DD"`` for every key
     that returned an answer. Without it an empty session is indistinguishable from a hole.
     """
+    from pips.core.calendar import SESSION_MINUTES_DEFAULT, load_calendar
+
+    calendar = load_calendar(calendar_path) if calendar_path else None
+    expected_minutes = calendar.continuous_session_minutes if calendar else SESSION_MINUTES_DEFAULT
+
     report = QcReport()
     for path in sorted(bronze_root.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
@@ -155,10 +170,12 @@ def run_qc(bronze_root: Path, quarantine_root: Path, fetched_keys: set[str]) -> 
             findings += check_spikes(bars, max_move_bps=_MAX_MOVE_BPS)
             findings += check_decimal_shift(bars)
 
-        # The expectation is the seeded fixture's own length when it is complete, so a short
-        # session is judged against what a session should be rather than against itself.
+        # From the CALENDAR, not from the fixture. This read `len(_rows())` — the seed
+        # fixture's 30 minutes — which made the check vacuous on real data: a genuine
+        # 375-minute session arriving with 50 bars scored 50/30 and passed. The expectation
+        # must describe the session, not the test data.
         findings += check_session_coverage(
-            bars, expected_minutes=len(_rows()), fetch_succeeded=key in fetched_keys
+            bars, expected_minutes=expected_minutes, fetch_succeeded=key in fetched_keys
         )
 
         if findings:

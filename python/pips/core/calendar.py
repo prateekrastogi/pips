@@ -28,7 +28,16 @@ from pips.core.config import PipsConfig, load_yaml
 from pips.core.ids import ShortId, content_hash, short_id
 from pips.core.time import NS_PER_SECOND, to_ist
 
-__all__ = ["ExchangeCalendar", "SessionState", "load_calendar"]
+__all__ = [
+    "SESSION_MINUTES_DEFAULT",
+    "ExchangeCalendar",
+    "SessionState",
+    "load_calendar",
+]
+
+# NSE continuous session length in minutes (09:15-15:30). The default when no calendar is
+# supplied; QC measures coverage against it, so it must describe the session and not a fixture.
+SESSION_MINUTES_DEFAULT = 375
 
 _UNTRADEABLE: Final = frozenset({"CAS", "FLATTEN_ONLY"})
 
@@ -95,6 +104,13 @@ class ExchangeCalendar(PipsConfig):
     def holidays_verified(self) -> bool:
         """Whether the holiday list has a source and a verification date."""
         return bool(self.holidays_source) and self.holidays_verified_on is not None
+
+    @property
+    def continuous_session_minutes(self) -> int:
+        """Minutes in the continuous session -- what a complete day should contain."""
+        open_t = _parse_clock(self.continuous_session.start)
+        close_t = _parse_clock(self.continuous_session.end)
+        return (close_t.hour * 60 + close_t.minute) - (open_t.hour * 60 + open_t.minute)
 
     def require_verified_holidays(self) -> None:
         """Refuse to proceed on an unverified calendar.

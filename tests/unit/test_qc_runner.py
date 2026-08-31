@@ -92,3 +92,77 @@ def test_the_report_is_reportable(tmp_path: Path) -> None:
     report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"CLEAN:2026-08-28"})
     summary = report.describe()
     assert "checked" in summary and "quarantined" in summary
+
+
+def test_coverage_is_measured_against_the_real_session_not_the_fixture(tmp_path: Path) -> None:
+    """A truncated REAL session must be caught.
+
+    This was vacuous on real data. `run_qc` passed `expected_minutes=len(_rows())` — the seed
+    fixture's 30 minutes — so a genuine 375-minute session arriving with 50 bars scored 50/30
+    and sailed through. QC ran against the first six real records, reported zero findings, and
+    the number was meaningless for this check.
+
+    Caught by asking why a pass was a pass, not by a failure. The expectation now comes from
+    the exchange calendar, so it describes the session rather than the test data.
+    """
+    import json
+    import time
+
+    rows = [
+        {
+            "datetime": f"2026-08-28 {9 + (15 + i) // 60:02d}:{(15 + i) % 60:02d}:00",
+            "open": 100.0,
+            "high": 100.5,
+            "low": 99.5,
+            "close": 100.1,
+            "volume": 10,
+        }
+        for i in range(50)  # 50 of ~375: badly truncated
+    ]
+    directory = tmp_path / "bronze" / "REAL" / "2026-08-28"
+    directory.mkdir(parents=True)
+    (directory / f"{time.time_ns()}.json").write_text(
+        json.dumps(
+            {
+                "request": {"symbol": "REAL", "trade_date": "2026-08-28", "interval": "1minute"},
+                "received_at_ns": time.time_ns(),
+                "payload": {"Status": 200, "Success": rows},
+            }
+        )
+    )
+    report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"REAL:2026-08-28"})
+    assert any(f.check == "session_coverage" for f in report.findings), (
+        "50 bars of a 375-minute session must be flagged as truncated"
+    )
+
+
+def test_a_full_real_session_is_not_flagged(tmp_path: Path) -> None:
+    # The control for the above. The M3 probe measured a real session at 370 of 375 minutes,
+    # because untraded minutes are omitted — so the floor must sit well below that.
+    import json
+    import time
+
+    rows = [
+        {
+            "datetime": f"2026-08-28 {9 + (15 + i) // 60:02d}:{(15 + i) % 60:02d}:00",
+            "open": 100.0,
+            "high": 100.5,
+            "low": 99.5,
+            "close": 100.1,
+            "volume": 10,
+        }
+        for i in range(370)
+    ]
+    directory = tmp_path / "bronze" / "REAL" / "2026-08-28"
+    directory.mkdir(parents=True)
+    (directory / f"{time.time_ns()}.json").write_text(
+        json.dumps(
+            {
+                "request": {"symbol": "REAL", "trade_date": "2026-08-28", "interval": "1minute"},
+                "received_at_ns": time.time_ns(),
+                "payload": {"Status": 200, "Success": rows},
+            }
+        )
+    )
+    report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"REAL:2026-08-28"})
+    assert not [f for f in report.findings if f.check == "session_coverage"]
