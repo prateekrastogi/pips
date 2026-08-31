@@ -111,7 +111,7 @@ def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
             outcomes.append((nxt - here) / here)
 
     registered = enumerate_specs(spec_path.parent)
-    with_plugin = {"A01"}  # compute plugins implemented so far
+    with_plugin = {"A01", "A02", "A03", "A04"}  # compute plugins implemented so far
     report: dict[str, object] = {
         "specs_registered": len(registered),
         "specs_with_a_compute_plugin": sorted(with_plugin),

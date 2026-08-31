@@ -51,14 +51,14 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 91 files · mypy --strict 91 files · 426 pytest · clippy clean (21 crates) ·
+  ruff 96 files · mypy --strict 96 files · 440 pytest · clippy clean (21 crates) ·
   cargo test ok · determinism bit-identical · ledger-check 26 rows (12/3/11)
 
 null-search calibration (the S1 chain checking itself on destroyed data)
   q=0.05 -> survivor 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17   all calibrated
 
 make s1-smoke -> the S1 funnel ran end to end on fixtures
-  9 specs registered · 1 with a compute plugin · 8 awaiting one (stated, not hidden)
+  9 specs registered · 4 with compute plugins (A01-A04) · 5 awaiting one (stated, not hidden)
   1875 bars · 3708 forecasts · rank_ic 0.0063 · p 0.7114 (correctly does NOT promote)
   harness_self_test OK (shuffled mean |IC| 0.0138 < bound 0.0821)
   — an IC of 0.006 on a seeded random walk is the RIGHT answer: there is nothing there.
@@ -71,8 +71,9 @@ make s1-smoke -> the S1 funnel ran end to end on fixtures
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **Compute plugins for A02-A08 and A12** — each with a mechanism test the way A01's
-   neutralization is tested, so the sweep covers all nine rather than one. Still no
+3. **Compute plugins for A05-A08 and A12** — the session-structure family (gap
+   continuation/reversal, opening-range breakout, compression-to-expansion) plus the
+   intraday seasonal. These exercise the calendar and session states built at M2. Still no
    credentials required.
 
 ## Blockers / awaiting
