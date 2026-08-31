@@ -8,9 +8,16 @@
   spec: "IMPLEMENTATION.md#31-config"
   source_refs: ["reference/alphaforge §schemas", "reference/blueprint §lineage"]
   code: "python/pips/core/ids.py"
-  tests: ["tests/unit/core/test_ids.py"]
-  status: building
+  tests:
+    - "tests/unit/core/test_ids.py"
+    - "tests/unit/core/test_trial_identity.py"
+    - "tests/property/test_core_properties.py"
+  status: enforced
   owner_milestone: M2
+  # ids.py is the canonical-encoding root; trial.py builds the §3.1 trial identity on it and
+  # holds the result cache. The load-bearing test is test_every_field_changes_the_trial_id,
+  # which parametrises over TrialIdentity's OWN field list: a field added later but not
+  # hashed fails there, rather than years on as a silent collision between distinct trials.
 
 - id: C-SPEC-01
   title: "AlphaSpec pre-registration object (H, I_t, T_h, φ_θ, C, E, N, F)"
