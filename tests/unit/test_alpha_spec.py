@@ -74,10 +74,13 @@ def test_a_spec_without_null_models_is_refused() -> None:
 
 
 def test_a_falsifier_must_state_a_condition_not_a_sentiment() -> None:
-    # "reject if it stops working" is not a rejection condition. A falsifier must name a
-    # perturbation and a threshold, or it cannot be evaluated after the fact.
-    with pytest.raises(ValueError, match="condition"):
+    # "looks bad" states no action, so it cannot be evaluated at the only time it matters.
+    # The check verifies an action word and a clause — see the module docstring for what it
+    # deliberately does NOT verify, and why widening it would make it vacuous.
+    with pytest.raises(ValueError, match="no action"):
         AlphaSpec.model_validate(spec_payload(falsifiers=["looks bad"]))
+    with pytest.raises(ValueError, match="fragment"):
+        AlphaSpec.model_validate(spec_payload(falsifiers=["reject it"]))
 
 
 def test_a_heuristic_alpha_declares_itself_quarantined() -> None:

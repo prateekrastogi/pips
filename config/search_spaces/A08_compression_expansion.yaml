@@ -1,0 +1,74 @@
+# A08 — Compression-to-expansion continuation  [C-SPEC-01] (§3.2, reference A-catalogue A08).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A08 card — composing my own would have inverted what pre-registration means.
+
+id: A08
+version: "1.0.0"
+
+hypothesis: >
+  Low realized range followed by DIRECTIONAL range and volume expansion can mark a
+  transition from balanced liquidity to one-sided information flow. The claim is the
+  directional component AFTER controlling for unconditional volatility clustering —
+  expansion alone is a volatility forecast, not an alpha.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "volume @ bar close label"
+
+target:
+  horizon_minutes: [10, 120]
+  price_convention: "close-to-close over the hold"
+  side: "both"
+  quantity: "directional component of post-compression expansion"
+
+feature_dag:
+  - node: compression_state
+    op: "realized range percentile over 10-120m below c0"
+    warmup_bars: 120
+    missingness: "insufficient history => no percentile, no state"
+  - node: expansion_trigger
+    op: "range and volume expansion beyond e0 MAD"
+    warmup_bars: 120
+    missingness: "no MAD estimate => no trigger"
+  - node: direction
+    op: "signed expansion, residual to a volatility forecast"
+    warmup_bars: 120
+    missingness: "no volatility forecast => no directional claim, since direction is defined relative to it"
+
+parameter_domain:
+  compression_window_m: [10, 120]
+  compression_percentile_c0: [5, 30]
+  expansion_threshold_e0_mad: [1, 3]
+  hold_minutes: [10, 120]
+
+fit_protocol: >
+  c0 and e0 selected on inner folds only, and reported as a surface so the plateau
+  requirement below can be checked rather than asserted.
+
+null_models:
+  - "zero forecast"
+  - "a pure volatility forecast with no direction — the parent this must beat"
+  - "expansion magnitude with random sign"
+
+falsifiers:
+  - "Reject if direction adds no information beyond a volatility forecast"
+  - "Reject if the effect is confined to circuit moves"
+  - "Reject if nearby threshold surfaces lack a plateau"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A08"

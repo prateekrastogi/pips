@@ -1,0 +1,74 @@
+# A07 — Opening-range breakout  [C-SPEC-01] (§3.2, reference A-catalogue A07).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A07 card — composing my own would have inverted what pre-registration means.
+
+id: A07
+version: "1.0.0"
+
+hypothesis: >
+  The opening range aggregates overnight information. A later escape accompanied by abnormal
+  participation and cross-sectional confirmation may indicate unresolved directional demand.
+  The range endpoint is fixed CAUSALLY — chosen before the session, never at the point the
+  breakout is observed.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "volume @ bar close label"
+  - "session open @ exchange calendar"
+
+target:
+  horizon_minutes: [15, 120]
+  price_convention: "breach price to close over the hold"
+  side: "both"
+  quantity: "conditional return after a causally fixed range is breached"
+
+feature_dag:
+  - node: opening_range
+    op: "high/low over a causally fixed endpoint of 5/10/15/30m"
+    warmup_bars: 30
+    missingness: "session shorter than the endpoint => no range, no forecast"
+  - node: volatility_buffer
+    op: "0-1 ATR added to the range boundary"
+    warmup_bars: 30
+    missingness: "no ATR estimate => no buffer, and therefore no signal"
+  - node: breakout_flag
+    op: "close beyond range +/- buffer, with abnormal participation"
+    warmup_bars: 0
+    missingness: "a breach on the same bar as the range endpoint is not a breach"
+
+parameter_domain:
+  range_end_minutes: [5, 10, 15, 30]
+  volatility_buffer_atr: [0.0, 1.0]
+  hold_minutes: [15, 120]
+
+fit_protocol: >
+  range_end is one of four PREDECLARED values, not a continuous search. The buffer is
+  selected on inner folds only.
+
+null_models:
+  - "zero forecast"
+  - "breakout without the participation filter"
+  - "random breach direction at the same frequency — isolates the directional claim"
+
+falsifiers:
+  - "Reject if small changes to range_end or buffer reverse the result"
+  - "Reject if most P&L comes from same-bar fills"
+  - "Reject if spread/impact consumes the apparent edge"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A07"

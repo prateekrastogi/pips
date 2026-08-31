@@ -1,0 +1,75 @@
+# A02 — Time-series momentum with volatility scaling  [C-SPEC-01] (§3.2, reference A-catalogue A02).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A02 card — composing my own would have inverted what pre-registration means.
+
+id: A02
+version: "1.0.0"
+
+hypothesis: >
+  Persistent order splitting and gradual information incorporation can create continuation
+  in each instrument's OWN return process. The claim is time-series, not cross-sectional: it
+  must hold per instrument after scaling so high-volatility names do not mechanically
+  dominate.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "volume @ bar close label"
+
+target:
+  horizon_minutes: [30, 240]
+  price_convention: "close-to-close on close-labelled bars"
+  side: "both"
+  quantity: "signed forecast per stock"
+
+feature_dag:
+  - node: own_return_multi_horizon
+    op: "multi-horizon own-return lookbacks 5-240m"
+    warmup_bars: 240
+    missingness: "insufficient warmup => no forecast, not a zero"
+  - node: volatility_scale
+    op: "EWMA volatility, half-life 10-120m"
+    warmup_bars: 120
+    missingness: "a name with no volatility estimate is absent, not zero-scaled"
+  - node: signed_forecast
+    op: "scaled multi-horizon combination"
+    warmup_bars: 0
+    missingness: "missing any predeclared horizon => no forecast"
+
+parameter_domain:
+  own_lookbacks_m: [5, 240]
+  n_predeclared_horizons: [2, 5]
+  vol_half_life_m: [10, 120]
+  hold_minutes: [30, 240]
+
+fit_protocol: >
+  Horizons are PREDECLARED, 2-5 of them, before any search. Volatility half-life fitted on
+  inner folds only (M15). Nothing fitted on the outer fold.
+
+null_models:
+  - "zero forecast"
+  - "sign of the single best lookback — isolates the multi-horizon claim"
+  - "unscaled own-return momentum — the simpler parent"
+
+falsifiers:
+  - "Reject if only one lookback works"
+  - "Reject if HAC-adjusted evidence is weak"
+  - "Reject if results are dominated by open gaps"
+  - "Reject if the sign flips under a one-bar skip"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A02 [R02][R13]"

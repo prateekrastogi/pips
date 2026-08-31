@@ -1,0 +1,77 @@
+# A05 — Opening-gap continuation  [C-SPEC-01] (§3.2, reference A-catalogue A05).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A05 card — composing my own would have inverted what pre-registration means.
+
+id: A05
+version: "1.0.0"
+
+hypothesis: >
+  Large overnight information shocks may be incorporated GRADUALLY when opening demand is
+  broad, liquid and confirmed by peers. Continuation and reversal are separate pre-
+  registrations (A05 vs A06) precisely so neither can be chosen after seeing the realized
+  sign.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "volume @ bar close label"
+  - "prior-session close @ prior session"
+  - "cross-sectional peer gaps @ same session open"
+
+target:
+  horizon_minutes: [5, 120]
+  price_convention: "open-to-close over the hold"
+  side: "both"
+  quantity: "E[r_open:t+h | idiosyncratic gap, opening volume, breadth, sector confirmation]"
+
+feature_dag:
+  - node: idiosyncratic_gap
+    op: "gap minus peer-median gap, scaled by prior-day volatility"
+    warmup_bars: 1
+    missingness: "no prior-day volatility => no gap measure"
+  - node: opening_confirmation
+    op: "opening volume and breadth over an observation window of 5-30m"
+    warmup_bars: 30
+    missingness: "insufficient observation window => no forecast"
+  - node: continuation_score
+    op: "gap sign gated on confirmation thresholds"
+    warmup_bars: 0
+    missingness: "unconfirmed => flat, not a reversed position"
+
+parameter_domain:
+  idiosyncratic_gap_prior_day_vol: [0.5, 3.0]
+  observe_minutes: [5, 30]
+  hold_minutes: [5, 120]
+  confirmation_thresholds: "coarse grid, preregistered"
+
+fit_protocol: >
+  Confirmation thresholds on coarse grids, selected on inner folds only. The
+  continuation/reversal split is fixed BEFORE the search (§5).
+
+null_models:
+  - "zero forecast"
+  - "raw gap sign without confirmation — isolates the confirmation claim"
+  - "market direction over the same window — the alpha must be distinct from it"
+
+falsifiers:
+  - "Reject if the result depends on the first untradeable print"
+  - "Reject if it disappears after realistic opening spread stress"
+  - "Reject if it is not distinct from market direction"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A05"
+  - "IMPLEMENTATION.md §5 — F5 gap digestion: continue/fade separate, never chosen ex post"

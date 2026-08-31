@@ -1,0 +1,80 @@
+# A12 — Intraday seasonal residual  [C-SPEC-01] (§3.2, reference A-catalogue A12).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A12 card — composing my own would have inverted what pre-registration means.
+
+id: A12
+version: "1.0.0"
+
+hypothesis: >
+  Recurring institutional schedules and liquidity cycles can create WEAK but STABLE
+  conditional return patterns at specific clock slots. The claim is a hierarchically shrunk
+  slot mean — an isolated slot spike is the null this must be distinguished from, not
+  evidence for it.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "clock slot @ bar close label, exchange-local"
+  - "session state @ exchange calendar"
+
+target:
+  horizon_minutes: [5, 60]
+  price_convention: "close-to-close on close-labelled bars"
+  side: "both"
+  quantity: "hierarchically shrunk stock/sector/slot mean residual return"
+
+feature_dag:
+  - node: clock_slot
+    op: "5/10/15m bins of the exchange-local session clock"
+    warmup_bars: 1
+    missingness: "a bar outside the continuous session has no slot"
+  - node: slot_residual
+    op: "residual return by slot over 60-250 sessions of history"
+    warmup_bars: 250
+    missingness: "insufficient session history => no slot estimate, not a zero"
+  - node: shrunk_mean
+    op: "hierarchical shrinkage stock -> sector -> slot"
+    warmup_bars: 250
+    missingness: "a slot with too few independent sessions is shrunk to its parent, not reported raw"
+
+parameter_domain:
+  clock_bin_minutes: [5, 10, 15]
+  history_sessions: [60, 250]
+  shrinkage: "fit internally"
+  hold_minutes: [5, 60]
+
+fit_protocol: >
+  Shrinkage strength fitted internally on inner folds. Slot means are never reported
+  unshrunk — an unshrunk slot mean over few sessions is the artefact this alpha must not
+  become.
+
+null_models:
+  - "zero forecast"
+  - "unshrunk slot mean — the artefact this must beat"
+  - "day-of-week effect alone"
+
+falsifiers:
+  - "Reject isolated day-of-week or slot spikes after family-wise correction"
+  - "Require stability across calendar eras"
+  - "Reject if it depends on a handful of expiry days"
+
+# Pre-registered but not yet evaluable. Declared here so the gap is machine-visible.
+falsifiers_deferred:
+  - "Require stability across calendar eras — needs multi-year history; evaluable once M4's backfill has delivered 3y of 1m bars"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A12 [R13][R20]"

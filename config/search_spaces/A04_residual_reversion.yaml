@@ -1,0 +1,76 @@
+# A04 — Residual mean reversion / factor-neutral dislocation  [C-SPEC-01] (§3.2, reference A-catalogue A04).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A04 card — composing my own would have inverted what pre-registration means.
+
+id: A04
+version: "1.0.0"
+
+hypothesis: >
+  A stock may temporarily deviate from a dynamically estimated market-sector-statistical
+  factor manifold and then CONVERGE after a transient liquidity shock. The estimand is the
+  conditional error-correction response of a factor-relative log-price state — NOT the
+  unconditional tendency of a price to revisit a moving average.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "cross-sectional peer returns @ same bar close, eligible PIT universe only"
+
+target:
+  horizon_minutes: [5, 90]
+  price_convention: "factor-relative log price"
+  side: "both"
+  quantity: "error-correction response"
+
+feature_dag:
+  - node: factor_relative_log_price
+    op: "log price minus factor projection, factor window 20-120 sessions"
+    warmup_bars: 120
+    missingness: "insufficient factor history => no state, not a zero"
+  - node: spread_z
+    op: "z of the log-price spread over 5-60m"
+    warmup_bars: 60
+    missingness: "no dispersion => no z"
+  - node: entry_exit_state
+    op: "entry 1.5-3.5, exit 0-1.0 bands on the z"
+    warmup_bars: 0
+    missingness: "outside the band => flat, which is a position not a missing value"
+
+parameter_domain:
+  factor_window_sessions: [20, 120]
+  spread_z_window_m: [5, 60]
+  entry_z: [1.5, 3.5]
+  exit_z: [0.0, 1.0]
+  hold_minutes: [5, 90]
+
+fit_protocol: >
+  phi estimated on inner folds only; half-life reported per fold so its stability is
+  observable rather than assumed.
+
+null_models:
+  - "zero forecast"
+  - "raw reversal without residualization — the simpler parent this must beat"
+  - "unconditional moving-average reversion"
+
+falsifiers:
+  - "Reject if the estimated half-life is unstable"
+  - "Reject if phi is not negative out of sample"
+  - "Reject if residualization adds no value over raw reversal"
+  - "Reject if event-day exclusions erase the result"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A04 [R04][R12]"

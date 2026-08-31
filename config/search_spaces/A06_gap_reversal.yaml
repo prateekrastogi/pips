@@ -1,0 +1,86 @@
+# A06 — Opening-gap reversal  [C-SPEC-01] (§3.2, reference A-catalogue A06).
+#
+# PRE-REGISTRATION, written before the search. The falsifiers below are TRANSCRIBED from the
+# reference's own A06 card — composing my own would have inverted what pre-registration means.
+
+id: A06
+version: "1.0.0"
+
+hypothesis: >
+  An idiosyncratic gap UNSUPPORTED by peer breadth, sustained volume or range continuation
+  may reflect an opening liquidity imbalance that subsequently mean reverts. Estimated
+  separately from A05's continuation claim, and the two are never selected between by
+  realized sign.
+
+information_set:
+  - "close_paise @ bar close label"
+  - "volume @ bar close label"
+  - "prior-session close @ prior session"
+  - "cross-sectional peer gaps @ same session open"
+  - "corporate-action / event flag @ PIT masters"
+
+target:
+  horizon_minutes: [5, 90]
+  price_convention: "open-to-close over the hold"
+  side: "both"
+  quantity: "E[-r_open:t+h | idiosyncratic gap, weak confirmation, no event flag]"
+
+feature_dag:
+  - node: idiosyncratic_gap
+    op: "gap minus peer-median gap, scaled by prior-day volatility"
+    warmup_bars: 1
+    missingness: "no prior-day volatility => no gap measure"
+  - node: weak_confirmation
+    op: "volume, breadth and range-continuation all BELOW their thresholds"
+    warmup_bars: 30
+    missingness: "any input missing => no weak-confirmation call, not a default one"
+  - node: no_event_flag
+    op: "mandatory: a flagged name is excluded entirely"
+    warmup_bars: 1
+    missingness: "missing event metadata => EXCLUDE the name, never assume no event"
+  - node: reversal_score
+    op: "negated gap, gated on weak confirmation and no event"
+    warmup_bars: 0
+    missingness: "gate not met => flat"
+
+parameter_domain:
+  idiosyncratic_gap_prior_day_vol: [0.5, 3.0]
+  weak_confirmation_grid: "separate from A05, preregistered"
+  hold_minutes: [5, 90]
+  event_flag_required: true
+
+fit_protocol: >
+  The weak-confirmation grid is SEPARATE from A05's confirmation grid and fixed before the
+  search. The no-event flag is mandatory, not a filter chosen later.
+
+null_models:
+  - "zero forecast"
+  - "raw gap fade without the weak-confirmation gate"
+  - "A05 continuation on the same names — the two must not be mirror images of one selection"
+
+falsifiers:
+  - "Reject if continuation and reversal rules are selected ex post by realized sign"
+  - "Reject if event metadata is incomplete"
+  - "Reject if the edge fails a protected-market-limit fill model"
+
+# Pre-registered but not yet evaluable. Declared here so the gap is machine-visible.
+falsifiers_deferred:
+  - "Reject if event metadata is incomplete — needs the PIT corporate-action and event masters (M6); until they exist every name is treated as event-flagged and excluded, which is the conservative direction"
+
+data_tier: T1
+
+cost_context:
+  brokers: ["FLATTRADE"]
+  capital_tiers: ["2L", "5L", "10L"]
+  must_clear: "net of the §3.7 statutory line and the high-cost reference line"
+
+execution_policy:
+  order_type: "protected marketable limit"
+  reprice_cap: 2
+  timeout_bars: 1
+
+heuristic: false
+
+references:
+  - "reference/AlphaForge A06 [R03]"
+  - "IMPLEMENTATION.md §5 — continue/fade separate, never chosen ex post"

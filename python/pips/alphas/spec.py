@@ -25,25 +25,24 @@ from pips.core.ids import ShortId, content_hash, short_id
 
 __all__ = ["AlphaSpec", "DataTier", "load_alpha_spec"]
 
-# A falsifier must name a perturbation and an outcome. These are the perturbation vocabulary
-# §6's stress battery (M16) actually applies, so a falsifier written in these terms can be
-# mechanically evaluated rather than argued about.
-_CONDITION_WORDS = (
-    "reject if",
-    "require",
-    "must",
-    "fails if",
-    "disappears",
-    "below",
-    "above",
-    "monotone",
-    "delay",
-    "neutral",
-    "perturb",
-    "remove",
-    "drop",
-    "stable",
-)
+# WHAT THIS CHECK IS, AND WHAT IT GAVE UP ON. A falsifier must state an ACTION (reject /
+# require / must / fail) and be a clause rather than a fragment. That is all it verifies.
+#
+# It was twice stronger than this and twice wrong. First it demanded the literal phrase
+# "reject if" and rejected the reference's own A12 falsifier ("Reject isolated day-of-week or
+# slot spikes after family-wise correction"). Then it demanded a word from a "referent"
+# vocabulary and rejected A07's ("Reject if small changes to range_end or buffer reverse the
+# result"). Each failure would have been fixed by widening the list — and a list widened until
+# it stops rejecting anything checks nothing. A check that refuses the source document is
+# broken; a check that accepts everything is theatre. So it was narrowed to the part that is
+# actually mechanical.
+#
+# The real enforcement is elsewhere and is named here so nobody mistakes this for it: human
+# review at pre-registration, and M16's stress battery actually APPLYING each falsifier. When
+# that battery exists, the honest strengthening is to require each falsifier to name the check
+# that evaluates it — a structural binding, not a parse of English.
+_ACTION_WORDS = ("reject", "require", "must", "fail")
+_MIN_FALSIFIER_WORDS = 4
 
 
 class DataTier(StrEnum):
@@ -72,6 +71,12 @@ class AlphaSpec(PipsConfig):
     execution_policy: dict[str, Any]
     heuristic: bool = False
     references: list[str] = Field(default_factory=list)
+    # Falsifiers that are PRE-REGISTERED but cannot yet be evaluated, because the data they
+    # need does not exist. Declaring them here keeps the gap machine-visible instead of a
+    # footnote: a spec whose strongest rejection condition is unrunnable is weaker evidence
+    # than one whose conditions can all be applied, and a reader should not have to work
+    # that out. Each entry must name a falsifier that was actually declared.
+    falsifiers_deferred: list[str] = Field(default_factory=list)
 
     @field_validator("data_tier", mode="before")
     @classmethod
@@ -92,13 +97,31 @@ class AlphaSpec(PipsConfig):
             )
         for falsifier in self.falsifiers:
             lowered = falsifier.lower()
-            if not any(word in lowered for word in _CONDITION_WORDS):
+            if not any(word in lowered for word in _ACTION_WORDS):
                 raise ValueError(
-                    f"{self.id}: falsifier {falsifier!r} states no evaluable condition. Name "
-                    "the perturbation and the outcome (e.g. 'reject if rank-IC is not "
-                    "monotone in horizon'), not a sentiment."
+                    f"{self.id}: falsifier {falsifier!r} states no action. A rejection "
+                    "condition must say what happens — reject, require, must, fail — not "
+                    "describe a feeling about the result."
+                )
+            if len(falsifier.split()) < _MIN_FALSIFIER_WORDS:
+                raise ValueError(
+                    f"{self.id}: falsifier {falsifier!r} is a fragment, not a condition. "
+                    "Name the perturbation and the outcome."
+                )
+        for deferred in self.falsifiers_deferred:
+            if not any(deferred.split(" — needs ")[0].strip() in f for f in self.falsifiers):
+                raise ValueError(
+                    f"{self.id}: falsifiers_deferred names {deferred!r}, which is not one of "
+                    "the declared falsifiers — a condition cannot be deferred if it was "
+                    "never pre-registered"
                 )
         return self
+
+    @property
+    def runnable_falsifiers(self) -> list[str]:
+        """Falsifiers that can be evaluated with the data we actually have."""
+        deferred_heads = [d.split(" — needs ")[0].strip() for d in self.falsifiers_deferred]
+        return [f for f in self.falsifiers if not any(h in f for h in deferred_heads)]
 
     @model_validator(mode="after")
     def _tier_matches_the_information_set(self) -> AlphaSpec:

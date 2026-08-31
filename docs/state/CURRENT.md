@@ -3,11 +3,12 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
-**M12 alpha wave 1 — STARTED.** The contracts are `enforced`: `[C-SPEC-01]` refuses a spec
+**M12 alpha wave 1 — DONE.** All nine T1 families (A01-A08, A12) are pre-registered with
+falsifiers transcribed from their reference cards, A05/A06 are structurally independent
+(no ex-post sign selection), and `make s1-smoke` runs the funnel. Contracts enforced: The contracts are `enforced`: `[C-SPEC-01]` refuses a spec
 without null models or a written falsifier (rule 5, at entry), `[C-FCST-01]` carries the
-two-term trade gate. A01 is pre-registered with the reference's own falsifiers and its compute
-plugin passes the neutralization test. `make s1-smoke` runs the funnel end to end. Remaining
-for M12: A02–A08 and A12 as AlphaSpecs.
+two-term trade gate. A01 also carries a compute plugin that passes the
+neutralization test; A02-A08 and A12 are pre-registrations awaiting their plugins.
 
 **M10 vectorized engine (F0) — DONE.** Three-day toy case reconciles to the paisa
 (gross 3,000,000 · cost 10,644 · net 2,989,356), the accounting identity holds by
@@ -45,7 +46,7 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 86 files · mypy --strict 86 files · 360 pytest · clippy clean (21 crates) ·
+  ruff 87 files · mypy --strict 87 files · 402 pytest · clippy clean (21 crates) ·
   cargo test ok · determinism bit-identical · ledger-check 26 rows (12/3/11)
 
 make s1-smoke -> the S1 funnel ran end to end on fixtures
@@ -61,10 +62,10 @@ make s1-smoke -> the S1 funnel ran end to end on fixtures
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **Finish M12** — A02–A08 and A12 as AlphaSpecs, each with the reference card's own
-   falsifiers and a compute plugin whose mechanism claim is tested the way A01's
-   neutralization is. Then **M13's S1 runner** (BH-FDR within family×universe, null-search
-   calibration). Still no credentials required.
+3. **M13 S1 runner** — enumerate the search spaces, rank-IC curves with NW t-stats,
+   half-life, coverage, monotonicity; BH-FDR within family×universe; and **null-search
+   calibration** (destroy features/labels, confirm the survivor rate approximates q). The
+   compute plugins for A02-A08/A12 land alongside it. Still no credentials required.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private
