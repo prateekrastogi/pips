@@ -1,6 +1,9 @@
 # Keep images small, reproducible and free of anything that is not code (rule 14:
 # data and runtime state live on VM volumes, never inside an image).
-.git
+# .git IS included on purpose: `make tdd-check` [G-TDD-01] walks branch history to prove
+# the branch was written test-first, so the research/CI image must carry it or the gate goes
+# vacuous. The engine and reader images never receive it — their Dockerfiles COPY only
+# Cargo manifests and rust/, never `COPY . .` — so no history reaches a production image.
 .gitignore
 .venv
 target/

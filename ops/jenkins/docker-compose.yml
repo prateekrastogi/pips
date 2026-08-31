@@ -1,0 +1,64 @@
+# pips CI controller (ADR-0007). Brought up from ops/jenkins/, separately from the
+# application compose file at the repo root — CI is infrastructure for the repo, not a
+# service of the trading system, and it must never appear in the arb-vm service set.
+#
+#   cd ops/jenkins && docker compose up -d --build      (or: make jenkins-up)
+
+# EXPLICIT PROJECT NAME, and it is not optional. Compose derives the project from the
+# DIRECTORY NAME when you do not set one — and this directory is called `jenkins`, exactly
+# like the neighbouring keeper project's `deploy/jenkins`. Without this line both files
+# resolve to the same project `jenkins` with the same service `jenkins`, so bringing pips up
+# ADOPTS AND REPLACES keeper's controller container and overwrites its `jenkins-jenkins`
+# image. That happened once, on the first `make jenkins-up`. Keeper's data volume survived
+# (it names the volume explicitly) and the controller was restored from its own compose file,
+# but nothing about the failure was visible while it happened: compose printed
+# `Container keeper-jenkins Recreated` in the middle of an otherwise successful build.
+name: pips-ci
+
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Explicit for the same reason: the default image name is `<project>-<service>`, which
+    # collides exactly as silently as the container did.
+    image: pips/jenkins:local
+    container_name: pips-jenkins
+    restart: unless-stopped
+    ports:
+      # LOOPBACK ONLY, and on 8081 because 127.0.0.1:8080 is already taken by another
+      # project's controller on this host. This instance has a placeholder password and a
+      # mounted docker socket; binding 0.0.0.0 would publish root-equivalent access to the LAN.
+      - "127.0.0.1:8081:8080"
+    environment:
+      CASC_JENKINS_CONFIG: /var/jenkins_conf/casc.yaml
+      # Override before `up` to replace the placeholder login.
+      PIPS_JENKINS_PASSWORD: ${PIPS_JENKINS_PASSWORD:-pips-local-only}
+      JAVA_OPTS: >-
+        -XX:MaxRAMPercentage=70
+        -Djenkins.install.runSetupWizard=false
+        -Dhudson.model.DirectoryBrowserSupport.CSP=
+        -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
+        -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400
+      # ^ The git plugin refuses a local-directory remote by default ("references a local
+      #   directory, which may be insecure"). That guard is aimed at multi-tenant controllers
+      #   where a job configurer could reach arbitrary host paths. This controller is bound to
+      #   127.0.0.1, has one user, and its only local remote is a READ-ONLY mount of the repo
+      #   it exists to build — so the threat is not present, and cloning from a remote instead
+      #   would add credentials to gain nothing.
+    volumes:
+      - pips_jenkins_home:/var/jenkins_home
+      - ./casc.yaml:/var/jenkins_conf/casc.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PIPS_REPO:-/Users/prateekrastogi/quant/pips}:/host-repo:ro
+      # NOTE: no ~/.ssh mount. M3.5 binds an arb-vm identity as a Jenkins credential when the
+      # deploy rail lands; until then the controller holds no key and reaches nothing remote.
+    cpus: 2
+    # 3g with MaxRAMPercentage=70 gives ~2.1 GiB of heap. Smaller limits look healthy in
+    # `docker stats` while the JVM GC-thrashes into 503s mid-build — the heap is the ceiling,
+    # not the container.
+    mem_limit: 3g
+
+volumes:
+  pips_jenkins_home:
+    name: pips_jenkins_home

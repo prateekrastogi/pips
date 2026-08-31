@@ -1,0 +1,88 @@
+# pips CI controller — configuration as code (ADR-0007).
+# THIS FILE IS THE CONTROLLER. Nothing about it is configured by clicking, so a rebuild on
+# any machine reproduces it exactly. Changing CI means editing this file in a reviewed commit.
+
+jenkins:
+  systemMessage: |
+    pips CI — the merge gate for this repository (IMPLEMENTATION.md ADR-0007, §2.2).
+    Stages mirror `make ci` 1:1 and run INSIDE the project's own research image, so a green
+    build certifies exactly the image arb-vm will run. Merge to main only on green.
+    This controller is pips-owned and loopback-only; it does not touch any other project.
+  numExecutors: 2
+  mode: NORMAL
+  labelString: "docker linux pips"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "pips"
+          # Loopback-bound single-user dev controller. The default is a placeholder, not a
+          # secret: override it by exporting PIPS_JENKINS_PASSWORD before `docker compose up`.
+          # No real credential belongs in git (constitution rule 14 / §2.2).
+          password: "${PIPS_JENKINS_PASSWORD:-pips-local-only}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  remotingSecurity:
+    enabled: true
+
+security:
+  gitHostKeyVerificationConfiguration:
+    sshHostKeyVerificationStrategy:
+      acceptFirstConnectionStrategy: {}
+
+unclassified:
+  location:
+    url: "http://127.0.0.1:8081/"
+    adminAddress: "pips-ci@localhost"
+  globalDefaultFlowDurabilityLevel:
+    durabilityHint: PERFORMANCE_OPTIMIZED
+
+jobs:
+  - script: >
+      pipelineJob('pips-ci') {
+        description('''
+          The merge gate for pips. Stages mirror the `make ci` ladder and run inside the
+          project research image (ADR-0007). Merge to main only on green; the arb-vm deploy
+          rail ships main.
+
+          PIPS_REF names the ref under test. It defaults to main — the only ref a merge gate
+          should judge by default — but is a parameter because the Jenkinsfile itself has to
+          be certified on its own branch before it can ever reach main.
+        '''.stripIndent())
+        parameters {
+          stringParam('PIPS_REF', 'main', 'branch or ref to build, e.g. main or m/0-scaffold')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('/host-repo') }
+                // ESCAPED WITH ^, and it must be. JCasC runs its OWN variable substitution
+                // over this file before job-dsl ever sees it, so a bare ${PIPS_REF} is
+                // resolved at CONTROLLER BOOT — against an environment that has no such
+                // variable — and lands in config.xml as an empty <name/>. The job then
+                // builds "whatever the default branch is" while the UI shows a parameter
+                // that appears to work. `^${...}` passes the literal through to the git
+                // plugin, which expands it per build from the PIPS_REF parameter.
+                branch('^${PIPS_REF}')
+                // NOT SHALLOW, and this is load-bearing. `make tdd-check` [G-TDD-01] walks
+                // branch history against origin/main to prove the branch was written
+                // test-first; a depth-1 clone has no history to walk, so the gate would go
+                // vacuous or red for the wrong reason. The neighbouring keeper project hit
+                // exactly this class of failure (its ledger §17.2253, "Jenkins shallow-history
+                // recovery") — a history-dependent check under a depth-one checkout. pips
+                // takes the full clone instead: this repo is small and local, so the clone is
+                // cheap and the gate stays real.
+                extensions {
+                  cloneOptions { shallow(false); noTags(false); honorRefspec(false) }
+                }
+              }
+            }
+            // cpsScm, NOT an inlined script: a JCasC-defined job has no workspace, and
+            // pasting the pipeline here would fork it from the committed Jenkinsfile.
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }

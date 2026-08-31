@@ -1,0 +1,29 @@
+# Jenkins plugins for pips CI (ADR-0007).
+# Versions are unpinned deliberately: `jenkins-plugin-cli --latest false` resolves the set
+# compatible with the PINNED controller image, so the image tag is the single thing that
+# moves this set.
+
+# --- pipeline core: the Jenkinsfile, stages, options, post conditions ---
+workflow-aggregator
+pipeline-stage-view
+workflow-durable-task-step
+
+# --- config-as-code: this controller is defined by casc.yaml, committed. Nothing clicked. ---
+configuration-as-code
+job-dsl
+
+# --- git: full-history checkout of the repo under test ---
+git
+git-client
+
+# --- build metadata and guards ---
+timestamper
+build-timeout
+lockable-resources
+
+# --- credentials: unused today. Present because M3.5 binds an arb-vm SSH identity for the
+#     deploy rail, and adding it then would mean rebuilding the controller image mid-milestone.
+credentials
+credentials-binding
+plain-credentials
+ssh-agent

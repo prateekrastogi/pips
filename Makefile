@@ -73,3 +73,23 @@ parity: ## Python/Rust byte-equality replay for DAY=<day> (M24)
 clean: ## Remove build and test caches
 	rm -rf .pytest_cache .mypy_cache .ruff_cache target
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+
+# ---- CI controller (ADR-0007). Infrastructure for the repo, never an arb-vm service. ----
+JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
+JENKINS_URL ?= http://127.0.0.1:8081
+REF ?= main
+
+.PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build
+
+jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)
+	PIPS_REPO=$(CURDIR) $(JENKINS_COMPOSE) up -d --build
+	@echo "pips Jenkins starting at $(JENKINS_URL) (user: pips)"
+
+jenkins-down: ## Stop the controller (keeps its home volume)
+	$(JENKINS_COMPOSE) down
+
+jenkins-logs: ## Tail controller logs
+	$(JENKINS_COMPOSE) logs -f --tail=100
+
+jenkins-build: ## Trigger the pips-ci job for REF=<branch> and wait for the verdict
+	@ops/jenkins/trigger.sh "$(REF)"
