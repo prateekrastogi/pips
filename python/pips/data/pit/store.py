@@ -132,6 +132,18 @@ class PitStore:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        # Parsed records per table, with the file SIZE they were parsed at. `append` enforces
+        # the forward-only rule by asking for the latest version, which read and re-validated
+        # the whole file every time — so appending N records cost N full parses of a file
+        # growing to N lines. The real instrument master (5,851 rows) turned a one-second
+        # parse into a ten-minute ingest. Correct at fixture scale, unusable at production
+        # scale, and no test would ever have said so.
+        self._cache: dict[str, list[PitRecord]] = {}
+        self._cached_size: dict[str, int] = {}
+        self.file_parses = 0
+        """Full file parses performed. Exposed so the read amplification can be ASSERTED as a
+        bound rather than measured as a duration -- a timing test would be flaky and would not
+        say what was slow."""
 
     # ---------------------------------------------------------------- writing --------
 
@@ -152,8 +164,15 @@ class PitStore:
                 "— backdate valid_from instead (§3.4)."
             )
         line = json.dumps(record.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-        with self._path(record.table).open("a", encoding="utf-8") as handle:
+        path = self._path(record.table)
+        with path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
+        # Extend the cache rather than invalidating it: the record we just wrote is the record
+        # we already hold, so re-reading the file to learn it would be the original defect in
+        # a smaller form.
+        if record.table in self._cache:
+            self._cache[record.table].append(record)
+            self._cached_size[record.table] = path.stat().st_size
 
     def correct(self, table: str, key: str, known_from: date, payload: dict[str, Any]) -> None:
         """Record a corrected payload as a NEW version (§3.4: never an overwrite)."""
@@ -194,16 +213,29 @@ class PitStore:
         path = self._path(table)
         if not path.exists():
             return []
+
+        # The cache is keyed on the file's SIZE, not merely on its presence. Two stores over
+        # one directory is exactly how a backfill and a QC pass coexist, and a cache that
+        # trusts itself after another process has written reports stale data with total
+        # confidence — worse than the slowness it was added to fix. A size change is cheap to
+        # check and cannot be missed by an append, which only ever grows the file.
+        size = path.stat().st_size
+        if self._cached_size.get(table) == size and table in self._cache:
+            return self._cache[table]
+        self.file_parses += 1
         # ``model_validate_json``, not ``model_validate(json.loads(...))``. PipsConfig is
         # strict, and strict PYTHON-mode validation rejects a str where a date is declared —
         # correctly, since a caller handing us "2026-01-01" has skipped parsing it. JSON has
         # no date type, so strict JSON-mode validation does accept the ISO form. Parsing the
         # line ourselves would throw that distinction away.
-        return [
+        records = [
             PitRecord.model_validate_json(line)
             for line in path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
+        self._cache[table] = records
+        self._cached_size[table] = size
+        return records
 
     def _latest_version(
         self, table: str, key: str, known_on: date | None, valid_on: date | None = None
