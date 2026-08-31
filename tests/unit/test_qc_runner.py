@@ -13,11 +13,13 @@ deleting it makes the finding unverifiable.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from pips.data.qc.runner import CORRUPTIONS, run_qc, seed_corrupt_bronze
+from pips.data.qc import runner as runner_module
+from pips.data.qc.runner import CORRUPTIONS, run_qc, seed_corrupt_bronze, seed_two_sessions
 
 
 @pytest.fixture
@@ -166,3 +168,60 @@ def test_a_full_real_session_is_not_flagged(tmp_path: Path) -> None:
     )
     report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"REAL:2026-08-28"})
     assert not [f for f in report.findings if f.check == "session_coverage"]
+
+
+def test_every_check_the_suite_defines_is_actually_run() -> None:
+    """A check that exists, is unit-tested, and never runs is worth nothing.
+
+    `check_unexplained_ratio_jump` was exactly that: written at M5, tested in isolation, and
+    never called by the runner. It was found by accident while rewiring it to the M6
+    corporate-action master — nothing pointed at it, because a suite of six passing checks and
+    a suite of seven where one is dead look identical from the outside.
+
+    This is the same shape as the coverage check that compared against the fixture's own row
+    count: a green that means nothing looks exactly like a green that means everything.
+    """
+    from pips.data.qc import checks as checks_module
+
+    runner_source = Path(runner_module.__file__).read_text(encoding="utf-8")
+    defined = {n for n in checks_module.__all__ if n.startswith("check_")}
+    unused = sorted(n for n in defined if n not in runner_source)
+    assert not unused, (
+        f"{unused} are defined in the check suite but never called by the runner — they "
+        "cannot fail on real data, so they protect nothing"
+    )
+
+
+def test_a_split_shaped_jump_between_consecutive_sessions_is_quarantined(tmp_path: Path) -> None:
+    seed_two_sessions(tmp_path / "bronze", second_open_paise=50_000, first_close_paise=100_000)
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-27", "CLEAN:2026-08-28"},
+        calendar_path=Path("config/calendars/nse_equity.yaml"),
+    )
+    assert any(f.check == "ratio_jump" for f in report.findings), (
+        f"a 2x overnight jump must be quarantined; got {[f.check for f in report.findings]}"
+    )
+
+
+def test_a_jump_across_a_gap_is_not_treated_as_overnight(tmp_path: Path) -> None:
+    """The false positive this guard exists to prevent.
+
+    Bronze is not guaranteed contiguous — a backfill can be partial, and a symbol can be
+    missing days. Comparing a close from a week ago against today's open produces a ratio that
+    means nothing, and quarantining on it would train everyone to ignore the finding.
+    """
+    seed_two_sessions(
+        tmp_path / "bronze",
+        second_open_paise=50_000,
+        first_close_paise=100_000,
+        first_day=date(2026, 8, 20),  # not the preceding trading day
+    )
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-20", "CLEAN:2026-08-28"},
+        calendar_path=Path("config/calendars/nse_equity.yaml"),
+    )
+    assert not any(f.check == "ratio_jump" for f in report.findings)

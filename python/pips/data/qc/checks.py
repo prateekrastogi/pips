@@ -22,6 +22,7 @@ from enum import StrEnum
 from itertools import pairwise
 
 from pips.data.breeze.ingest import NormalizedBar
+from pips.data.pit.corporate_actions import JumpVerdict
 
 __all__ = [
     "Finding",
@@ -219,14 +220,23 @@ def check_decimal_shift(bars: list[NormalizedBar]) -> list[Finding]:
 def check_unexplained_ratio_jump(
     previous_close_paise: int,
     first_open_paise: int,
-    known_actions: list[tuple[str, float]],
+    verdict: JumpVerdict | None,
 ) -> list[Finding]:
-    """An overnight jump at a common split/bonus ratio, with no corporate action to explain it.
+    """An overnight jump at a common split/bonus ratio that no known action accounts for.
 
-    Quarantined rather than adjusted. Until M6's PIT corporate-action master exists we cannot
-    tell a 1:2 split from bad data, and adjusting on a guess would silently corrupt every
-    return that crosses the date -- in a way no later check could detect, because the adjusted
-    series looks perfectly well-formed.
+    Quarantined rather than adjusted: adjusting on a guess silently corrupts every return
+    crossing the date, in a way no later check can detect, because the adjusted series looks
+    perfectly well-formed.
+
+    ``verdict`` comes from M6's PIT corporate-action master, which answers whether a KNOWN
+    action accounts for THIS jump. It replaced a list of declared actions and a bare
+    ``if known_actions: return []`` — so any action on the day cleared any jump, and a 1:2
+    split sitting next to a 90% collapse waved the collapse through. An action on the day is
+    not a licence to accept an arbitrary move.
+
+    ``verdict=None`` means the master was never consulted, and it FAILS CLOSED. Absence of an
+    answer is not an answer -- the same rule the websocket gap record follows when it writes
+    ``messages_missed: null`` rather than 0.
     """
     if previous_close_paise <= 0 or first_open_paise <= 0:
         return []
@@ -234,15 +244,21 @@ def check_unexplained_ratio_jump(
     for candidate in _ACTION_RATIOS:
         for direction in (candidate, 1 / candidate):
             if abs(ratio - direction) <= _RATIO_TOLERANCE * direction:
-                if known_actions:
+                if verdict is not None and verdict.explained:
                     return []
+                why = (
+                    "the corporate-action master was not consulted"
+                    if verdict is None
+                    else verdict.reason
+                )
                 return [
                     Finding(
                         "ratio_jump",
                         Severity.QUARANTINE,
-                        f"overnight ratio {ratio:.3f} matches a common corporate action and "
-                        "none is declared — quarantined rather than adjusted, because "
-                        "adjusting on a guess corrupts every return crossing the date",
+                        f"overnight ratio {ratio:.3f} matches a common corporate action "
+                        f"pattern and is unexplained ({why}) — quarantined rather than "
+                        "adjusted, because adjusting on a guess corrupts every return "
+                        "crossing the date",
                     )
                 ]
     return []

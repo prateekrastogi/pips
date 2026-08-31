@@ -21,12 +21,15 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Final
 
+from pips.core.calendar import ExchangeCalendar
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
+from pips.data.pit.corporate_actions import JumpVerdict
 from pips.data.qc.checks import (
     Finding,
     Severity,
@@ -36,6 +39,7 @@ from pips.data.qc.checks import (
     check_raw_row_order,
     check_session_coverage,
     check_spikes,
+    check_unexplained_ratio_jump,
 )
 
 __all__ = ["CORRUPTIONS", "QcReport", "main", "run_qc", "seed_corrupt_bronze"]
@@ -65,7 +69,11 @@ class QcReport:
         )
 
 
-def _rows(minutes: int = _EXPECTED_MINUTES) -> list[dict[str, Any]]:
+def _rows(
+    minutes: int = _EXPECTED_MINUTES,
+    day: date = _SEED_DAY,
+    base_rupees: float = 100.00,
+) -> list[dict[str, Any]]:
     """A clean minute series. Prices in rupees, as the vendor sends them.
 
     A FULL session by default, because the coverage check measures against a real session and
@@ -74,15 +82,60 @@ def _rows(minutes: int = _EXPECTED_MINUTES) -> list[dict[str, Any]]:
     """
     return [
         {
-            "datetime": f"2026-08-28 {9 + (15 + i) // 60:02d}:{(15 + i) % 60:02d}:00",
-            "open": 100.00 + i * 0.01,
-            "high": 100.50 + i * 0.01,
-            "low": 99.50 + i * 0.01,
-            "close": 100.10 + i * 0.01,
+            "datetime": (f"{day.isoformat()} {9 + (15 + i) // 60:02d}:{(15 + i) % 60:02d}:00"),
+            "open": base_rupees + i * 0.01,
+            "high": base_rupees + 0.50 + i * 0.01,
+            "low": base_rupees - 0.50 + i * 0.01,
+            "close": base_rupees + 0.10 + i * 0.01,
             "volume": 1000 + i,
         }
         for i in range(minutes)
     ]
+
+
+def _write_record(bronze_root: Path, day: date, rows: list[dict[str, Any]]) -> Path:
+    directory = bronze_root / _SEED_SYMBOL / day.isoformat()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{time.time_ns()}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "request": {
+                    "symbol": _SEED_SYMBOL,
+                    "trade_date": day.isoformat(),
+                    "interval": "1minute",
+                },
+                "received_at_ns": time.time_ns(),
+                "payload": {"Status": 200, "Success": rows},
+            },
+            indent=1,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def seed_two_sessions(
+    bronze_root: Path,
+    first_close_paise: int,
+    second_open_paise: int,
+    first_day: date = date(2026, 8, 27),
+    second_day: date = _SEED_DAY,
+) -> None:
+    """Two clean sessions whose overnight ratio is under the caller's control.
+
+    Used to exercise the ratio-jump check, which needs two records to have anything to
+    compare — the single-record seeder cannot reach it at all, which is part of why it went
+    unrun for a milestone.
+    """
+    first = _rows(day=first_day, base_rupees=first_close_paise / 100.0)
+    first[-1]["close"] = first_close_paise / 100.0
+    second = _rows(day=second_day, base_rupees=second_open_paise / 100.0)
+    second[0]["open"] = second_open_paise / 100.0
+    _write_record(bronze_root, first_day, first)
+    _write_record(bronze_root, second_day, second)
 
 
 def seed_corrupt_bronze(bronze_root: Path, corruption: str | None) -> Path:
@@ -107,27 +160,20 @@ def seed_corrupt_bronze(bronze_root: Path, corruption: str | None) -> Path:
             f"unknown corruption {corruption!r}; expected one of {sorted(CORRUPTIONS)}"
         )
 
-    directory = bronze_root / _SEED_SYMBOL / _SEED_DAY.isoformat()
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{time.time_ns()}.json"
-    path.write_text(
-        json.dumps(
-            {
-                "request": {
-                    "symbol": _SEED_SYMBOL,
-                    "trade_date": _SEED_DAY.isoformat(),
-                    "interval": "1minute",
-                },
-                "received_at_ns": time.time_ns(),
-                "payload": {"Status": 200, "Success": rows},
-            },
-            indent=1,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    return path
+    return _write_record(bronze_root, _SEED_DAY, rows)
+
+
+JumpExplainer = Callable[[str, date, int, int], JumpVerdict | None]
+"""``(symbol, day, previous_close_paise, open_paise) -> verdict``."""
+
+
+def _previous_trading_day(calendar: ExchangeCalendar, day: date, limit: int = 10) -> date | None:
+    """The trading day immediately before ``day``, or ``None`` across a long closure."""
+    for back in range(1, limit + 1):
+        candidate = day - timedelta(days=back)
+        if calendar.is_trading_day(candidate):
+            return candidate
+    return None
 
 
 def run_qc(
@@ -135,11 +181,23 @@ def run_qc(
     quarantine_root: Path,
     fetched_keys: set[str],
     calendar_path: Path | None = None,
+    explain_jump: JumpExplainer | None = None,
 ) -> QcReport:
     """Check every bronze record; quarantine what fails, with reasons.
 
     ``fetched_keys`` comes from the backfill manifest -- ``"SYMBOL:YYYY-MM-DD"`` for every key
     that returned an answer. Without it an empty session is indistinguishable from a hole.
+
+    ``explain_jump`` is the seam to M6's corporate-action master: given a symbol, a date and
+    the observed prices, it says whether a known action accounts for the move. It is
+    **optional and defaults to None**, which FAILS CLOSED -- every common-ratio jump is
+    quarantined, exactly the behaviour before the master existed.
+
+    It is a callable rather than a master object because the master is keyed on ISIN and
+    bronze carries a SYMBOL, and resolving one to the other as-of is the instrument master's
+    job. Nothing has loaded real instruments yet, so the resolution is left to the caller
+    instead of being faked here -- a seam that is honest about not being connected beats one
+    that looks connected and silently resolves nothing.
     """
     from pips.core.calendar import SESSION_MINUTES_DEFAULT, load_calendar
 
@@ -147,6 +205,9 @@ def run_qc(
     expected_minutes = calendar.continuous_session_minutes if calendar else SESSION_MINUTES_DEFAULT
 
     report = QcReport()
+    # Per symbol, the last session seen and its closing price. Path order is symbol-then-date
+    # (bronze/<symbol>/<date>/<ns>.json), so this walks each symbol's sessions in order.
+    previous_session: dict[str, tuple[date, int]] = {}
     for path in sorted(bronze_root.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
         request = record["request"]
@@ -177,6 +238,27 @@ def run_qc(
         findings += check_session_coverage(
             bars, expected_minutes=expected_minutes, fetch_succeeded=key in fetched_keys
         )
+
+        # The overnight ratio, but ONLY across genuinely adjacent sessions. Bronze is not
+        # guaranteed contiguous -- a partial backfill leaves holes -- and comparing a close
+        # from last week against today's open yields a ratio that means nothing. Quarantining
+        # on that would train everyone to ignore the finding, which is worse than not having
+        # it. Needs a calendar to establish adjacency; without one the check is skipped.
+        if bars:
+            prior = previous_session.get(symbol)
+            if prior is not None and calendar is not None:
+                prior_day, prior_close = prior
+                if prior_day == _previous_trading_day(calendar, day):
+                    findings += check_unexplained_ratio_jump(
+                        previous_close_paise=prior_close,
+                        first_open_paise=bars[0].open_paise,
+                        verdict=(
+                            explain_jump(symbol, day, prior_close, bars[0].open_paise)
+                            if explain_jump
+                            else None
+                        ),
+                    )
+            previous_session[symbol] = (day, bars[-1].close_paise)
 
         if findings:
             report.findings.extend(findings)

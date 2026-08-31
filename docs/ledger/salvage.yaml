@@ -295,6 +295,12 @@
     a shape reference at best: M6 needs bitemporal CA records with known_from/known_to and a
     cross-check against price series (§3.4, M5). Treat this as a starting point, not a donor
     that closes the need.
+    HARVESTED at M6 into python/pips/data/pit/corporate_actions.py. Taken: the idea of a
+    multiplicative back-adjustment applied to bars before the ex-date. Rejected: float
+    arithmetic (pips prices are integer paise; a 4:9 bonus factor has no float form), and the
+    donor's adjustment rule, which applies every supplied action to every pre-ex-date bar with
+    no knowledge time and no check that the ex-date has arrived — a lookahead in the
+    flattering direction. Both of those donor bugs are pinned as mutations that must fail.
 
 - id: SAL-0017
   component: "Broker/stream reconciliation map"

@@ -54,6 +54,7 @@
   tests:
     - "tests/unit/test_pit.py"
     - "tests/unit/test_instrument_master.py"
+    - "tests/unit/test_corporate_actions.py"
   # BUILDING, not enforced, and the distinction is deliberate. The bitemporal half is done and
   # tested: valid_from/known_from, corrections as new versions, as-of reads that never move,
   # and now the instrument master on top of it (ISIN-keyed, symbol/token histories, ambiguity

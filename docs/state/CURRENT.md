@@ -7,7 +7,7 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M6 PIT masters — store, root-pinning and the instrument master landed; corporate actions next.**
+**M6 PIT masters — store, root-pinning, instrument master and corporate actions landed.**
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
 of the world) and `known_from` (when we knew it). The log is append-only in the literal sense —
@@ -34,11 +34,19 @@ can lend the same letters to a different company later, and a symbol-keyed join 
 boundary splices two companies into one price series. An ambiguous resolution is refused, not
 guessed — guessing would usually be right, which is what makes it dangerous.
 
-Still unwritten for M6: corporate actions (SAL-0016 has a real donor — harvest before writing),
-ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV is the v0), and index
-membership. Two things wait on those — the calendar's holiday list is still
-`holidays_verified: false`, and QC quarantines every unexplained ratio jump because no
-corporate-action master exists to explain one.
+The **corporate-action master** followed (SAL-0016 harvested for shape only — the donor's own
+adjustment rule is a lookahead, and both of its bugs are now pinned as mutations that must
+fail). Its causality rule is the substance: adjust a bar at `bar_on`, as of `as_of`, using
+actions where `bar_on < ex_date <= as_of` **and** `known_from <= as_of`.
+
+Wiring it turned up a real hole: `check_unexplained_ratio_jump` had **never been called by the
+runner** — written at M5, unit-tested, dead — and it also cleared *any* jump if *any* action
+was declared that day. Both fixed, plus a meta-test asserting every check the suite defines is
+actually run.
+
+Still unwritten for M6: ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV
+is the v0), and index membership. The calendar's holiday list is still
+`holidays_verified: false`.
 
 ## Done
 M0, M0.5, M1, M2, M3, M3.5, M4, M5, M9, M10, M11, M12. M13 mostly (compute plugins for
@@ -52,7 +60,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 119 files · mypy --strict 119 files · 619 pytest · clippy clean · cargo test ok
+  ruff 121 files · mypy --strict 121 files · 640 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -77,19 +85,25 @@ instrument-master mutation run — 4 mutations, 3 killed immediately, 1 SURVIVED
   gap fallback · ambiguity picks first · ISIN validation  -> killed
   symbol_history dedup removed -> SURVIVED (untested claim; now covered, mutation caught)
 
+corporate-action mutation run — 6 of 6 killed, including both donor bugs reproduced:
+  drop ex_date<=as_of (the donor's lookahead) · drop bar_on<ex_date · tolerance accepts all
+  unadjustable kind silently returns 1 (the donor's other bug) · explains_jump ignores as_of
+  ratio sanity check removed
+QC runner wiring — 3 of 3 killed: adjacency guard, finding discarded, previous close never kept
+
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
 make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (correctly no promotion)
 ```
 
 ## Next 3 actions
-1. **Corporate-action master** — harvest SAL-0016 first (`convexity 790d7235b202:
-   src/convexity/breakout/data/corporate_actions.py`, deleted from HEAD, a shape reference
-   rather than a donor that closes the need). QC quarantines *every* unexplained ratio jump
-   today because nothing exists to explain one, so this unblocks a check firing blind.
-2. **Ingest a real instrument master on arb-vm** — the class exists and is tested; nothing has
-   loaded actual NSE instruments into it yet. That is also what turns `snapshot_root` from a
-   built gate into a used one.
+1. **Ingest real masters on arb-vm and connect the QC verdict seam.** Both master classes
+   exist and are tested; nothing has loaded actual NSE instruments or actions into them. Until
+   that happens `explain_jump` stays `None` and the ratio check fails closed — correct, but it
+   can never say "explained". This is also what turns `snapshot_root` from a built gate into a
+   used one.
+2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
+   rests on an empty list. It is the last unverified placeholder in the calendar.
 3. **Compute plugins for A05–A08 and A12** — the session-structure family plus the intraday
    seasonal. Exercises the M2 calendar and needs no credentials or data.
 

@@ -28,9 +28,9 @@ from typing import Final
 from pydantic import field_validator
 
 from pips.core.config import PipsConfig
-from pips.data.pit.store import PitOp, PitRecord, PitStore
+from pips.data.pit.store import PitOp, PitRecord, PitStore, from_payload
 
-__all__ = ["AmbiguousSymbolError", "Instrument", "InstrumentMaster"]
+__all__ = ["AmbiguousSymbolError", "Instrument", "InstrumentMaster", "validate_isin"]
 
 TABLE: Final = "instruments"
 
@@ -38,6 +38,22 @@ TABLE: Final = "instruments"
 # identifier, and accepting mixed case would let "ine002a01018" and "INE002A01018" become two
 # instruments with two price histories and no complaint from anything.
 _ISIN_RE: Final = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+
+
+def validate_isin(value: str) -> str:
+    """Return ``value`` if it is a well-formed ISIN, else raise.
+
+    Public and shared, because the corporate-action master needs the identical rule and two
+    copies of a validation rule drift — which is precisely the defect the registry's
+    schema/model guard was added to catch a few commits ago.
+    """
+    if not _ISIN_RE.match(value):
+        raise ValueError(
+            f"{value!r} is not an ISIN (2-letter country code, 9 alphanumeric, check digit, "
+            "uppercase). The ISIN is the master's key — a malformed one creates a second "
+            "identity for a security that already has one."
+        )
+    return value
 
 
 class AmbiguousSymbolError(LookupError):
@@ -58,13 +74,7 @@ class Instrument(PipsConfig):
     @field_validator("isin")
     @classmethod
     def _looks_like_an_isin(cls, value: str) -> str:
-        if not _ISIN_RE.match(value):
-            raise ValueError(
-                f"{value!r} is not an ISIN (2-letter country code, 9 alphanumeric, check "
-                "digit, uppercase). The ISIN is the master's key — a malformed one creates a "
-                "second identity for a security that already has one."
-            )
-        return value
+        return validate_isin(value)
 
 
 class InstrumentMaster:
@@ -137,14 +147,14 @@ class InstrumentMaster:
                 "amended. If it has come back, record that as an upsert — a relisting is a "
                 "new fact about the ISIN, not an edit to a security that no longer exists."
             )
-        return Instrument.model_validate(records[-1].payload)
+        return from_payload(Instrument, records[-1].payload)
 
     # ------------------------------------------------------------- reading ----------
 
     def as_of(self, on: date) -> list[Instrument]:
         """Every live instrument as the master knew it on that date, in ISIN order."""
         return [
-            Instrument.model_validate(r.payload)
+            from_payload(Instrument, r.payload)
             for r in self.store.as_of(TABLE, known_on=on, valid_on=on)
         ]
 
@@ -194,7 +204,7 @@ class InstrumentMaster:
         for record in self.store.all_records(TABLE):
             if record.key != isin or not record.payload:
                 continue
-            value = field(Instrument.model_validate(record.payload))
+            value = field(from_payload(Instrument, record.payload))
             if not out or out[-1][1] != value:
                 out.append((record.known_from, value))
         return out

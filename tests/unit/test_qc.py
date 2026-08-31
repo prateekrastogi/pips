@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import date, time
 
 from pips.data.breeze.ingest import NormalizedBar
+from pips.data.pit.corporate_actions import JumpVerdict
 from pips.data.qc.checks import (
     Finding,
     Severity,
@@ -166,29 +167,60 @@ def test_a_genuine_sustained_move_is_not_called_a_decimal_shift() -> None:
     assert check_decimal_shift(bars) == []
 
 
-# ------------------------------------------- corporate actions, absent until M6 ---------
+# ------------------------------------- corporate actions, now that the M6 master exists ---
 
 
 def test_an_unexplained_overnight_ratio_jump_is_quarantined_not_adjusted() -> None:
-    # A 1:2 split halves the price overnight. With no CA master until M6 we cannot tell a
-    # split from bad data — so it is quarantined rather than silently adjusted or silently
-    # accepted. Adjusting on a guess would corrupt every return that crosses the date.
+    # A 1:2 split halves the price overnight. If nothing can explain it we cannot tell a split
+    # from bad data — so it is quarantined rather than silently adjusted or silently accepted.
+    # Adjusting on a guess would corrupt every return that crosses the date.
     findings = check_unexplained_ratio_jump(
-        previous_close_paise=200_00, first_open_paise=100_00, known_actions=[]
+        previous_close_paise=200_00,
+        first_open_paise=100_00,
+        verdict=JumpVerdict(False, "no known action"),
     )
     assert findings and findings[0].severity is Severity.QUARANTINE
     assert "corporate action" in findings[0].detail.lower()
 
 
-def test_a_declared_corporate_action_explains_the_jump() -> None:
+def test_a_matching_corporate_action_explains_the_jump() -> None:
     findings = check_unexplained_ratio_jump(
-        previous_close_paise=200_00, first_open_paise=100_00, known_actions=[("SPLIT", 2.0)]
+        previous_close_paise=200_00,
+        first_open_paise=100_00,
+        verdict=JumpVerdict(True, "SPLIT on 2026-07-01 predicts 0.5000; observed 0.5000"),
     )
     assert findings == []
 
 
+def test_an_action_on_the_day_is_not_a_licence_to_accept_any_jump() -> None:
+    """The defect this rewiring fixes.
+
+    The check used to take a list of declared actions and return `[]` if the list was
+    non-empty — so ANY action on the day cleared ANY jump. A 1:2 split sat next to a 90%
+    collapse and the collapse was waved through by the very table meant to catch it. The
+    master now answers whether the action accounts for THIS jump, and a mismatch quarantines.
+    """
+    findings = check_unexplained_ratio_jump(
+        previous_close_paise=200_00,
+        first_open_paise=20_00,
+        verdict=JumpVerdict(False, "SPLIT predicts 0.5000 but observed 0.1000"),
+    )
+    assert findings and findings[0].severity is Severity.QUARANTINE
+    assert "0.5000" in findings[0].detail, "the finding must carry the master's reasoning"
+
+
+def test_no_verdict_at_all_fails_closed() -> None:
+    # A caller that never consulted the master must not thereby pass. Absence of an answer is
+    # not an answer — the same rule the WS gap record follows with `messages_missed: null`.
+    findings = check_unexplained_ratio_jump(
+        previous_close_paise=200_00, first_open_paise=100_00, verdict=None
+    )
+    assert findings and findings[0].severity is Severity.QUARANTINE
+    assert "not consulted" in findings[0].detail
+
+
 def test_an_ordinary_overnight_gap_is_not_a_ratio_jump() -> None:
-    assert check_unexplained_ratio_jump(200_00, 196_00, known_actions=[]) == []
+    assert check_unexplained_ratio_jump(200_00, 196_00, verdict=None) == []
 
 
 def test_a_finding_carries_enough_to_act_on() -> None:

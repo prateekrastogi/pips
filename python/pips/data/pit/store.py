@@ -38,11 +38,33 @@ from pydantic import Field
 from pips.core.config import PipsConfig
 from pips.core.ids import canonical_bytes
 
-__all__ = ["MerkleTree", "PitOp", "PitRecord", "PitStore", "SurvivorshipAudit"]
+__all__ = [
+    "MerkleTree",
+    "PitOp",
+    "PitRecord",
+    "PitStore",
+    "SurvivorshipAudit",
+    "from_payload",
+]
 
 _LEAF: Final = b"\x00"
 _NODE: Final = b"\x01"
 _EMPTY_ROOT_DOMAIN: Final = b"pips.merkle.empty.v1"
+
+
+def from_payload[T: PipsConfig](model: type[T], payload: dict[str, Any]) -> T:
+    """Rebuild a config model from a PIT payload.
+
+    Payloads are stored as JSON, so they hold ISO date strings and plain enum values. Every
+    PipsConfig is strict, and strict PYTHON-mode validation correctly refuses a ``str`` where
+    a ``date`` or an enum is declared — a caller handing over ``"2026-07-01"`` has skipped
+    parsing it. Strict JSON-mode validation accepts the ISO form, because JSON has no date
+    type to have used instead.
+
+    One helper rather than the same round-trip written at each call site: the masters both
+    need it, and a rule implemented twice is a rule that drifts.
+    """
+    return model.model_validate_json(json.dumps(payload))
 
 
 class PitOp(StrEnum):
