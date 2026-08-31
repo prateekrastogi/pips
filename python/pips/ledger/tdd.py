@@ -22,12 +22,28 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["Commit", "classify", "evaluate", "git_commits", "main"]
+__all__ = [
+    "Commit",
+    "NotAGitRepositoryError",
+    "UnknownBaseRefError",
+    "classify",
+    "evaluate",
+    "git_commits",
+    "main",
+]
 
 _PRODUCTION_PREFIXES = ("python/pips/", "rust/crates/", "schemas/", "apps/")
 _TEST_PREFIXES = ("tests/",)
 _TEST_MARKERS = ("/tests/", "/test_", "_test.")
 _EXEMPT_TRAILER = "TDD-Exempt:"
+
+
+class NotAGitRepositoryError(RuntimeError):
+    """No git history to inspect -- the check is vacuous here and must say so."""
+
+
+class UnknownBaseRefError(RuntimeError):
+    """The repository exists but the base ref does not: a misconfigured pipeline."""
 
 
 @dataclass(frozen=True)
@@ -81,11 +97,19 @@ def _git(root: Path, *args: str) -> str:
 
 
 def git_commits(root: Path, base: str = "main") -> list[Commit]:
-    """Commits on ``HEAD`` that are not on ``base``, oldest first."""
+    """Commits on ``HEAD`` that are not on ``base``, oldest first.
+
+    Raises rather than returning an empty list when it cannot see history: an empty
+    result must mean "nothing to flag", never "I could not look".
+    """
+    try:
+        _git(root, "rev-parse", "--git-dir")
+    except RuntimeError as exc:
+        raise NotAGitRepositoryError(f"not a git repository: {root}") from exc
     try:
         merge_base = _git(root, "merge-base", base, "HEAD").strip()
-    except RuntimeError:
-        return []
+    except RuntimeError as exc:
+        raise UnknownBaseRefError(f"unknown base ref {base!r} in {root}") from exc
     shas = _git(root, "rev-list", "--reverse", f"{merge_base}..HEAD").split()
     commits: list[Commit] = []
     for sha in shas:
@@ -112,7 +136,20 @@ def main(argv: list[str] | None = None) -> int:
     base = args[0] if args else "main"
     root = Path(args[1]) if len(args) > 1 else Path.cwd()
 
-    commits = git_commits(root, base)
+    try:
+        commits = git_commits(root, base)
+    except NotAGitRepositoryError:
+        # The image build excludes .git (rule 14), so `make ci` inside a bare container
+        # cannot see history. Announce the vacuum instead of reporting a green gate --
+        # Jenkins runs this stage with the workspace mounted, where it is real.
+        print(f"tdd-check SKIPPED: not a git repository at {root} — this run proves nothing.")
+        print("  the real check runs in Jenkins against origin/main with the workspace mounted.")
+        return 0
+    except UnknownBaseRefError as exc:
+        print(f"tdd-check FAILED: {exc}")
+        print("  pass an existing base, e.g. `make tdd-check BASE=origin/main`.")
+        return 1
+
     if not commits:
         print(f"tdd-check OK: no commits ahead of {base}")
         return 0

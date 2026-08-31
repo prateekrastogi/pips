@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from pips.ledger.tdd import Commit, classify, evaluate, git_commits
+from pips.ledger.tdd import Commit, NotAGitRepositoryError, classify, evaluate, git_commits, main
 
 
 def _c(sha: str, files: list[str], exempt: str | None = None) -> Commit:
@@ -98,3 +98,38 @@ def test_git_walk_reads_real_history(tmp_path: Path) -> None:
     commits = git_commits(tmp_path, "main")
     assert [c.subject for c in commits] == ["test: red first"]
     assert commits[0].files == ("tests/test_a.py",)
+
+
+def test_a_non_repository_is_reported_not_silently_passed(tmp_path: Path) -> None:
+    # A gate that quietly returns "OK" when it cannot see anything is the vacuous-test
+    # failure mode ADR-0009 exists to prevent. It must say so out loud.
+    with pytest.raises(NotAGitRepositoryError):
+        git_commits(tmp_path, "main")
+
+
+def test_cli_announces_a_vacuous_run_instead_of_claiming_green(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["main", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "SKIPPED" in out and "not a git repository" in out.lower()
+    assert "tdd-check OK" not in out
+
+
+def test_an_unknown_base_ref_fails_loudly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def run(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    (tmp_path / "README.md").write_text("x\n")
+    run("add", "-A")
+    run("commit", "-qm", "base")
+
+    # A real repo but a base ref that does not exist is a misconfigured pipeline, not a
+    # vacuous environment — it must go red rather than skip.
+    assert main(["origin/does-not-exist", str(tmp_path)]) == 1
+    assert "unknown base ref" in capsys.readouterr().out.lower()

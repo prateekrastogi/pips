@@ -1,0 +1,18 @@
+# Keep images small, reproducible and free of anything that is not code (rule 14:
+# data and runtime state live on VM volumes, never inside an image).
+.git
+.gitignore
+.venv
+target/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+data/
+docs/reference/*.docx
+.env
+.env.*
+!.env.example
+config/live.yaml
+secrets/

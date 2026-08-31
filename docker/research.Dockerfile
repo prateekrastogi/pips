@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # --- Rust toolchain (pinned by rust-toolchain.toml at build time) -------------------
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | sh -s -- -y --profile minimal --default-toolchain 1.90.0 --component clippy rustfmt \
+      | sh -s -- -y --profile minimal --default-toolchain 1.90.0 --component clippy --component rustfmt \
     && chmod -R a+w "$CARGO_HOME" "$RUSTUP_HOME"
 
 # --- uv ----------------------------------------------------------------------------
