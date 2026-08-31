@@ -39,3 +39,31 @@ def test_alphanumeric_ids_are_cited() -> None:
 def test_heading_slugs_are_prefix_matchable() -> None:
     slugs = heading_slugs("### 3.7 Cost model — golden numbers `[C-COST-01…04]`\n")
     assert any(s.startswith("37-cost-model") for s in slugs)
+
+
+def test_ledger_check_also_enforces_the_harvest_map(tmp_path: Path) -> None:
+    # rule 13 only bites if it is wired into the gate. A salvage.yaml that leaves an
+    # infrastructure need unanswered must turn `make ledger-check` red, not just fail a
+    # unit test nobody runs before writing a connector.
+    import shutil
+
+    from pips.ledger.check import check_ledger
+
+    shutil.copy(ROOT / "IMPLEMENTATION.md", tmp_path / "IMPLEMENTATION.md")
+    ledger_dir = tmp_path / "docs" / "ledger"
+    ledger_dir.mkdir(parents=True)
+    for name in ("contracts.yaml", "gates.yaml"):
+        shutil.copy(ROOT / "docs" / "ledger" / name, ledger_dir / name)
+    # A harvest map that covers nothing at all.
+    (ledger_dir / "salvage.yaml").write_text(
+        "- id: SAL-0001\n"
+        "  component: 'something'\n"
+        "  decision: SKIP\n"
+        "  covers_needs: ['M4 historical fetcher']\n"
+        "  repo: intraday\n"
+        "  path: 'a.py'\n"
+        "  commit: 'be8186d4262a'\n",
+        encoding="utf-8",
+    )
+    failures = check_ledger(tmp_path)
+    assert any("salvage" in f or "no salvage row covers" in f for f in failures), failures

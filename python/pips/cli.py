@@ -11,6 +11,7 @@ _USAGE = """usage: pips <command> [args]
 commands:
   ledger check [root]        verify the doc/ledger/code/test loop (§8.2)
   tdd check [base] [root]    verify this branch is test-first (§7.1)
+  salvage verify [past]      resolve every donor SHA in ../past (§1.2)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -31,6 +32,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.ledger.tdd import main as tdd_main
 
         return tdd_main(rest[1:])
+    if command == "salvage" and rest[:1] == ["verify"]:
+        from pips.ledger.salvage import main as salvage_main
+
+        return salvage_main(rest[1:])
     if command == "fixtures" and rest[:1] == ["generate"]:
         from pips.fixtures.generate import main as fixtures_main
 

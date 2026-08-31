@@ -1,18 +1,459 @@
-# ledger/salvage.yaml — SAL-* rows produced by M1 (§1.2 harvest audit).
-# EMPTY UNTIL M1 RUNS. Constitution rule 13: before writing any connector, adapter,
-# session/token flow, instrument master, downloader or calendar, consult this file.
-# A from-scratch implementation requires a row with decision: NONE_FOUND naming the
-# refs and keywords searched — "I didn't look" is not valid provenance.
+# ledger/salvage.yaml — SAL-* rows from the M1 harvest audit (§1.2).
 #
-# Row shape:
-#   - id: SAL-0001
-#     component: "breeze session-token bootstrap"
-#     repo: convexity            # ../past/<repo>
-#     path: "src/breeze/auth.py"
-#     commit: "<source SHA — often NOT head>"
-#     ref: "<branch or tag it was found on>"
-#     found_at_head: false
-#     decision: VENDOR | PORT | WRAP | SKIP | NONE_FOUND
-#     covers_needs: ["M4 session-token flow"]
-#     notes: "<why this donor, what changes on vendor/port>"
-[]
+# Constitution rule 13: before writing any connector, adapter, session/token flow, instrument
+# master, downloader or calendar, consult this file. A from-scratch implementation requires a
+# NONE_FOUND row naming the refs and keywords searched — "I didn't look" is not provenance.
+#
+# Every donor row resolves to an exact blob: `git show <commit>:<path>` in ../past/<repo>.
+# Donors are frequently NOT at HEAD. In `intraday` the entire Breeze adapter was deleted by a
+# later refactor, so found_at_head is false for every one of its rows and the code is only
+# reachable through history.
+#
+# Schema and coverage enforced by python/pips/ledger/salvage.py (tests/unit/test_salvage.py),
+# which runs inside `make ledger-check`.
+
+# ═══════════════════════ intraday — the Breeze donor ═══════════════════════
+# 47 commits, refs: main + origin/main. HEAD is a bare README: everything below was deleted
+# by 9381e97 ("Strip to minimal directional-ITM ORB engine") and 1fa7ea8 ("Refactor code
+# structure"). The commit be8186d is the last state where the Breeze adapter demonstrably
+# worked — 06e4ce8 upstream of it says the parser was "validated on live Breeze".
+
+- id: SAL-0001
+  component: "Breeze session-token bootstrap (daily session)"
+  repo: intraday
+  path: "src/volarb/adapters/breeze/auth.py"
+  commit: "be8186d4262a"
+  ref: main
+  found_at_head: false
+  size_bytes: 1451
+  decision: PORT
+  covers_needs: ["M4 session-token flow"]
+  notes: >
+    Small but load-bearing: the daily session dance is where Breeze integrations actually
+    fail. Port rather than vendor — pips splits the data plane into its own process with its
+    own credentials (rule 7), so the auth surface changes shape even though the flow does not.
+
+- id: SAL-0002
+  component: "Breeze historical OHLCV fetcher + normalizer"
+  repo: intraday
+  path: "src/volarb/adapters/breeze/history.py"
+  commit: "be8186d4262a"
+  ref: main
+  found_at_head: false
+  size_bytes: 3784
+  decision: PORT
+  covers_needs: ["M4 historical fetcher"]
+  notes: >
+    Carries the 1000-candle date-chunking and an ist_window helper. Its bar-timestamp
+    convention is direct evidence for the M3/M4 probe behind ADR-0001 — read it before
+    writing the normalizer, and record what it implies about Breeze's labelling.
+
+- id: SAL-0003
+  component: "Breeze rate limiter (100/min, 5000/day, Status-5 detection)"
+  repo: intraday
+  path: "src/volarb/adapters/breeze/ratelimit.py"
+  commit: "be8186d4262a"
+  ref: main
+  found_at_head: false
+  size_bytes: 2340
+  decision: PORT
+  covers_needs: ["M4 rate-limit budgeter"]
+  notes: >
+    ATTENTION at M3: this donor encodes 100/min, but IMPLEMENTATION.md M3 says the docs
+    conflict (100/min vs 75/min) and pips throttles to 75 until confirmed. Port the
+    Status-5 detection and the budgeter shape; do NOT inherit the limit constant.
+
+- id: SAL-0004
+  component: "Resumable multi-instrument backfill orchestrator"
+  repo: intraday
+  path: "src/volarb/adapters/breeze/backfill.py"
+  commit: "be8186d4262a"
+  ref: main
+  found_at_head: false
+  size_bytes: 14728
+  decision: PORT
+  covers_needs: ["M4 backfill orchestrator"]
+  notes: >
+    The largest single donor. Per-day discovery, resumable manifest, retry/backoff, clean
+    budget-stop — exactly M4's "resumable budgeter" requirement, already debugged against a
+    real quota. Options-specific parts (expiry widening, ATM strike bands) are dropped:
+    pips is cash equity.
+
+- id: SAL-0005
+  component: "Breeze adapter test suite (cassette-style)"
+  repo: intraday
+  path: "tests/test_breeze_backfill.py"
+  commit: "0c38c8440ffc"
+  ref: main
+  found_at_head: false
+  size_bytes: 15600
+  decision: VENDOR
+  covers_needs: ["M4 backfill orchestrator", "M4 rate-limit budgeter"]
+  notes: >
+    Vendored as reference material, not as a passing suite: it pins the edge cases the
+    fetcher hit in practice. Siblings at the same commit: tests/test_breeze_ratelimit.py
+    (7437b), tests/test_panel.py (11492b); tests/test_breeze_data.py (3171b) at be8186d.
+    M4's own tests are written first, against pips contracts (rule 16).
+
+- id: SAL-0006
+  component: "NSE cost model — date-aware STT + full charge stack"
+  repo: intraday
+  path: "src/volarb/costs/nse_fees.py"
+  commit: "ac3cba72e547"
+  ref: main
+  found_at_head: false
+  size_bytes: 6125
+  decision: PORT
+  covers_needs: ["M9 cost model"]
+  notes: >
+    Strong donor for [C-COST-01..04]: date-aware STT, the full NSE charge stack, and a
+    GST tax-on-tax base that a later commit (0c38c84) explicitly corrected. Tests at the
+    same commit, tests/test_costs.py (8435b). The rates are STALE — pips carries schedules
+    as effective-dated data with verified_on (rule 6), so port the STRUCTURE and re-verify
+    every number against the goldens in §3.7.
+
+- id: SAL-0007
+  component: "Walk-forward + embargo + final-holdout splitter"
+  repo: intraday
+  path: "src/volarb/backtest/splits.py"
+  commit: "8023ae3a7365"
+  ref: main
+  found_at_head: false
+  size_bytes: 4016
+  decision: PORT
+  covers_needs: ["M15 nested walk-forward"]
+  notes: >
+    Its commit claims no-lookahead, coverage and holdout-isolation pinned by 12 tests
+    (tests/test_splits.py, 4607b at 9518f3e). M15 needs purge = horizon and embargo >=
+    horizon + order duration, which this predates — port the isolation logic, not the
+    parameters.
+
+- id: SAL-0008
+  component: "Panel / bar data layer"
+  repo: intraday
+  path: "src/volarb/data/panel.py"
+  commit: "dd5381053444"
+  ref: main
+  found_at_head: false
+  size_bytes: 9779
+  decision: PORT
+  covers_needs: ["M8 feature store"]
+  notes: >
+    Predates the AsOf discipline entirely, so it is a shape reference only: pips panels are
+    read through AsOfPanelView and may not expose a row later than decision_ts (rule 2).
+
+- id: SAL-0009
+  component: "Breeze scaffold stubs (data/execution/factories/providers/config)"
+  repo: intraday
+  path: "src/volarb/adapters/breeze/data.py"
+  commit: "3bd73a8e4460"
+  ref: main
+  found_at_head: false
+  size_bytes: 243
+  decision: SKIP
+  covers_needs: ["M4 historical fetcher"]
+  notes: >
+    Checked and rejected: these are 96-261 byte scaffold placeholders from the initial
+    commit, never filled in. Recorded so a later sweep does not re-investigate them.
+    Siblings: execution.py 240b, factories.py 177b, providers.py 261b (aea10b4), config.py 176b.
+
+# ═══════════════════════ convexity — machinery, wrong venue ═══════════════════════
+# 177 commits, refs: main + origin/hardening + origin/journal-backups-convexity. A LIVE
+# crypto/commodity/equity fleet on Binance USDT-M. No NSE broker or Breeze code anywhere —
+# but the *machinery* around a live fleet is directly reusable, and most of it is at HEAD.
+
+- id: SAL-0010
+  component: "Continuous deploy rail (watch origin -> build -> gate -> promote -> recreate)"
+  repo: convexity
+  path: "ops/deploy/autodeploy.sh"
+  commit: "d7a733a8dcf6"
+  ref: main
+  found_at_head: true
+  size_bytes: 8104
+  decision: PORT
+  covers_needs: ["M3.5 deploy rail"]
+  notes: >
+    The closest match in ../past to anything pips needs: watches origin for new commits,
+    fast-forwards, builds with a test stage gating the image, runs a data-dependent suite the
+    in-image gate cannot, and only then promotes and recreates. Written for a LIVE trading
+    fleet, so its safety properties are the interesting part. M3.5 adds what it lacks:
+    SHA-tagged images, market-hours deferral for trading-path services, and auto-rollback
+    [C-DEPLOY-01] [G-DEPLOY-01].
+
+- id: SAL-0011
+  component: "Liquidity ranking / universe scoring"
+  repo: convexity
+  path: "src/convexity/universe/liquidity/ranking.py"
+  commit: "8b8ceae8b0a2"
+  ref: main
+  found_at_head: true
+  size_bytes: 6025
+  decision: PORT
+  covers_needs: ["M7 universe policy"]
+  notes: >
+    M7's score is a fixed-weight z-combination (log median rupee volume, spread, Amihud,
+    gap-rate). This donor solves the same shape for a different venue; take the ranking and
+    hysteresis machinery, not the weights — pips' are stress-tested and never P&L-tuned.
+
+- id: SAL-0012
+  component: "Universe API + eligibility gates"
+  repo: convexity
+  path: "src/convexity/universe/universe_api.py"
+  commit: "8b8ceae8b0a2"
+  ref: main
+  found_at_head: true
+  size_bytes: 10986
+  decision: PORT
+  covers_needs: ["M7 universe policy"]
+  notes: >
+    Sibling: universe/shortability/liquidity_gate.py (5234b, 635b051). pips' eligibility is
+    read from the daily broker_capability snapshot, never hard-coded (§3.4) — port the gate
+    structure and make the inputs data.
+
+- id: SAL-0013
+  component: "Spread + impact friction model"
+  repo: convexity
+  path: "src/convexity/cost/friction/spread_impact.py"
+  commit: "c13fccaf3dfa"
+  ref: main
+  found_at_head: true
+  size_bytes: 15896
+  decision: PORT
+  covers_needs: ["M9 cost model"]
+  notes: >
+    Complements SAL-0006: that donor has the statutory stack, this one the spread and impact
+    terms [C-COST-04]. Test suites at HEAD are substantial (tests/cost/test_invariants.py
+    26409b, test_spread_impact.py 11120b, test_friction_stress.py 10678b).
+
+- id: SAL-0014
+  component: "Corwin-Schultz spread estimator + rejection rules"
+  repo: convexity
+  path: "src/convexity/cost/friction/validate/corwin_schultz_reject.py"
+  commit: "8b8ceae8b0a2"
+  ref: main
+  found_at_head: true
+  size_bytes: 16439
+  decision: PORT
+  covers_needs: ["M9 cost model"]
+  notes: >
+    A high-low spread estimator with its rejection conditions already worked out — directly
+    useful for the session-dependent spread table when only OHLC is available (T1, before
+    the quote archive exists). The rejection rules matter more than the estimator.
+
+- id: SAL-0015
+  component: "Amihud illiquidity calibration"
+  repo: convexity
+  path: "src/convexity/cost/friction/validate/amihud_calibration.py"
+  commit: "a1ffbf145f97"
+  ref: main
+  found_at_head: true
+  size_bytes: 7203
+  decision: PORT
+  covers_needs: ["M7 universe policy"]
+  notes: "Amihud is a named term in M7's liquidity score; this is a calibrated implementation."
+
+- id: SAL-0016
+  component: "Corporate actions handling"
+  repo: convexity
+  path: "src/convexity/breakout/data/corporate_actions.py"
+  commit: "790d7235b202"
+  ref: main
+  found_at_head: false
+  size_bytes: 2268
+  decision: PORT
+  covers_needs: ["M6 corporate actions"]
+  notes: >
+    The ONLY corporate-actions code in ../past, and it is small and deleted from HEAD. It is
+    a shape reference at best: M6 needs bitemporal CA records with known_from/known_to and a
+    cross-check against price series (§3.4, M5). Treat this as a starting point, not a donor
+    that closes the need.
+
+- id: SAL-0017
+  component: "Broker/stream reconciliation map"
+  repo: convexity
+  path: "src/convexity/ops/reconcile/streams_map.py"
+  commit: "635b051c9e48"
+  ref: main
+  found_at_head: true
+  size_bytes: 8712
+  decision: PORT
+  covers_needs: ["M23 reconciliation"]
+  notes: >
+    Reconciling venue truth against internal state is [C-OMS-03]'s hardest requirement, and
+    this is a working implementation of it on a live account. Venue differs; the failure
+    taxonomy does not.
+
+- id: SAL-0018
+  component: "Risk brake engine"
+  repo: convexity
+  path: "src/convexity/ops/brake/engine.py"
+  commit: "635b051c9e48"
+  ref: main
+  found_at_head: true
+  size_bytes: 8368
+  decision: PORT
+  covers_needs: ["M23 risk governor"]
+  notes: >
+    Exposure-reducing-only degradation is exactly [C-RISK-01]'s DEGRADED state. pips' risk
+    layer is Rust and independent of the strategy, so this is a logic donor, not a code one.
+
+- id: SAL-0019
+  component: "Paise/unit-exact accounting"
+  repo: convexity
+  path: "src/convexity/cost/accounting.py"
+  commit: "c13fccaf3dfa"
+  ref: main
+  found_at_head: true
+  size_bytes: 8234
+  decision: PORT
+  covers_needs: ["M23 accounting"]
+  notes: >
+    Supports the `pnl_gross - costs == pnl_net` identity pips asserts continuously (§7).
+    pips' boundary is integer paise [C-NUM-01]; check what this donor uses before porting.
+
+- id: SAL-0020
+  component: "Fleet alerting"
+  repo: convexity
+  path: "scripts/fleet_alert.sh"
+  commit: "eedf44fdeded"
+  ref: main
+  found_at_head: true
+  size_bytes: 934
+  decision: WRAP
+  covers_needs: ["ops alerting"]
+  notes: >
+    Small and complete. Wrap behind an ops/alerts/ seam rather than porting; the deploy rail
+    (SAL-0010) and the risk layer both need somewhere to send a page.
+
+- id: SAL-0021
+  component: "Binance venue adapters"
+  repo: convexity
+  path: "src/convexity/adapters/binance_data/lake.py"
+  commit: "d60897f82e94"
+  ref: main
+  found_at_head: false
+  size_bytes: 195
+  decision: SKIP
+  covers_needs: ["M21 breeze reader"]
+  notes: >
+    Checked and rejected: 106-330 byte stubs, and the wrong venue regardless. The live
+    Binance path in this repo is inside execution.py, not in a reusable adapter. Recorded so
+    a later sweep does not re-investigate.
+
+# ═══════════════════════ vol_research — no code ═══════════════════════
+
+- id: SAL-0022
+  component: "vol_research repository (whole)"
+  decision: NONE_FOUND
+  covers_needs: ["M4 historical fetcher"]
+  searched:
+    repos: [vol_research]
+    refs: ["main", "origin/main", "origin/HEAD"]
+    tags: []
+    keywords: ["breeze", "kiteconnect", "zerodha", "websocket", "isin", "instrument", "ohlc"]
+    method: >
+      Full sweep: 26 commits across all refs; deleted-file sweep (6 deletions, all .json/.txt
+      data); path + content grep over every reachable commit.
+  notes: >
+    Contains no code at all — 4 code paths ever existed, none at HEAD. The kiteconnect and
+    zerodha hits are PROSE in IMPLEMENTATION.md/README.md: a vendor comparison table costing
+    Kite Connect at ~Rs500/mo and rejecting QuantConnect for NSE. That analysis is useful
+    context for ADR-0006 / [G-AUTH-0] (the fallback-feed decision) and is cited there, but
+    it is not a donor.
+
+# ═══════════════════════ NONE_FOUND — from-scratch pre-authorised ═══════════════════════
+# Each of these ran the full §1.2 sweep and found nothing. That is what pre-authorises
+# writing them from scratch; without these rows, doing so would violate rule 13.
+
+- id: SAL-0023
+  component: "Flattrade order client / order-state polling"
+  decision: NONE_FOUND
+  covers_needs: ["M23 broker-flattrade adapter"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["flattrade", "noren", "retail/api"]
+    method: "path sweep across all refs (AMR + deletions) + git grep -i over every reachable commit"
+  notes: >
+    Zero hits of any kind, in any repo, on any ref. The Flattrade adapter is written from
+    scratch at M23. No donor exists even for the auth quirks or the error taxonomy, so the
+    limit-only constraint and the 10/s + 40/min rate limits come from §3.7 and live probing,
+    not from prior code.
+
+- id: SAL-0024
+  component: "Zerodha / Kite Connect order client"
+  decision: NONE_FOUND
+  covers_needs: ["M23 broker-zerodha adapter"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["zerodha", "kiteconnect", "kite_", "kiteticker"]
+    method: "path sweep across all refs (AMR + deletions) + git grep -i over every reachable commit"
+  notes: >
+    The only hits are the vol_research prose noted in SAL-0022 — a pricing table, not code.
+    Written from scratch at M23.
+
+- id: SAL-0025
+  component: "Breeze websocket / tick capture"
+  decision: NONE_FOUND
+  covers_needs: ["M4 websocket capture"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["websocket", "ws_connect", "on_ticks", "subscribe_feeds"]
+    method: "path sweep across all refs + git grep -i over every reachable commit"
+  notes: >
+    The one path hit in intraday is `logs/websocketLogs.log` — a runtime LOG, not capture
+    code, from a commit that later untracked Breeze runtime logs (550c3f0). It is still worth
+    reading once at M4: it is a real record of Breeze WS traffic shapes from this account.
+    The capture service itself is written from scratch. This is M4's "forward WS capture from
+    day one" requirement and it has no donor.
+
+- id: SAL-0026
+  component: "NSE instrument master (token/symbol change history)"
+  decision: NONE_FOUND
+  covers_needs: ["M6 instrument master"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["instruments.csv", "scrip_master", "instrument_master", "nse_symbol", "isin"]
+    method: "path sweep across all refs + git grep -i over every reachable commit"
+  notes: >
+    The `isin` content hits are incidental field names in unrelated code; no master loader or
+    token/symbol history exists. intraday's conf/instruments.py is a 237-byte stub (see
+    SAL-0009). M6 writes this from scratch, bitemporal from the start [C-DATA-01].
+
+- id: SAL-0027
+  component: "NSE exchange calendar incl. CAS session windows"
+  decision: NONE_FOUND
+  covers_needs: ["M6 exchange calendar"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["trading_holiday", "nse_holiday", "exchange_calendar", "mcx_holiday"]
+    method: "path sweep across all refs + git grep -i over every reachable commit"
+  notes: >
+    Zero hits in any repo. convexity's crypto books run 24/7 and need no holiday calendar,
+    which is why none exists. M2/M6 write the calendar from scratch, including the CAS
+    windows [C-SESS-01] that ADR-0004 keeps disabled as an alpha venue.
+
+- id: SAL-0028
+  component: "Breeze reader process (Rust)"
+  decision: NONE_FOUND
+  covers_needs: ["M21 breeze reader"]
+  searched:
+    repos: [convexity, intraday, vol_research]
+    refs: ["main", "origin/main", "origin/HEAD", "origin/hardening", "origin/journal-backups-convexity"]
+    tags: []
+    keywords: ["breeze", "market-protocol", "unix socket", "rust"]
+    method: "path sweep across all refs + git grep -i over every reachable commit"
+  notes: >
+    No Rust exists in ../past at all — every repo is Python. The M21 reader crate is written
+    from scratch, but NOT blind: SAL-0001..0004 supply the Breeze auth quirks, endpoint
+    shapes, error taxonomy and edge cases, and §1.2 says a cross-language donor still counts.
+    Cite them in rust/crates/market-breeze/PROVENANCE.md.

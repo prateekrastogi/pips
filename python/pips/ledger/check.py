@@ -7,7 +7,9 @@ Verifies, over ``IMPLEMENTATION.md`` + ``docs/ledger/``:
    is cited by the prose (no orphans in either direction);
 3. every row's ``spec:`` anchor resolves to a real heading;
 4. status >= ``building`` implies its ``code:`` path exists;
-5. status == ``enforced`` implies its ``tests:`` exist and are collectable.
+5. status == ``enforced`` implies its ``tests:`` exist and are collectable;
+6. every M4/M6/M21-M23 infrastructure need is answered by ``salvage.yaml`` -- a named
+   donor or a ``NONE_FOUND`` that records what was searched (§1.2, rule 13).
 
 Exit code 0 = green. Any failure prints the exact rows and exits 1 -- and the fix is
 never to soften the check (constitution rule 10).
@@ -22,6 +24,7 @@ from collections import Counter
 from pathlib import Path
 
 from pips.ledger.model import Ledger, Status, load_ledger
+from pips.ledger.salvage import check_salvage
 
 __all__ = ["check_ledger", "cited_ids", "heading_slugs", "main"]
 
@@ -118,6 +121,10 @@ def check_ledger(root: Path) -> list[str]:
                     pytest_nodes.append(ref)
 
     failures += [f"pytest does not collect: {n}" for n in _collectable_pytest(root, pytest_nodes)]
+
+    # The harvest map is part of the normative layer: rule 13 makes consulting it a
+    # precondition for every connector, so an unanswered need is a gate failure, not a note.
+    failures += check_salvage(root)
     return failures
 
 
