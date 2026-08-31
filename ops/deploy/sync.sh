@@ -70,6 +70,23 @@ fi
 log "new SHA on origin/$BRANCH: ${CURRENT:0:12} -> ${TARGET:0:12}"
 git merge --ff-only "origin/$BRANCH" --quiet || die "fast-forward failed"
 
+# RE-EXEC, because we have just rewritten the file we are running from.
+#
+# Bash reads a script lazily, by byte offset. The fast-forward above can change sync.sh
+# underneath this very shell, which then continues reading at its saved offset in a file whose
+# contents have shifted. Observed live on 2026-08-31: a run began on the old script, pulled in
+# a fix to that same script, and carried on executing the OLD logic — promoting a service the
+# new version had already removed. The benign outcome was a failed deploy; the general case is
+# arbitrary corruption, because the offset lands wherever it lands.
+#
+# The guard flag makes this exactly one re-exec: the second invocation sees the checkout
+# already at TARGET and takes the "nothing to do" path if it re-enters here at all.
+if [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
+  log "checkout updated; re-executing the new sync.sh before building"
+  flock -u 9 2>/dev/null || true
+  PIPS_DEPLOY_REEXEC=1 exec "$REPO/ops/deploy/sync.sh" "$@"
+fi
+
 # --- build under the SHA tag. The running stack is untouched until this is green. -----
 export PIPS_SHA="$TARGET"
 if ! docker compose -f "$COMPOSE_FILE" build 2>&1 | tail -20; then
@@ -83,7 +100,10 @@ DEFERRED=""
 
 # Every service compose defines, minus the ones that are not long-running.
 services_to_promote() {
-  docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
+  # COMPOSE_PROFILES=vm: the long-running services are all under that profile, so a plain
+  # `config --services` reports only the build container and the rail would find nothing to
+  # promote while appearing to succeed.
+  COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
     | grep -vxF "$NOT_PROMOTED" | sort
 }
 
@@ -100,7 +120,8 @@ promote() {
   fi
 
   log "promoting $service"
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps "$service" || die "up -d failed for $service"
+  COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" up -d --no-deps "$service" \
+    || die "up -d failed for $service"
 }
 
 PROMOTABLE="$(services_to_promote)"
@@ -110,7 +131,7 @@ log "services to promote: $(echo $PROMOTABLE | tr '\n' ' ')"
 # VALIDATE THE WHOLE SET BEFORE TOUCHING ANYTHING. Discovering a problem mid-promotion is
 # what produces a half-deployed fleet; discovering it here costs one poll interval.
 for s in $PROMOTABLE; do
-  docker compose -f "$COMPOSE_FILE" config --services | grep -qxF "$s" \
+  COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services | grep -qxF "$s" \
     || die "service '$s' vanished between listing and promotion — refusing to promote a partial set"
 done
 

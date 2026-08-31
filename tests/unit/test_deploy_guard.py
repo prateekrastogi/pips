@@ -160,3 +160,36 @@ def test_the_guards_service_classes_cover_every_compose_service() -> None:
         "they would be treated as trading-path by the fail-closed default, which is safe "
         "but should be explicit"
     )
+
+
+def test_the_rail_reexecs_itself_after_updating_the_checkout() -> None:
+    """A deploy script that updates the checkout it lives in must re-exec.
+
+    Bash reads a script lazily, by byte offset. `git merge --ff-only` rewrites `sync.sh`
+    underneath the running shell, which then continues reading at its saved offset in a file
+    whose contents have shifted. Observed live: a run began on the old script, pulled in a fix
+    to that same script, and carried on executing the OLD logic — promoting a service the new
+    version had already removed. The benign outcome was a failed deploy; the general case is
+    arbitrary corruption, because the offset lands wherever it lands.
+    """
+    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
+    assert "exec " in sync and "PIPS_DEPLOY_REEXEC" in sync, (
+        "sync.sh must re-exec itself after the fast-forward, with a guard flag so it cannot loop"
+    )
+    # The re-exec must happen AFTER the merge and BEFORE anything is built or promoted.
+    merge_at = sync.index("git merge --ff-only")
+    reexec_at = sync.index("PIPS_DEPLOY_REEXEC")
+    build_at = sync.index('docker compose -f "$COMPOSE_FILE" build')
+    assert merge_at < reexec_at < build_at, (
+        "the re-exec must sit between the fast-forward and the first build"
+    )
+
+
+def test_the_rail_asks_compose_with_the_vm_profile() -> None:
+    # The trading-path and research services are all under `profiles: ["vm"]`, so a plain
+    # `config --services` reports only `research` — and the rail would find nothing to
+    # promote while looking like it had succeeded.
+    sync = (ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8")
+    assert "COMPOSE_PROFILES" in sync, (
+        "sync.sh must select the vm profile, or compose reports only the build container"
+    )
