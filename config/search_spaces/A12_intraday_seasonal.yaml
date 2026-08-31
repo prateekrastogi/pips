@@ -62,6 +62,15 @@ falsifiers:
 falsifiers_deferred:
   - "Require stability across calendar eras — needs multi-year history; evaluable once M4's backfill has delivered 3y of 1m bars"
 
+# Which check EVALUATES which falsifier (§6 M16). Added only where the named check genuinely
+# tests the stated condition — the incomplete ones are left unbound on purpose, because
+# inventing a binding to make the coverage report look finished is the prose-as-enforcement
+# failure this field exists to end. `pips.validation.falsifier_binding.coverage_report` counts
+# and NAMES what is still unbound.
+falsifier_checks:
+  - falsifier: "Reject isolated day-of-week or slot spikes after family-wise correction"
+    check: "bh-fdr"
+
 data_tier: T1
 
 cost_context:

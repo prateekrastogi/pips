@@ -23,7 +23,7 @@ from pydantic import Field, field_validator, model_validator
 from pips.core.config import PipsConfig, load_yaml
 from pips.core.ids import ShortId, content_hash, short_id
 
-__all__ = ["AlphaSpec", "DataTier", "load_alpha_spec"]
+__all__ = ["AlphaSpec", "DataTier", "FalsifierBinding", "load_alpha_spec"]
 
 # WHAT THIS CHECK IS, AND WHAT IT GAVE UP ON. A falsifier must state an ACTION (reject /
 # require / must / fail) and be a clause rather than a fragment. That is all it verifies.
@@ -38,11 +38,28 @@ __all__ = ["AlphaSpec", "DataTier", "load_alpha_spec"]
 # actually mechanical.
 #
 # The real enforcement is elsewhere and is named here so nobody mistakes this for it: human
-# review at pre-registration, and M16's stress battery actually APPLYING each falsifier. When
-# that battery exists, the honest strengthening is to require each falsifier to name the check
-# that evaluates it — a structural binding, not a parse of English.
+# review at pre-registration, and M16's stress battery actually APPLYING each falsifier.
+#
+# THAT BINDING NOW EXISTS. `falsifier_checks` below names, per falsifier, the check that
+# evaluates it — and the check must RESOLVE (see `pips.validation.falsifier_binding`), not
+# merely appear in a list. It is deliberately incomplete: 12 of 32 falsifiers across the
+# catalogue are bound today, and `coverage_report` counts and NAMES the rest. Inventing
+# bindings so that number looked finished would be this same prose-as-enforcement failure,
+# relocated.
 _ACTION_WORDS = ("reject", "require", "must", "fail")
 _MIN_FALSIFIER_WORDS = 4
+
+
+class FalsifierBinding(PipsConfig):
+    """One pre-registered falsifier and the check that evaluates it.
+
+    The structural binding this module's comment above has been asking for since M12. The
+    falsifier TEXT is repeated rather than referenced by index: a spec's falsifier list is
+    pre-registration, and an index would silently re-point if the list were ever reordered.
+    """
+
+    falsifier: str
+    check: str
 
 
 class DataTier(StrEnum):
@@ -77,6 +94,11 @@ class AlphaSpec(PipsConfig):
     # than one whose conditions can all be applied, and a reader should not have to work
     # that out. Each entry must name a falsifier that was actually declared.
     falsifiers_deferred: list[str] = Field(default_factory=list)
+    # Which check evaluates which falsifier. OPTIONAL, and expected to be incomplete: the
+    # checks most falsifiers need do not exist yet, and inventing bindings to look complete
+    # would be the prose-as-enforcement failure this field exists to end. What is NOT optional
+    # is that a binding present here be real — see the validator below.
+    falsifier_checks: list[FalsifierBinding] = Field(default_factory=list)
 
     @field_validator("data_tier", mode="before")
     @classmethod
@@ -108,6 +130,24 @@ class AlphaSpec(PipsConfig):
                     f"{self.id}: falsifier {falsifier!r} is a fragment, not a condition. "
                     "Name the perturbation and the outcome."
                 )
+        for binding in self.falsifier_checks:
+            if binding.falsifier not in self.falsifiers:
+                raise ValueError(
+                    f"{self.id}: falsifier_checks names {binding.falsifier!r}, which is not "
+                    "one of the declared falsifiers — a check cannot evaluate a rejection "
+                    "condition nobody pre-registered"
+                )
+            # Imported here rather than at module scope: validation depends on the check
+            # registry, and the registry's modules import alpha machinery.
+            from pips.validation.falsifier_binding import resolve_check
+
+            try:
+                resolve_check(binding.check)
+            except LookupError as exc:
+                # Re-raised as ValueError so pydantic reports it as a validation failure
+                # rather than letting a LookupError escape the model boundary raw.
+                raise ValueError(f"{self.id}: {exc}") from exc
+
         for deferred in self.falsifiers_deferred:
             if not any(deferred.split(" — needs ")[0].strip() in f for f in self.falsifiers):
                 raise ValueError(

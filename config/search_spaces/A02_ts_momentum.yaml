@@ -57,6 +57,17 @@ falsifiers:
   - "Reject if results are dominated by open gaps"
   - "Reject if the sign flips under a one-bar skip"
 
+# Which check EVALUATES which falsifier (§6 M16). Added only where the named check genuinely
+# tests the stated condition — the incomplete ones are left unbound on purpose, because
+# inventing a binding to make the coverage report look finished is the prose-as-enforcement
+# failure this field exists to end. `pips.validation.falsifier_binding.coverage_report` counts
+# and NAMES what is still unbound.
+falsifier_checks:
+  - falsifier: "Reject if HAC-adjusted evidence is weak"
+    check: "newey-west-hac"
+  - falsifier: "Reject if the sign flips under a one-bar skip"
+    check: "delay-1bar"
+
 data_tier: T1
 
 cost_context:

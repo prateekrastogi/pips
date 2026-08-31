@@ -56,6 +56,15 @@ falsifiers:
   - "Reject if the effect is confined to circuit moves"
   - "Reject if nearby threshold surfaces lack a plateau"
 
+# Which check EVALUATES which falsifier (§6 M16). Added only where the named check genuinely
+# tests the stated condition — the incomplete ones are left unbound on purpose, because
+# inventing a binding to make the coverage report look finished is the prose-as-enforcement
+# failure this field exists to end. `pips.validation.falsifier_binding.coverage_report` counts
+# and NAMES what is still unbound.
+falsifier_checks:
+  - falsifier: "Reject if nearby threshold surfaces lack a plateau"
+    check: "plateau-centroid"
+
 data_tier: T1
 
 cost_context:

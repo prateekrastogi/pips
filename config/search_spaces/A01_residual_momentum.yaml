@@ -66,6 +66,19 @@ falsifiers:
   - "Require monotone rank-IC across the horizon grid"
   - "Require stable cross-sectional breadth; reject if the edge concentrates in few names"
 
+# Which check EVALUATES which falsifier (§6 M16). Added only where the named check genuinely
+# tests the stated condition — the incomplete ones are left unbound on purpose, because
+# inventing a binding to make the coverage report look finished is the prose-as-enforcement
+# failure this field exists to end. `pips.validation.falsifier_binding.coverage_report` counts
+# and NAMES what is still unbound.
+falsifier_checks:
+  - falsifier: "Reject if performance disappears under a one-bar execution delay"
+    check: "delay-1bar"
+  - falsifier: "Reject if performance disappears after removal of the best month"
+    check: "drop-best-block"
+  - falsifier: "Require monotone rank-IC across the horizon grid"
+    check: "monotone-in-horizon"
+
 data_tier: T1
 
 cost_context:
