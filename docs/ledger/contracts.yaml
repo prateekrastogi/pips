@@ -51,16 +51,27 @@
   title: "Data zones bronze/silver/gold/quarantine with bitemporal PIT columns"
   spec: "IMPLEMENTATION.md#34-data-plane"
   code: "python/pips/data/pit"
-  tests: []
-  status: planned
+  tests:
+    - "tests/unit/test_pit.py"
+  # BUILDING, not enforced, and the distinction is deliberate. The bitemporal half is done and
+  # tested: valid_from/known_from, corrections as new versions, as-of reads that never move.
+  # The ZONE half is not — bronze exists (breeze/backfill.py) and quarantine exists (qc), but
+  # nothing promotes bronze to silver or silver to gold. Marking this enforced would claim a
+  # promotion path that does not exist; the row goes to enforced when it does.
+  status: building
   owner_milestone: M6
 
 - id: C-DATA-02
   title: "Snapshot manifests are Merkle-rooted; experiments pin snapshot_root"
   spec: "IMPLEMENTATION.md#34-data-plane"
   code: "python/pips/data/pit"
-  tests: []
-  status: planned
+  tests:
+    - "tests/unit/test_pit.py"
+  # Same split. Merkle-rooted manifests exist, are second-preimage-safe on odd levels, and are
+  # pinned by golden vectors. "Experiments pin snapshot_root" does not: the search registry
+  # records no root today, so a result cannot yet be tied to the data it was computed on.
+  # That wiring is the next M6 unit and it is what promotes this row.
+  status: building
   owner_milestone: M6
 
 - id: C-BAR-01

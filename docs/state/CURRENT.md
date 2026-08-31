@@ -1,131 +1,79 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
+**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0
+
+> This file is a snapshot, not a log. It had accreted every finished milestone since M0 and
+> still named a branch we left and two owner-actions the owner had already cleared. The
+> history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M5 QC + quarantine — DONE.** Six checks (OHLC sanity, raw row order, coverage, spikes,
-decimal shifts, unexplained ratio jumps), six seeded corruptions each caught by its intended
-check, and `make qc` exiting non-zero on any quarantine. Run against the real campaign data on
-arb-vm: 6 records checked, 0 findings — a meaningful pass now that the coverage expectation
-comes from the calendar rather than the fixture.
+**M6 PIT masters — bitemporal store landed; masters and pinning still to come.**
 
-**M4 Breeze ingest — DONE, with real data on the VM.** First live campaign ran on arb-vm:
-6/6 symbol-days fetched (RELIND, ICIBAN over 2026-08-26..28), 492 KB of bronze at
-`/srv/pips/bronze`, 370 rows per session, and a resume that costs zero calls. Three
-infrastructure defects surfaced by *running* it, all fixed — see the log.
+`pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
+of the world) and `known_from` (when we knew it). The log is append-only in the literal sense —
+`correct()` and `close()` append new versions, `known_to` is never stored but implied by the
+next version, so no row is ever edited. §6 M6's headline Verify holds as written: an as-of read
+is **byte-identical** before and after later snapshots, corrections and delistings land. The
+survivorship audit names what disappeared between two dates. `MerkleTree` roots the snapshot
+manifests and is pinned by golden vectors, not just by structural properties.
 
-**M4 Breeze ingest — code complete.** Fetch path, budgeter, backfill orchestrator and forward
-WS capture all landed and tested without a network. Remaining before M4 closes: a first real
-backfill run on arb-vm, which is a data-collection campaign rather than code.
+Both M6 ledger rows are `building` rather than `enforced`, and the gap is the point:
 
-**M4 Breeze ingest — backfill DONE.** Fetch path, resumable budgeter and the backfill
-orchestrator are all ported and tested (cassettes and fakes; CI makes no live calls), with the
-runbook at `ops/runbooks/backfill.md`. Remaining for M4: forward WS capture, which has no donor
-(SAL-0025 NONE_FOUND).
+- `[C-DATA-01]` — bitemporal columns done. The **zone** half is not: bronze exists, quarantine
+  exists, nothing promotes bronze→silver→gold.
+- `[C-DATA-02]` — Merkle manifests done. **"Experiments pin `snapshot_root`"** is not: the
+  search registry records no root, so a result still cannot be tied to the data it was
+  computed on.
 
-**M4 Breeze ingest — fetch path DONE.** Response classification and bar normalization ported
-from SAL-0002/0003, tested against **recorded cassettes** (CI makes no live calls), plus a
-resumable call budgeter reading `config/breeze.yaml`. Remaining for M4: the backfill
-orchestrator (SAL-0004) and forward WS capture (SAL-0025 is NONE_FOUND, so from-scratch).
+Still unwritten for M6: the instrument master with token/symbol change history, corporate
+actions, ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV is the v0), and
+index membership. Two things already wait on it — the calendar's holiday list is still
+`holidays_verified: false`, and QC quarantines every unexplained ratio jump because no
+corporate-action master exists to explain one.
 
-**M3 feasibility probe — DONE.** Breeze's bar convention measured, not assumed: it is
-**OPEN-labelled**, so ingest adds one interval `[C-BAR-01]`. ADR-0001 updated with the
-evidence. Also found: untraded minutes are OMITTED not zero-filled, the vendor returns
-pre-open and post-close bars if the window allows, and 1-minute history goes back at least
-10 years. See `docs/reports/feasibility/breeze-bar-convention.md`.
+## Done
+M0, M0.5, M1, M2, M3, M3.5, M4, M5, M9, M10, M11, M12. M13 mostly (compute plugins for
+A02–A08/A12 and the first real sweep report outstanding).
 
-**M3.5 arb-vm deploy rail — DONE.** `[C-DEPLOY-01]` and `[G-DEPLOY-01]` both `enforced`, and
-all three Verify clauses demonstrated live (see `docs/reports/deploy-rail-demo.md`).
-**All three human items are cleared**: deploy key added, Breeze credentials working, main
-merged and deploying. main is now the live branch and the rail ships every green SHA.
-
-**M13 S1 runner — mostly DONE.** BH-FDR within family×universe, Newey-West HAC t, half-life,
-monotonicity, coverage, and **null-search calibration** — which caught a real 7x over-rejection
-in the statistics chain. Remaining: compute plugins for A02-A08/A12, and the first real sweep
-report (needs data).
-
-**M12 alpha wave 1 — DONE.** All nine T1 families (A01-A08, A12) are pre-registered with
-falsifiers transcribed from their reference cards, A05/A06 are structurally independent
-(no ex-post sign selection), and `make s1-smoke` runs the funnel. Contracts enforced: The contracts are `enforced`: `[C-SPEC-01]` refuses a spec
-without null models or a written falsifier (rule 5, at entry), `[C-FCST-01]` carries the
-two-term trade gate. A01 also carries a compute plugin that passes the
-neutralization test; A02-A08 and A12 are pre-registrations awaiting their plugins.
-
-**M10 vectorized engine (F0) — DONE.** Three-day toy case reconciles to the paisa
-(gross 3,000,000 · cost 10,644 · net 2,989,356), the accounting identity holds by
-construction, and a peeking signal dies *inside* the engine. `[C-FILL-01]` is now `building`:
-F0 and the tier-stamping half landed; F1-F3 are M14/M24.
-
-**M11 registry + multiplicity ledger — DONE** (`[C-REG-01]` `enforced`). Append-only is
-enforced by SQLite triggers, M counts every status, M_erank collapses to 1 on clones and
-rises to N on independent trials, and the Appendix B experiment manifest parses.
-
-**M9 cost model — DONE.** All four `[C-COST-*]` rows are `enforced`: the statutory stack
-reproduces all five §3.7 goldens exactly, and the execution-friction terms enforce the
-*structure* reference §10.2-§10.3 specifies (additive, monotone in aggression, square-root
-impact) with every constant declaring itself an uncalibrated placeholder.
-
-**M3.5 arb-vm deploy rail — built and VM-bootstrapped; end-to-end verify blocked on two human
-items.** arb-vm now has Docker 29.7.2 + Compose v5.5.0 running, `/srv/pips` with all data
-zones and a 0700 secrets dir, and a read-only deploy keypair. The rail (`sync.sh`,
-`rollback.sh`, `healthcheck.sh`, `alert.sh`, systemd unit + timer) is written and its
-market-hours guard is tested. M0, M0.5, M1, M2 done; M3 done except the Breeze probe.
+The deploy rail is live: `main` is the shipping branch, arb-vm builds and runs every green SHA
+within one 2-minute poll, trading-path services never restart in the protected window, and
+`ops/git-hooks/pre-push` blocks a red push. Real data is on the VM — 6 symbol-days of bronze
+at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 
 ## Last verify output
 ```
-M9 Verify (§6) — pytest tests/unit/costs -q -> 15 passed
-  Flattrade  Rs1L: buy 6.74 / sell 28.74 / RT 35.48 = 3.548 bps      <- §3.7 golden, exact
-  High-cost  Rs1L: buy 30.34 / sell 52.34 / RT 82.68 = 8.268 bps     <- §3.7 golden, exact
-  High-cost RT bps at 50k / 2L / 5L: 10.63 / 5.91 / 4.49             <- §3.7 goldens, exact
-
-arb-vm    Docker 29.7.2 · Compose v5.5.0 · daemon active · docker usable as ubuntu
-          /srv/pips/{bronze,silver,gold,quarantine,snapshots,universes,deploy} owned by ubuntu
-          /srv/pips/secrets 0700 · deploy.env 0600 · deploy keypair generated (private stays there)
-
-pips deploy guard breeze-reader  --now 2026-06-01T12:00 -> DEFER (exit 1)  protected window
-pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
-pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
-
 make ci -> ci: green
-  ruff 96 files · mypy --strict 96 files · 440 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (12/3/11)
+  ruff 116 files · mypy --strict 116 files · 590 pytest · clippy clean · cargo test ok
+  determinism bit-identical · ledger-check 26 rows (planned=10 building=3 enforced=13)
 
-null-search calibration (the S1 chain checking itself on destroyed data)
-  q=0.05 -> survivor 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17   all calibrated
+M6 mutation run — 5 deliberate breaks, 4 killed by tests:
+  Merkle duplicates odd node       -> killed (test_every_index_proves_against_the_root[9])
+  as_of ignores valid time         -> killed (test_a_fact_not_yet_valid_is_withheld…)
+  backdating guard removed         -> killed (test_backdating_a_knowledge_date_is_refused)
+  CLOSE tombstone ignored          -> killed (test_the_survivorship_audit_names_what…)
+  leaf/node domain separation off  -> SURVIVED  ->  golden vectors added, see the log
 
-make s1-smoke -> the S1 funnel ran end to end on fixtures
-  9 specs registered · 4 with compute plugins (A01-A04) · 5 awaiting one (stated, not hidden)
-  1875 bars · 3708 forecasts · rank_ic 0.0063 · p 0.7114 (correctly does NOT promote)
-  harness_self_test OK (shuffled mean |IC| 0.0138 < bound 0.0821)
-  — an IC of 0.006 on a seeded random walk is the RIGHT answer: there is nothing there.
+M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
+null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
+make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (correctly no promotion)
 ```
 
 ## Next 3 actions
-1. **Unblock M3.5's end-to-end verify** — needs the two items below. Once main carries the
-   rail and the VM can clone, the Verify is: push a trivial commit to main → the VM runs the
-   new SHA within one poll; a deliberately failing health check rolls back; a main update
-   during simulated market hours defers trading-path restarts.
-2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
-   arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **Compute plugins for A05-A08 and A12** — the session-structure family (gap
-   continuation/reversal, opening-range breakout, compression-to-expansion) plus the
-   intraday seasonal. These exercise the calendar and session states built at M2. Still no
-   credentials required.
+1. **Pin `snapshot_root` in the search registry** — the second half of `[C-DATA-02]`, and the
+   smallest remaining step that promotes a row. A trial record gains the root of the data
+   snapshot it read, so a result can be re-derived years later against the same bytes.
+2. **Instrument master on the PIT store** — token/symbol change history is the master that
+   makes the rest of M6 possible, and the one that makes a symbol-keyed join honest.
+3. **Compute plugins for A05–A08 and A12** — the session-structure family plus the intraday
+   seasonal. Exercises the M2 calendar and needs no credentials or data.
 
 ## Blockers / awaiting
-- **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private
-  repo. A read-only keypair is already generated on the VM; the private half never leaves it.
-  Add this as a **deploy key with write access OFF** at
-  github.com/prateekrastogi/pips → Settings → Deploy keys:
-  `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIUoCb9mUgkJTiF/7AA2s/gNI6k5U2xu2YO+kR2qvyvB pips-deploy@arb-vm (read-only)`
-- **MERGED AND DEPLOYING.** `main` carries everything and the rail ships each green SHA to
-  arb-vm within one 2-minute poll. Pushing is gated by `ops/git-hooks/pre-push`, which runs
-  `pips-ci` and blocks on red, so nothing reaches main untested.
-- **ACTION FOR THE OWNER (3) — Breeze token** in `.env` (tracked, ADR-0011) for the M3 probe
-  and M4. `ops/runbooks/breeze-token.md` is the daily procedure. I put no credential there.
+- None blocking. All three owner-actions (deploy key, Breeze token, merge to main) are cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
   `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank
   fields in `gate0-owner-attestation.md`.
 - **Deliberate placeholders, all erring safe and all marked unverified:** Flattrade's MIS
-  square-off (15:00), the Breeze per-minute rate (75/min, **not** inferred from 100k/day), and
-  the NSE holiday list (empty). Each is an M3/M6 item.
+  square-off (15:00), the Breeze per-minute rate (75/min — **not** inferred from the owner's
+  100k/day and 32 parallel fetches), and the NSE holiday list (empty). Each is an M6 item.
+- **Never measured, deliberately:** Breeze's true per-minute limit, WS subscription capacity,
+  BSE support. Each would cost live calls to learn and none blocks current work.

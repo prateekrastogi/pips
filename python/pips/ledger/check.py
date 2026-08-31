@@ -7,7 +7,8 @@ Verifies, over ``IMPLEMENTATION.md`` + ``docs/ledger/``:
    is cited by the prose (no orphans in either direction);
 3. every row's ``spec:`` anchor resolves to a real heading;
 4. status >= ``building`` implies its ``code:`` path exists;
-5. status == ``enforced`` implies its ``tests:`` exist and are collectable;
+5. status == ``enforced`` implies it lists tests, and every listed test -- at any
+   status -- exists and is collectable;
 6. every M4/M6/M21-M23 infrastructure need is answered by ``salvage.yaml`` -- a named
    donor or a ``NONE_FOUND`` that records what was searched (§1.2, rule 13).
 
@@ -124,15 +125,19 @@ def check_ledger(root: Path) -> list[str]:
             elif not (root / row.code).exists():
                 failures.append(f"{row.id}: code path does not exist: {row.code}")
 
-        if row.status is Status.ENFORCED:
-            if not row.tests:
-                failures.append(f"{row.id}: status enforced requires at least one test")
-            for ref in row.tests:
-                if ref.startswith("rust/"):
-                    if not _rust_test_present(root, ref):
-                        failures.append(f"{row.id}: rust test not found: {ref}")
-                else:
-                    pytest_nodes.append(ref)
+        if row.status is Status.ENFORCED and not row.tests:
+            failures.append(f"{row.id}: status enforced requires at least one test")
+
+        # Every LISTED test is checked, whatever the row's status. A `building` row that names
+        # its tests is making a claim, and a claim that goes unverified until someone promotes
+        # the row is a claim that rots quietly in between — which is exactly when a rename or
+        # a deletion would slip through unnoticed.
+        for ref in row.tests:
+            if ref.startswith("rust/"):
+                if not _rust_test_present(root, ref):
+                    failures.append(f"{row.id}: rust test not found: {ref}")
+            else:
+                pytest_nodes.append(ref)
 
     failures += [f"pytest does not collect: {n}" for n in uncollectable_nodes(root, pytest_nodes)]
 
