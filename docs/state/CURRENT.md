@@ -3,6 +3,12 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M5 QC + quarantine — DONE.** Six checks (OHLC sanity, raw row order, coverage, spikes,
+decimal shifts, unexplained ratio jumps), six seeded corruptions each caught by its intended
+check, and `make qc` exiting non-zero on any quarantine. Run against the real campaign data on
+arb-vm: 6 records checked, 0 findings — a meaningful pass now that the coverage expectation
+comes from the calendar rather than the fixture.
+
 **M4 Breeze ingest — DONE, with real data on the VM.** First live campaign ran on arb-vm:
 6/6 symbol-days fetched (RELIND, ICIBAN over 2026-08-26..28), 492 KB of bronze at
 `/srv/pips/bronze`, 370 rows per session, and a resume that costs zero calls. Three
