@@ -90,3 +90,5 @@ live data, and the fixtures make the whole funnel runnable with zero API access 
 A daily token will fail again tomorrow, and the useful artifact is not "it worked once" but the
 procedure and the two failure modes. §6 M3 asks for probe artifacts committed under
 `docs/reports/feasibility/`; this is one, and a negative result is a result.
+
+<!-- deploy-rail rollback verification, 05a9ffa -->
