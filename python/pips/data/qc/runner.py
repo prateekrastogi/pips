@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -29,7 +28,7 @@ from typing import Any, Final
 
 from pips.core.calendar import ExchangeCalendar
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
-from pips.data.pit.corporate_actions import JumpVerdict
+from pips.data.pit.explain import JumpExplainer, jump_explainer
 from pips.data.qc.checks import (
     Finding,
     Severity,
@@ -100,6 +99,14 @@ def _rows(
     ]
 
 
+def _set_bar(row: dict[str, Any], price: float) -> None:
+    """Move a whole bar to ``price``, keeping open/high/low/close mutually consistent."""
+    row["open"] = price
+    row["high"] = price + 0.50
+    row["low"] = price - 0.50
+    row["close"] = price
+
+
 def _write_record(bronze_root: Path, day: date, rows: list[dict[str, Any]]) -> Path:
     directory = bronze_root / _SEED_SYMBOL / day.isoformat()
     directory.mkdir(parents=True, exist_ok=True)
@@ -137,10 +144,14 @@ def seed_two_sessions(
     compare — the single-record seeder cannot reach it at all, which is part of why it went
     unrun for a milestone.
     """
+    # The WHOLE bar is moved, not just the one field. Setting `close` alone left it below its
+    # own row's low — the last row of a 375-minute ramp sits well above the base — so a
+    # "clean" two-session fixture arrived with a bar_sanity violation baked in. A dirty
+    # fixture in a seeder named for clean data hides whatever it is used to test.
     first = _rows(day=first_day, base_rupees=first_close_paise / 100.0)
-    first[-1]["close"] = first_close_paise / 100.0
+    _set_bar(first[-1], first_close_paise / 100.0)
     second = _rows(day=second_day, base_rupees=second_open_paise / 100.0)
-    second[0]["open"] = second_open_paise / 100.0
+    _set_bar(second[0], second_open_paise / 100.0)
     _write_record(bronze_root, first_day, first)
     _write_record(bronze_root, second_day, second)
 
@@ -168,10 +179,6 @@ def seed_corrupt_bronze(bronze_root: Path, corruption: str | None) -> Path:
         )
 
     return _write_record(bronze_root, _SEED_DAY, rows)
-
-
-JumpExplainer = Callable[[str, date, int, int], JumpVerdict | None]
-"""``(symbol, day, previous_close_paise, open_paise) -> verdict``."""
 
 
 def _previous_trading_day(calendar: ExchangeCalendar, day: date, limit: int = 10) -> date | None:
@@ -339,8 +346,20 @@ def main(argv: list[str] | None = None) -> int:
     if not calendar_path.exists():
         print(f"qc: WARNING no calendar at {calendar_path} — the overnight-ratio check needs")
         print("    one to tell adjacent sessions from a gap, and will be SKIPPED without it.")
+    # The verdict seam, connected to the M6 masters when a PIT store exists. Without one
+    # there is no explainer and the ratio check fails closed — which is correct, and is said
+    # out loud rather than looking like a clean pass.
+    explain = jump_explainer(root / "pit")
+    if explain is None:
+        print(f"qc: no PIT store at {root / 'pit'} — no corporate action can explain a jump,")
+        print("    so every ratio jump will be quarantined. That is fail-closed, not a pass.")
+
     report = run_qc(
-        bronze, quarantine, fetched, calendar_path=calendar_path if calendar_path.exists() else None
+        bronze,
+        quarantine,
+        fetched,
+        calendar_path=calendar_path if calendar_path.exists() else None,
+        explain_jump=explain,
     )
     print(report.describe())
     by_check: dict[str, int] = {}

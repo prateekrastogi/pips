@@ -60,7 +60,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 121 files · mypy --strict 121 files · 640 pytest · clippy clean · cargo test ok
+  ruff 123 files · mypy --strict 123 files · 647 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -90,6 +90,10 @@ corporate-action mutation run — 6 of 6 killed, including both donor bugs repro
   unadjustable kind silently returns 1 (the donor's other bug) · explains_jump ignores as_of
   ratio sanity check removed
 QC runner wiring — 3 of 3 killed: adjacency guard, finding discarded, previous close never kept
+QC on real arb-vm data — control 0 findings; injected halving -> ratio_jump quarantined
+verdict-seam mutation run — 3 of 4 killed, 1 SURVIVED:
+  resolve_symbol(on=day) -> on=date.max killed nothing — the reused-symbol splice
+  reintroduced at the JOIN. Now covered; mutation caught.
 
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
@@ -97,20 +101,27 @@ make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (corre
 ```
 
 ## Next 3 actions
-1. **Ingest real masters on arb-vm and connect the QC verdict seam.** Both master classes
-   exist and are tested; nothing has loaded actual NSE instruments or actions into them. Until
-   that happens `explain_jump` stays `None` and the ratio check fails closed — correct, but it
-   can never say "explained". This is also what turns `snapshot_root` from a built gate into a
-   used one.
+1. **AWAITING OWNER: the security-master download.** The seam is connected (symbol → as-of
+   instrument master → ISIN → action master → verdict) and tested end to end, but no real
+   instruments are loaded, so it still resolves nothing and fails closed. Probing settled how
+   to load them: `get_names` returns no ISIN, and the SDK's own master loader discards every
+   column except code/token/name — so the 2.9 MB `SecurityMaster.zip` must be fetched and its
+   raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
 3. **Compute plugins for A05–A08 and A12** — the session-structure family plus the intraday
    seasonal. Exercises the M2 calendar and needs no credentials or data.
 
 ## Blockers / awaiting
-- None blocking. The orphaned `checkout` compose project was cleared with the owner's
-  go-ahead — one fleet on arb-vm now, one breeze-reader. All three original owner-actions
-  (deploy key, Breeze token, merge to main) remain cleared.
+- **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
+  `https://directlink.icicidirect.com/MotherAppMaster/SecurityMaster.zip` · 2.9 MB ·
+  `application/zip` · refreshed daily. It is the only source of ISIN/series/lot/tick for the
+  M6 instrument master (`get_names` has none of them, and the SDK's own loader throws them
+  away). Same vendor and same read-only data plane as Breeze, but a different endpoint from
+  the one the GATE-0 attestation names, so I am asking rather than assuming. Fetched by the
+  official SDK's own method; would land on the VM only, per rule 14.
+- Otherwise none blocking. The orphaned `checkout` compose project was cleared with the
+  owner's go-ahead. All three original owner-actions remain cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
   `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank
   fields in `gate0-owner-attestation.md`.
