@@ -41,7 +41,8 @@ Fixture manifest root `eccc5e2f268b4ad125163f58815710a68a524943f8a34b79597199f07
   the `keeper` controller or get its own compose-managed one. See
   `docs/state/blocks/BLK-0001.md`. Not simulated, not worked around.
 - **Consequence while open:** merges to main are not CI-certified. Research work is
-  unaffected — the containerized ladder is green.
+  unaffected — the containerized ladder is green. BLK-0001 is **off the critical path**, so
+  per LOOP.md §1.2 the loop records it and proceeds to M1 rather than idling.
 - **Human-only, not blocking yet:** `G-AUTH-0` (written ICICI data-use clarification) is filed
   at M3 and gates only the live path. Nothing in P0–P2 needs credentials, spend or paperwork.
 - `pandoc` is absent on the laptop, so `make refs-extract` runs in the research container

@@ -12,8 +12,12 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
 
 ## 1 · Pick exactly one action, in this priority order
 1. `git status` dirty or verify half-run from a previous tick → finish/commit that first.
-2. Open block card escalated to human → check for the human's answer on the card; if none,
-   note "waiting on BLK-####" and stop the tick.
+2. Open block card escalated to human → check for the human's answer on the card. If the
+   human has answered, act on it. If not: note "waiting on BLK-####" in CURRENT.md, then —
+   only if that block sits on the ACTIVE item / critical path — stop the tick. An escalated
+   block that does not gate the next milestone must NOT halt the project: record it and fall
+   through to the next actionable item below. (Don't grind on a blocked item; don't idle the
+   whole plant because one side road is closed.)
 3. Open non-escalated block card → act as (or spawn) the §10.4 domain specialist for it.
 4. CURRENT.md says awaiting phase gate → if docs/state/gates/P<k>-approved.md exists, open
    the next phase; else re-run the phase's headline Verify (regression watch), update
