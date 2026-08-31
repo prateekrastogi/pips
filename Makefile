@@ -11,7 +11,7 @@ BASE ?= main
 PAST_DIR ?= ../past
 DAY ?=
 
-.PHONY: help setup lint typecheck test tdd-check ledger-check salvage-verify determinism ci \
+.PHONY: help setup lint typecheck test tdd-check ledger-check salvage-verify authority-check determinism ci \
         fixtures s1-smoke backtest-smoke parity qc rust-test refs-extract clean
 
 help: ## Show this help
@@ -39,6 +39,9 @@ ledger-check: ## Verify prose <-> ledger <-> code <-> tests (§8.2)
 
 salvage-verify: ## Resolve every harvest-map donor SHA against ../past (§1.2, read-only)
 	$(PY) -m pips.cli salvage verify $(PAST_DIR)
+
+authority-check: ## Report GATE-0 data-use authority status [G-AUTH-0]
+	$(PY) -m pips.cli authority check
 
 determinism: ## Run the smoke pipeline twice and diff hashes (constitution rule 1)
 	$(PY) -m pips.cli determinism .

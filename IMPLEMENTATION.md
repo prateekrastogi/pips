@@ -187,8 +187,8 @@ order**, obtain written ICICI clarification — or switch the certified signal f
 execution broker's entitled feed (Flattrade's free API, subject to its terms). **With Zerodha
 deferred (ADR-0010) this escape hatch has exactly one option**: if Flattrade's terms do not
 permit it, GATE-0 can only be cleared by the ICICI clarification or by reopening a second
-venue. That narrowing is a known cost of the single-venue decision. This is a release gate and an adapter swap, not an
-architecture change. Breeze data is never redistributed. Tracked as ledger gate `G-AUTH-0`.
+venue. That narrowing is a known cost of the single-venue decision. This is a release gate
+and an adapter swap, not an architecture change. Breeze data is never redistributed. Tracked as ledger gate `G-AUTH-0`.
 
 ### 2.2 Runtime topology and the deploy rail (arb-vm) `[C-DEPLOY-01]` `[G-DEPLOY-01]`
 

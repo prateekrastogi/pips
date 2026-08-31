@@ -6,12 +6,17 @@
   spec: "IMPLEMENTATION.md#21-gate-0"
   source_refs: ["reference/cg-blueprint GATE-0", "ADR-0006"]
   threshold: {written_clarification: true, or_broker_feed_swap: true}
-  enforced_by: "ops/runbooks/authority.md"
-  evidence: "docs/reports/feasibility/gate0-authority.md"
-  code: null
-  tests: []
-  status: planned
+  enforced_by: "python/pips/core/authority.py::AuthorityRecord.live_trading_permitted"
+  evidence: "docs/reports/feasibility/gate0-authority.yaml"
+  code: "python/pips/core/authority.py"
+  tests: ["tests/unit/core/test_authority.py"]
+  status: enforced
   owner_milestone: M3
+  # ENFORCED, NOT CLEARED — and the difference matters. The gate is now machine-checked and
+  # is currently BLOCKING: the record says UNFILED, so live_trading_permitted() is false.
+  # A record claiming a cleared gate without evidence fails to VALIDATE, so the gate cannot
+  # be opened by editing a status field. The question itself is human-only (§10.6):
+  # ops/runbooks/authority.md holds the letter to send.
 
 - id: G-DEPLOY-01
   title: "Deploy rail: main SHA reaches arb-vm; failed health check auto-rolls back"

@@ -1,0 +1,28 @@
+# [G-AUTH-0] — GATE-0 data-use authority record (§2.1, ADR-0006, ADR-0010).
+#
+# This file is the gate. `live_trading_permitted()` reads it, and a record claiming the gate
+# is cleared without the evidence to back it FAILS TO VALIDATE — see
+# python/pips/core/authority.py. Editing `status` alone will not clear anything.
+#
+# CURRENT STATE: the question has not been sent. Nothing before P6 is blocked by it, but it
+# has a long lead time, so it is worth sending early (see ops/runbooks/authority.md).
+
+gate: G-AUTH-0
+status: UNFILED
+
+question_ref: ops/runbooks/authority.md
+
+filed_on: null
+response_received_on: null
+response_summary: null
+evidence_paths: []
+
+# The feed the certified signal actually comes from today. If ICICI declines, this moves to
+# FLATTRADE and the status becomes RESOLVED_BY_FEED_SWAP — an adapter swap, not an
+# architecture change.
+certified_signal_feed: BREEZE
+
+notes: >
+  Awaiting a human to send the letter in ops/runbooks/authority.md. The autonomous loop
+  cannot file it, cannot answer it, and cannot clear this gate — GATE-0 is one of the three
+  human-only pause points named in IMPLEMENTATION.md §10.6.
