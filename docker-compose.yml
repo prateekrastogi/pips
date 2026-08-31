@@ -26,7 +26,12 @@ services:
     extends:
       service: research
     command: ["python", "-m", "pips.cli", "--help"]
-    restart: unless-stopped
+    # restart: "no" ON PURPOSE, until this has a real workload at M4. The command exits 0
+    # immediately, so `unless-stopped` made it a crash-loop that burned CPU and filled the
+    # journal while `docker ps` showed a plausible-looking "Restarting". Giving it a fake
+    # long-running command instead would be worse: the health check would then report a
+    # healthy service that does nothing.
+    restart: "no"
     profiles: ["vm"]
 
   breeze-reader:

@@ -193,3 +193,25 @@ def test_the_rail_asks_compose_with_the_vm_profile() -> None:
     assert "COMPOSE_PROFILES" in sync, (
         "sync.sh must select the vm profile, or compose reports only the build container"
     )
+
+
+def test_no_one_shot_service_is_set_to_restart_forever() -> None:
+    """A container whose command exits immediately must not carry `restart: unless-stopped`.
+
+    Observed live: `research-runner` runs `python -m pips.cli --help`, exits 0, and was
+    restarted forever — a crash-loop that burns CPU and fills the journal while looking, in
+    `docker ps`, like a service that is merely "Restarting". It has no real workload until
+    M4, and giving it a fake long-running command to silence the loop would be worse: the
+    health check would then report a healthy service that does nothing.
+    """
+    import yaml
+
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    one_shot_markers = ("--help", "--version")
+    for name, spec in compose["services"].items():
+        command = " ".join(spec.get("command", []) or [])
+        if any(marker in command for marker in one_shot_markers):
+            assert spec.get("restart", "no") in ("no", None), (
+                f"{name} runs a one-shot command ({command!r}) but is set to "
+                f"restart={spec.get('restart')!r} — that is a crash-loop, not a service"
+            )
