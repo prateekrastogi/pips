@@ -193,7 +193,13 @@
 - id: C-DEPLOY-01
   title: "Immutable SHA-tagged images; data/secrets in VM volumes, never baked in"
   spec: "IMPLEMENTATION.md#22-runtime-topology"
-  code: "docker-compose.yml"
-  tests: []
+  code: "ops/deploy/sync.sh"
+  tests:
+    - "tests/unit/test_deploy_guard.py"
+    - "tests/unit/test_secrets_and_data_locality.py"
   status: building
   owner_milestone: M3.5
+  # NOT enforced yet, and the gap is honest: the "data/secrets never baked into an image"
+  # half IS tested, but "immutable SHA-tagged images reaching the VM" cannot be demonstrated
+  # until main carries the rail and arb-vm can read the private repo. Both are human items
+  # (a merge decision and a deploy key), recorded in CURRENT.md.

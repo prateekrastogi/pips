@@ -24,10 +24,14 @@
   threshold: {poll_interval_minutes_max: 2, auto_rollback: true, market_hours_guard: true}
   enforced_by: "ops/deploy/sync.sh"
   evidence: "docs/reports/deploy-rail-demo.md"
-  code: null
-  tests: []
-  status: planned
+  code: "ops/deploy/sync.sh"
+  tests: ["tests/unit/test_deploy_guard.py"]
+  status: building
   owner_milestone: M3.5
+  # The rail exists and its market-hours guard is tested. The gate's THRESHOLD — a main SHA
+  # reaching the VM within a poll, and a failed health check auto-rolling back — is an
+  # end-to-end demonstration that needs main to carry the rail and the VM to be able to clone
+  # it. Neither is a code problem; both are recorded as human items in CURRENT.md.
 
 - id: G-S4-DSR
   title: "Deflated Sharpe >= 0.95 at N=M (report N=M_erank)"

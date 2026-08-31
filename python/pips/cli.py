@@ -13,6 +13,7 @@ commands:
   tdd check [base] [root]    verify this branch is test-first (§7.1)
   salvage verify [past]      resolve every donor SHA in ../past (§1.2)
   authority check [record]   report GATE-0 data-use authority [G-AUTH-0]
+  deploy guard <service>     may the rail restart this service now? (§2.2)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -41,6 +42,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.core.authority import main as authority_main
 
         return authority_main(rest[1:])
+    if command == "deploy" and rest[:1] == ["guard"]:
+        from pips.ops.deploy_guard import main as guard_main
+
+        return guard_main(rest[1:])
     if command == "fixtures" and rest[:1] == ["generate"]:
         from pips.fixtures.generate import main as fixtures_main
 

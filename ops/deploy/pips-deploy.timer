@@ -1,0 +1,17 @@
+# Polls every 2 minutes. §2.2 specifies a ~1-2 minute poller; a webhook is optional later.
+[Unit]
+Description=pips deploy rail poller
+Documentation=file:///srv/pips/checkout/ops/deploy/README.md
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+# The market-hours guard, not the timer, decides what may restart — so the poller runs at the
+# same cadence all day. Silencing the timer during market hours would also silence the
+# research and data services, which are supposed to roll immediately (§2.2).
+AccuracySec=15s
+Persistent=false
+Unit=pips-deploy.service
+
+[Install]
+WantedBy=timers.target
