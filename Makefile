@@ -9,6 +9,7 @@ RUN ?= $(UV) run
 PY ?= $(RUN) python
 BASE ?= main
 PAST_DIR ?= ../past
+PIPS_DATA_ROOT ?= /srv/pips
 DAY ?=
 
 .PHONY: help setup lint typecheck test tdd-check ledger-check salvage-verify authority-check determinism ci \
@@ -64,8 +65,8 @@ refs-extract: ## Cache pandoc extractions of docs/reference/*.docx (needs pandoc
 	  pandoc -t markdown --wrap=none "$$f" -o "$$out"; \
 	done
 
-qc: ## Data quality control over the silver zone (M5)
-	@echo "qc: not implemented until M5"; exit 1
+qc: ## Quality-check bronze and quarantine failures (§6 M5)
+	$(PY) -m pips.cli qc $(PIPS_DATA_ROOT)
 
 s1-smoke: ## Stage-1 screening smoke run on fixtures (§6 M12 Verify)
 	$(PY) -m pips.cli s1-smoke fixtures
