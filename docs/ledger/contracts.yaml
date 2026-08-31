@@ -137,10 +137,16 @@
 - id: C-FILL-01
   title: "Fill-fidelity tiers F0–F3; every result stamped; cross-tier comparison refused"
   spec: "IMPLEMENTATION.md#38-fill-fidelity-tiers"
-  code: "python/pips/sim/fills"
-  tests: []
-  status: planned
+  code: "python/pips/sim/vector.py"
+  tests:
+    - "tests/unit/test_vector_engine.py::test_every_result_is_stamped_with_its_fill_tier"
+    - "tests/unit/test_vector_engine.py::test_cross_tier_comparison_is_refused"
+  status: building
   owner_milestone: M14
+  # BUILDING, not enforced, and the gap is exactly F1-F3. M10 landed the F0 screen tier plus
+  # the half of this contract that binds every tier — results are stamped, and a cross-tier
+  # comparison raises rather than returning a number. The event engine (F1), quote/trade (F2)
+  # and auction (F3) fills land at M14/M24, and the row flips then.
 
 - id: C-BNDL-01
   title: "StrategyBundle: signed, content-hashed, registered-IR-only, golden boot check"

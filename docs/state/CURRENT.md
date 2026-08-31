@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M10 vectorized engine (F0) — DONE.** Three-day toy case reconciles to the paisa
+(gross 3,000,000 · cost 10,644 · net 2,989,356), the accounting identity holds by
+construction, and a peeking signal dies *inside* the engine. `[C-FILL-01]` is now `building`:
+F0 and the tier-stamping half landed; F1-F3 are M14/M24.
+
 **M11 registry + multiplicity ledger — DONE** (`[C-REG-01]` `enforced`). Append-only is
 enforced by SQLite triggers, M counts every status, M_erank collapses to 1 on clones and
 rises to N on independent trials, and the Appendix B experiment manifest parses.
@@ -34,8 +39,8 @@ pips deploy guard breeze-reader  --now 2026-06-01T16:00 -> ALLOW (exit 0)
 pips deploy guard research-runner --now 2026-06-01T12:00 -> ALLOW (exit 0)  rolls always
 
 make ci -> ci: green
-  ruff 76 files · mypy --strict 76 files · 318 pytest · clippy clean (21 crates) ·
-  cargo test ok · determinism bit-identical · ledger-check 26 rows (15/2/9)
+  ruff 78 files · mypy --strict 78 files · 332 pytest · clippy clean (21 crates) ·
+  cargo test ok · determinism bit-identical · ledger-check 26 rows (14/3/9)
 ```
 
 ## Next 3 actions
@@ -45,9 +50,10 @@ make ci -> ci: green
    during simulated market hours defers trading-path restarts.
 2. **M4 Breeze ingest** — harvest-first from SAL-0001..0004 (`intraday be8186d`), running on
    arb-vm. Needs the Breeze token in `.env` and the deploy rail live.
-3. **M10 vectorized engine (F0/F1-lite)** — panel forward returns, portfolio wrappers
-   (long/flat, top-k, tolerance-neutral), cost application, verified to the paisa on a 3-day
-   toy case. Pure engineering on fixtures; the cost model it applies is already enforced.
+3. **M12 alpha wave 1 (T1 core)** — A01–A08 + A12 as AlphaSpecs `[C-SPEC-01]` with written
+   falsifiers and shuffled-future tests, then **M13's S1 runner**. Every piece they need is
+   now in place: the as-of view, the canary, the cost model, the registry, and an engine that
+   can score a signal to the paisa. Still no credentials required.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER (1 of 2) — add the deploy key.** arb-vm cannot clone the private
