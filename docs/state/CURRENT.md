@@ -3,6 +3,11 @@
 **Updated:** 2026-08-31 · **Branch:** `m/0-scaffold` · **Phase:** P0
 
 ## Active item
+**M4 Breeze ingest — fetch path DONE.** Response classification and bar normalization ported
+from SAL-0002/0003, tested against **recorded cassettes** (CI makes no live calls), plus a
+resumable call budgeter reading `config/breeze.yaml`. Remaining for M4: the backfill
+orchestrator (SAL-0004) and forward WS capture (SAL-0025 is NONE_FOUND, so from-scratch).
+
 **M3 feasibility probe — DONE.** Breeze's bar convention measured, not assumed: it is
 **OPEN-labelled**, so ingest adds one interval `[C-BAR-01]`. ADR-0001 updated with the
 evidence. Also found: untraded minutes are OMITTED not zero-filled, the vendor returns

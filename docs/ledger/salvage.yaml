@@ -48,6 +48,9 @@
     convention is direct evidence for the M3/M4 probe behind ADR-0001 — read it before
     writing the normalizer, and record what it implies about Breeze's labelling.
 
+    PORTED at M4 into python/pips/data/breeze/ingest.py. Its IST-wall-clock note held on
+    live data, and the M3 probe added what it did not record: Breeze is OPEN-labelled, so
+    ingest adds one interval.
 - id: SAL-0003
   component: "Breeze rate limiter (100/min, 5000/day, Status-5 detection)"
   repo: intraday
@@ -63,6 +66,11 @@
     conflict (100/min vs 75/min) and pips throttles to 75 until confirmed. Port the
     Status-5 detection and the budgeter shape; do NOT inherit the limit constant.
 
+    PORTED at M4 into python/pips/data/breeze/{ingest,budget}.py. Its two best ideas kept —
+    injectable sleep/clock, and pacing under the published cap — with its constants replaced
+    by config/breeze.yaml per ADR-0012. Its most valuable line was that a rate rejection
+    arrives in the JSON BODY as Status 5, not as HTTP 429: a client checking HTTP status
+    records a gap that looks like a quiet market.
 - id: SAL-0004
   component: "Resumable multi-instrument backfill orchestrator"
   repo: intraday
