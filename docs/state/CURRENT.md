@@ -7,7 +7,7 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M14 event engine — F1 protected-limit state machine and flatten scheduler landed.** M6's masters are complete
+**M14 event engine — F1 state machine, flatten scheduler and F0/F1 reconciliation landed.** M6's masters are complete
 except ASM/GSM/T2T and index membership; all nine T1 alphas have compute plugins.
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
@@ -66,7 +66,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 138 files · mypy --strict 138 files · 738 pytest · clippy clean · cargo test ok
+  ruff 140 files · mypy --strict 140 files · 748 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -134,10 +134,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **Finish M14** — F1-vs-vectorized reconciliation, §6 M14's third Verify and the one that
-   binds the two engines to each other. The state machine and the flatten scheduler are done.
-   Needs no data. The NSE holiday list stays parked: it needs a source I cannot fetch, and its
-   consequence is at least no longer silent (QC reports its own skip count).
+3. **M15 nested walk-forward** — outer 21d / inner 21d / train 126d, purge = horizon, embargo
+   ≥ horizon + order duration. Its headline Verify is that the leakage canary DIES here, which
+   is the strongest single check in the project and needs no market data to demonstrate. The
+   NSE holiday list stays parked: it needs a source I cannot fetch, and its consequence is at
+   least no longer silent (QC reports its own skip count).
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
