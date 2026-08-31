@@ -44,8 +44,13 @@ runner** — written at M5, unit-tested, dead — and it also cleared *any* jump
 was declared that day. Both fixed, plus a meta-test asserting every check the suite defines is
 actually run.
 
-Still unwritten for M6: ASM/GSM/T2T, the broker-capability daily snapshotter (M3's manual CSV
-is the v0), and index membership. The calendar's holiday list is still
+The **broker-capability snapshotter** is now on the store too, with the two clocks separated —
+a change announced weeks before it takes effect is finally expressible, which one
+`snapshot_date` column never could. Wiring it surfaced a real bug in `PitStore.as_of`: a
+future-dated version was MASKING the one actually in force, so the key vanished from the table
+entirely. Fixed, with the regression test in the store's own suite where it belonged.
+
+Still unwritten for M6: ASM/GSM/T2T and index membership. The calendar's holiday list is still
 `holidays_verified: false`.
 
 ## Done
@@ -60,7 +65,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 132 files · mypy --strict 132 files · 701 pytest · clippy clean · cargo test ok
+  ruff 134 files · mypy --strict 134 files · 710 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -107,6 +112,8 @@ A07 mutation run — 5 of 6 killed, 1 SURVIVED:
   Fixed by pairing: zero with the buffer, positive with buffer_atr=0.
 A12 mutation run — 5 of 6 killed; the survivor was the zero-variance branch, whose only
   coverage I had just removed by de-degenerating the fixtures.
+capability-master mutation run — 5 of 5 killed. And it found a PitStore bug its own suite
+  missed: a future-dated version masked the version in force, so the key vanished entirely.
 A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   removing volatility normalisation killed nothing —  held under the alpha
   AND under the variance forecast it must not be. Fixed with a RATIO (>5x), not an ordering.
@@ -122,9 +129,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
 2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
    rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **Broker-capability daily snapshotter onto the PIT store** — the last M6 item needing no
-   external download. M3's manually maintained CSV is the v0; moving it onto the bitemporal
-   store makes "what could this broker do on that date" an as-of read like everything else.
+3. **NSE holiday list** — `holidays_verified: false`, so every session-state decision rests on
+   an empty list and `is_trading_day` calls every weekday a trading day. That now matters
+   directly: QC's overnight-ratio check uses it to tell adjacent sessions from a gap, so a jump
+   across a holiday is compared as if it were overnight.
 
 ## Blockers / awaiting
 - **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**

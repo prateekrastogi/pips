@@ -5,9 +5,17 @@ constants** (§3.4). This is the table they live in, and it is where
 :meth:`pips.core.calendar.ExchangeCalendar.session_at` gets its broker cutoff -- so there is
 no path from a hard-coded time to a session state.
 
-v0 is a manually maintained CSV, which M3 explicitly permits. M6 replaces the ingest with the
-bitemporal PIT snapshotter (``known_from``/``known_to``, Merkle-rooted manifests); what does
-not change is the read shape: ask as of a date, get what was knowable then.
+v0 is a manually maintained CSV, which M3 explicitly permits. **M6 has now replaced the
+ingest**: :mod:`pips.data.pit.capability_master` puts these rows on the bitemporal PIT store,
+where ``known_from`` and ``valid_from`` are separate — a change announced weeks before it takes
+effect is finally expressible, which one ``snapshot_date`` column never could.
+
+This module is not dead. :class:`CapabilityRow` is still the schema, ``load_capability_csv`` is
+what the migration reads, and :class:`CapabilitySnapshot` is the reference the migration's
+equivalence test compares against row by row. A capability table that quietly answers
+differently after a refactor is worse than one that fails outright, and that test is what says
+it does not. The read shape is unchanged either way: ask as of a date, get what was knowable
+then.
 """
 
 from __future__ import annotations

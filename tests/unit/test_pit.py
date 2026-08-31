@@ -400,3 +400,41 @@ def test_a_record_leaf_is_pinned_to_its_content() -> None:
         payload={"symbol": "RELIANCE"},
     )
     assert record.leaf() == ("65a2ca97cb87cccc8398265ce2fa34a11319994ef96fed79aba20dba6fb1ddc0")
+
+
+def test_a_future_dated_version_does_not_mask_the_one_in_force(store: PitStore) -> None:
+    """The bug this file did not catch, found by the capability master's tests instead.
+
+    `as_of` picked the most recently KNOWN version of a key and only then asked whether it was
+    yet valid. So a version recorded today and effective next month hid the one actually in
+    force, and the key disappeared from the table altogether — a lookup reporting no data for
+    a date that plainly has data. In the broker-capability table that reads as "this broker
+    could not trade that day", which is a permission decision made by an ordering mistake.
+
+    Both filters now apply before the choice, which is what bitemporal means: among versions
+    known by then AND valid by then, take the most recently known.
+    """
+    store.append(
+        PitRecord(
+            table="rules",
+            key="cutoff",
+            valid_from=D(2026, 1, 1),
+            known_from=D(2026, 1, 1),
+            payload={"at": "15:00"},
+        )
+    )
+    store.append(
+        PitRecord(
+            table="rules",
+            key="cutoff",
+            valid_from=D(2026, 9, 1),  # announced early, effective later
+            known_from=D(2026, 8, 20),
+            payload={"at": "15:10"},
+        )
+    )
+
+    in_force = store.as_of("rules", known_on=D(2026, 8, 25))
+    assert [r.payload["at"] for r in in_force] == ["15:00"], (
+        "the announcement must not displace the rule actually in force"
+    )
+    assert [r.payload["at"] for r in store.as_of("rules", known_on=D(2026, 9, 2))] == ["15:10"]

@@ -205,13 +205,26 @@ class PitStore:
             if line.strip()
         ]
 
-    def _latest_version(self, table: str, key: str, known_on: date | None) -> PitRecord | None:
-        """The version in force for ``key`` as of ``known_on`` -- last write wins on a tie."""
+    def _latest_version(
+        self, table: str, key: str, known_on: date | None, valid_on: date | None = None
+    ) -> PitRecord | None:
+        """The version in force for ``key`` on both clocks -- last write wins on a tie.
+
+        BOTH filters are applied BEFORE choosing the latest, and that ordering is the whole
+        correctness of the method. An earlier version picked the most recently KNOWN version
+        and only then checked whether it was yet valid — so a version recorded today and
+        effective next month MASKED the one actually in force, and the key vanished from the
+        table entirely. The symptom is a lookup that reports no data for a date that plainly
+        has data, which for the capability table would read as "this broker could not trade
+        that day".
+        """
         winner: PitRecord | None = None
         for record in self.all_records(table):
             if record.key != key:
                 continue
             if known_on is not None and record.known_from > known_on:
+                continue
+            if valid_on is not None and record.valid_from > valid_on:
                 continue
             if winner is None or record.known_from >= winner.known_from:
                 winner = record
@@ -228,10 +241,8 @@ class PitStore:
         keys = sorted({r.key for r in self.all_records(table)})
         out: list[PitRecord] = []
         for key in keys:
-            version = self._latest_version(table, key, known_on=known_on)
+            version = self._latest_version(table, key, known_on=known_on, valid_on=effective_valid)
             if version is None or version.op is PitOp.CLOSE:
-                continue
-            if version.valid_from > effective_valid:
                 continue
             out.append(version)
         return out
