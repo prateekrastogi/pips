@@ -26,7 +26,32 @@ from datetime import date
 from pips.data.pit.instruments import Instrument, InstrumentMaster
 from pips.data.pit.scrip_master import RejectedRow
 
-__all__ = ["IngestSummary", "ingest_instruments"]
+__all__ = ["UNKNOWN_LISTING_DATE", "IngestSummary", "ingest_instruments"]
+
+UNKNOWN_LISTING_DATE = date(1990, 1, 1)
+"""Validity start for an instrument whose listing date the vendor does not supply.
+
+**All 5,873 rows of the real NSE scrip master have a blank ``DateOfListing``** — measured, not
+assumed. So the master cannot say when a security listed, and the ingest date is emphatically
+not the answer: defaulting to it said RELIANCE began on 31 August and made every historical
+read exclude it.
+
+This asserts *at or before anything we could have data for*, and nothing more. It is
+deliberately absurd as a listing date — NSE began trading in 1994 — because a plausible one
+gets mistaken for a measurement.
+
+WHAT IT COSTS, stated rather than discovered: a reused code now has two claimants overlapping
+in valid time, and valid time can no longer separate them. That is a real loss of resolution.
+It degrades to the master's existing refusal to guess, which is loud, rather than to a silent
+splice of two companies into one price series — and a wrong answer there would be
+undetectable.
+
+It also makes VALID TIME DEGENERATE for these instruments: every version is valid from 1990, so
+temporal resolution falls back entirely to knowledge time, and their symbol history is a
+knowledge history rather than a validity one. That is the honest description of a master built
+from a file with no listing dates in it. When a listing-date source appears, this sentinel is
+what to replace, and valid time starts doing its job again.
+"""
 
 
 @dataclass(frozen=True)
@@ -62,9 +87,17 @@ def ingest_instruments(
     master: InstrumentMaster,
     instruments: list[Instrument],
     known_from: date,
+    *,
+    valid_from: date,
     rejected: list[RejectedRow] | None = None,
 ) -> IngestSummary:
-    """Record only what actually changed, and report everything."""
+    """Record only what actually changed, and report everything.
+
+    ``valid_from`` is REQUIRED and has no default. The ingest date is not when an instrument
+    came into existence, and using it made every historical read exclude every instrument —
+    silently. The vendor does not supply listing dates, so the caller states what it is
+    asserting; :data:`UNKNOWN_LISTING_DATE` is the honest answer when nothing better exists.
+    """
     if not instruments:
         raise ValueError(
             "ingest_instruments called with no instruments. An empty ingest reports a clean "
@@ -73,20 +106,23 @@ def ingest_instruments(
 
     # Both clocks at the ingest date: an ingest compares against what the master holds NOW,
     # and "now" for a snapshotter is the date it is snapshotting.
-    current = {i.isin: i for i in master.as_of(known_from, known_on=known_from)}
+    # Compare against everything we hold, on both clocks wide open: an instrument recorded
+    # with an UNKNOWN_LISTING_DATE validity start is still the instrument we have, and a
+    # narrow read here would report it as new every single day.
+    current = {i.isin: i for i in master.as_of(known_from, known_on=None)}
     added = changed = unchanged = 0
     changed_isins: list[str] = []
     for instrument in instruments:
         existing = current.get(instrument.isin)
         if existing is None:
-            master.upsert(instrument, known_from=known_from)
+            master.upsert(instrument, known_from=known_from, valid_from=valid_from)
             added += 1
         elif existing == instrument:
             # The common case by far, and the one that must cost nothing. See the module
             # docstring: re-recording it is how a snapshotter buries its own signal.
             unchanged += 1
         else:
-            master.upsert(instrument, known_from=known_from)
+            master.upsert(instrument, known_from=known_from, valid_from=valid_from)
             changed += 1
             changed_isins.append(instrument.isin)
 
