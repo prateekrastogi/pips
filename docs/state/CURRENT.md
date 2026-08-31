@@ -70,7 +70,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 157 files · mypy --strict 157 files · 844 pytest · clippy clean · cargo test ok
+  ruff 158 files · mypy --strict 158 files · 859 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -150,15 +150,14 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **SETTLE THE IDENTITY CLOCK (open question, written up in today's log).**
-   `InstrumentMaster.as_of(on)` uses `on` as BOTH `known_on` and `valid_on`. Correct for
-   corporate actions — an action recorded later must not explain an earlier jump, and a test
-   pins that. WRONG for identity: knowing today that RELIND was Reliance on 28 August is
-   reference data about the past, not lookahead, and valid time already answers which company
-   held the code then. As it stands historical QC can never resolve any instrument ingested
-   afterwards, which is every instrument. Deliberate modelling decision, deferred on purpose.
+1. **A LISTING-DATE SOURCE.** The vendor file has a blank `DateOfListing` on all 5,873 rows,
+   so instruments are recorded with `UNKNOWN_LISTING_DATE` (1990-01-01). That makes valid time
+   DEGENERATE for them: a reused code has two overlapping claimants, the master refuses to
+   guess (loudly, which is the acceptable failure), and symbol history is knowledge history.
+   Replacing the sentinel is what restores valid time. NSE's own equity list carries listing
+   dates and would need its own download decision.
 
-2. **DONE — the security-master download** (approved and completed): The seam is connected (symbol → as-of
+2. **DONE — identity clock split, and the security-master download** (approved and completed): The seam is connected (symbol → as-of
    instrument master → ISIN → action master → verdict) and tested end to end, but no real
    instruments are loaded, so it still resolves nothing and fails closed. Probing settled how
    to load them: `get_names` returns no ISIN, and the SDK's own master loader discards every
