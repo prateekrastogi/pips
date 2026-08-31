@@ -32,6 +32,8 @@ COMPOSE_FILE="${PIPS_COMPOSE:-$REPO/docker-compose.yml}"
 STATE_DIR="${PIPS_STATE:-/srv/pips/deploy}"
 LOCK="${PIPS_DEPLOY_LOCK:-/srv/pips/deploy/sync.lock}"
 LAST_GOOD="$STATE_DIR/last-good-sha"
+ATTEMPTS="$STATE_DIR/attempts"
+MAX_DEPLOY_ATTEMPTS="${PIPS_MAX_DEPLOY_ATTEMPTS:-3}"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
@@ -66,9 +68,41 @@ TARGET="$(git rev-parse "origin/$BRANCH")"
 # self-modification hazard by never deploying at all — and logged a clean "Finished" while
 # building nothing and promoting nothing. A silent no-op that reports success is worse than
 # the loud failure it replaced, because nothing prompts anyone to look.
-if [ "$CURRENT" = "$TARGET" ] && [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
-  log "already at ${TARGET:0:12}; nothing to do"
+# ...AND THE CHECKOUT IS NOT THE DEPLOY. `git merge --ff-only` runs long before anything is
+# promoted, so a run that fast-forwards and then dies leaves HEAD at TARGET with nothing
+# shipped. Comparing HEAD to origin/main then answers "nothing to do" — forever. Observed
+# live 2026-08-31 12:04:55: promotion died, and every poll afterwards logged
+# `already at 8aa1a610c635; nothing to do` while the fleet ran the previous SHA. Same class
+# as the re-exec bug above: a silent no-op that reports success. `last-good-sha` is written
+# only after a promotion survives its health check, so it is the only file that knows.
+LAST_DEPLOYED="$(cat "$LAST_GOOD" 2>/dev/null || true)"
+if [ "$CURRENT" = "$TARGET" ] && [ "$LAST_DEPLOYED" = "$TARGET" ] \
+   && [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
+  log "already at ${TARGET:0:12} and last-good matches; nothing to do"
   exit 0
+fi
+
+# BOUNDED RETRY. Retrying forever is the other half of the same mistake: SAL-0010's fourth
+# safety property is "no partial promotion, NO RETRY STORM". A rail that re-attempts a broken
+# SHA every two minutes, alerting each time, trains everyone to mute the alerts. So: a few
+# real attempts, then one loud stop and a quiet holding pattern until a human or a new SHA
+# arrives. The counter is per target SHA and is cleared on success.
+mkdir -p "$ATTEMPTS"
+ATTEMPT_FILE="$ATTEMPTS/$TARGET"
+
+# ONLY IN THE ORIGINAL RUN, never in the re-exec. The re-exec is the same attempt seen twice;
+# counting it would halve the budget, and re-reading the just-incremented counter there would
+# make the second half of every attempt "give up" the moment the first half hit the cap.
+if [ -z "${PIPS_DEPLOY_REEXEC:-}" ]; then
+  ATTEMPT_N="$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0)"
+  if [ "$ATTEMPT_N" -ge "$MAX_DEPLOY_ATTEMPTS" ]; then
+    log "giving up on ${TARGET:0:12} after $ATTEMPT_N attempts — human needed; not retrying"
+    exit 0
+  fi
+  echo $((ATTEMPT_N + 1)) > "$ATTEMPT_FILE"
+  if [ "$CURRENT" = "$TARGET" ] && [ "$LAST_DEPLOYED" != "$TARGET" ]; then
+    log "checkout is at ${TARGET:0:12} but last-good is ${LAST_DEPLOYED:0:12} — a previous deploy did not complete; retrying (attempt $((ATTEMPT_N + 1))/$MAX_DEPLOY_ATTEMPTS)"
+  fi
 fi
 
 if [ "$CURRENT" != "$TARGET" ] && ! git merge-base --is-ancestor "$CURRENT" "$TARGET"; then
@@ -112,15 +146,6 @@ log "built images tagged ${TARGET:0:12}"
 # --- promote, service by service, honouring the market-hours guard --------------------
 DEFERRED=""
 
-# Every service compose defines, minus the ones that are not long-running.
-services_to_promote() {
-  # COMPOSE_PROFILES=vm: the long-running services are all under that profile, so a plain
-  # `config --services` reports only the build container and the rail would find nothing to
-  # promote while appearing to succeed.
-  COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
-    | grep -vxF "$NOT_PROMOTED" | sort
-}
-
 promote() {
   local service="$1"
   local guard_args=("$service")
@@ -138,15 +163,32 @@ promote() {
     || die "up -d failed for $service"
 }
 
-PROMOTABLE="$(services_to_promote)"
+# ASK COMPOSE ONCE. The previous version re-ran `config --services` inside the validation
+# loop, once per service, and treated a non-zero exit as evidence that the service was gone.
+# On 2026-08-31 the command failed transiently one second after a large image build and the
+# rail alerted `service 'breeze-reader' vanished between listing and promotion` — a
+# confident, specific, wrong claim about the fleet, derived from a command that had simply
+# not answered. This project keeps meeting that shape: a rate-limited HTTP 200 recorded as
+# "no data", a missed-message count defaulted to 0, and now a failed listing read as an empty
+# fleet. The dangerous failure is the one that looks like data. So a failed listing says the
+# listing failed, and says nothing at all about which services exist.
+# COMPOSE_PROFILES=vm: the long-running services are all under that profile, so a plain
+# `config --services` reports only the build container and the rail would find nothing
+# to promote while appearing to succeed.
+DEFINED="$(COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services)" \
+  || die "compose service listing failed — this says NOTHING about which services exist; not promoting"
+[ -n "$DEFINED" ] || die "compose service listing failed to name a single service — not promoting"
+
+PROMOTABLE="$(echo "$DEFINED" | grep -vxF "$NOT_PROMOTED" | sort)"
 [ -n "$PROMOTABLE" ] || die "compose defines no promotable services — refusing to continue"
 log "services to promote: $(echo $PROMOTABLE | tr '\n' ' ')"
 
 # VALIDATE THE WHOLE SET BEFORE TOUCHING ANYTHING. Discovering a problem mid-promotion is
-# what produces a half-deployed fleet; discovering it here costs one poll interval.
+# what produces a half-deployed fleet; discovering it here costs one poll interval. Both
+# lists now come from the same captured listing, so this can only fail on a real mismatch.
 for s in $PROMOTABLE; do
-  COMPOSE_PROFILES=vm docker compose -f "$COMPOSE_FILE" config --services | grep -qxF "$s" \
-    || die "service '$s' vanished between listing and promotion — refusing to promote a partial set"
+  echo "$DEFINED" | grep -qxF "$s" \
+    || die "service '$s' is not defined by compose — refusing to promote a partial set"
 done
 
 for s in $PROMOTABLE; do promote "$s"; done
@@ -169,6 +211,7 @@ done
 log "republished :current -> ${TARGET:0:12}"
 
 echo "$TARGET" > "$LAST_GOOD"
+rm -f "$ATTEMPT_FILE"
 if [ -n "$DEFERRED" ]; then
   log "deployed ${TARGET:0:12}; DEFERRED (will retry next poll):$DEFERRED"
 else

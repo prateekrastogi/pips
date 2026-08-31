@@ -58,6 +58,13 @@ M6 mutation run — 5 deliberate breaks, 4 killed by tests:
 snapshot-pinning mutation run — 3 of 3 killed:
   root validator removed · verify_pinned_root always true · open-time drift raise removed
 
+deploy rail — TWO defects found by verifying a push (both fixed, see the log):
+  1. wedged silently: a failed deploy that had already fast-forwarded was never retried,
+     because the up-to-date check consulted the CHECKOUT, not what was deployed.
+     Every poll then logged `already at 8aa1a61; nothing to do` — forever.
+  2. `config --services` failed transiently and the rail reported it as
+     `service 'breeze-reader' vanished` — a failed command read as a fact about the fleet.
+
 M9 §3.7 cost goldens — all five exact (Flattrade Rs1L RT 3.548 bps; high-cost 8.268 bps)
 null-search calibration — q=0.05 -> 0.05 · q=0.10 -> 0.08 · q=0.20 -> 0.17  (calibrated)
 make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (correctly no promotion)
@@ -75,7 +82,14 @@ make s1-smoke — 9 specs · 4 with plugins · rank_ic 0.0063 · p 0.7114 (corre
    seasonal. Exercises the M2 calendar and needs no credentials or data.
 
 ## Blockers / awaiting
-- None blocking. All three owner-actions (deploy key, Breeze token, merge to main) are cleared.
+- **ACTION FOR THE OWNER — an orphaned compose project is running a duplicate fleet.**
+  arb-vm has TWO compose projects from the same file: `pips` (correct) and `checkout`, a
+  leftover from before `name: pips` landed, whose containers are still up on SHA `a7248c2`.
+  That means **two breeze-readers**, which doubles consumption against the 100k/day budget.
+  I did not remove them unilaterally — they are running services on your VM. To clear:
+  `ssh arb-vm 'docker compose -p checkout down'`. Say the word and I will run it.
+- None otherwise. All three original owner-actions (deploy key, Breeze token, merge to main)
+  are cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
   `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank
   fields in `gate0-owner-attestation.md`.

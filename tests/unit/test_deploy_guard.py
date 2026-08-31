@@ -296,3 +296,105 @@ def test_the_compose_fallback_tag_is_the_one_the_rail_publishes() -> None:
             "`docker compose run` would resolve to whatever stale image happens to carry "
             "that tag"
         )
+
+
+def test_the_rail_retries_a_sha_whose_deploy_did_not_complete(
+    strip_comments: Callable[[str], str],
+) -> None:
+    """The up-to-date early exit must consult what was DEPLOYED, not just the checkout.
+
+    Observed live on 2026-08-31 at 12:04:55. The fast-forward and re-exec succeeded, the build
+    succeeded, and then promotion died. Nothing was promoted — but the checkout was already at
+    the new SHA, so the next poll compared HEAD to origin/main, found them equal, logged
+    `already at 8aa1a610c635; nothing to do`, and exited 0. Every poll after that did the same.
+
+    The rail was wedged: permanently convinced it had shipped a SHA it had never promoted,
+    while `last-good-sha` still recorded the previous one. This is the same failure class as
+    the re-exec bug documented above it — a silent no-op that reports success — and it is
+    worse here, because the reassuring line is printed forever.
+
+    The checkout is where the code IS; `last-good-sha` is what was actually deployed. Only the
+    second can answer "is there work to do".
+    """
+    sync = strip_comments((ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8"))
+    exit_at = sync.index("nothing to do")
+    condition = sync[sync.index("if [", exit_at - 400) : exit_at]
+    assert "LAST_GOOD" in condition or "LAST_DEPLOYED" in condition, (
+        "the 'nothing to do' early exit must also require that the last COMPLETED deploy is "
+        "at TARGET — otherwise a failed deploy that already fast-forwarded is never retried"
+    )
+
+
+def test_a_failed_deploy_is_retried_a_bounded_number_of_times(
+    strip_comments: Callable[[str], str],
+) -> None:
+    # Retrying forever is the other half of the same mistake. SAL-0010's fourth safety
+    # property is "no partial promotion, NO RETRY STORM": a rail that re-attempts a broken SHA
+    # every two minutes, alerting each time, trains everyone to mute the alerts. Bounded
+    # retries then one loud stop.
+    sync = strip_comments((ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8"))
+    assert "MAX_DEPLOY_ATTEMPTS" in sync, (
+        "sync.sh must bound its retries of a failing SHA — unbounded retry with an alert per "
+        "poll is a retry storm, which is what SAL-0010 warns about"
+    )
+
+
+def test_a_failed_service_listing_is_not_reported_as_a_missing_service(
+    strip_comments: Callable[[str], str],
+) -> None:
+    """The guard must distinguish "absent from the list" from "the listing failed".
+
+    What actually happened at 12:04:55: the validation loop re-ran `config --services` once
+    per service, the command failed transiently one second after a large image build, and its
+    empty output was read as *the service is gone*. The alert said
+    `service 'breeze-reader' vanished between listing and promotion` — a confident, specific,
+    wrong claim about the fleet, derived from a command that had simply not answered.
+
+    This project keeps meeting the same shape: a rate-limited HTTP 200 recorded as "no data",
+    a missed-message count defaulted to 0, and now a failed listing read as an empty fleet.
+    The dangerous failure is the one that looks like data.
+
+    So: list once, prove the listing succeeded and is non-empty, and only then compare.
+    """
+    sync = strip_comments((ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8"))
+    promote_at = sync.index("for s in $PROMOTABLE; do promote")
+    before = sync[:promote_at]
+    assert before.count("config --services") == 1, (
+        "compose must be asked for its service list exactly once before promotion. Asking "
+        "again per service turns a transient command failure into a false claim that a "
+        "service disappeared"
+    )
+    assert "listing failed" in sync, (
+        "a failed listing must say so — it is not evidence about which services exist"
+    )
+
+
+def test_the_reexec_does_not_consume_a_second_deploy_attempt(
+    strip_comments: Callable[[str], str],
+) -> None:
+    # The re-exec is one attempt seen twice. Counting it halves the retry budget, and
+    # re-reading the just-incremented counter in the second half makes every attempt "give
+    # up" the moment the first half reaches the cap — a retry bound that bounds at one.
+    sync = strip_comments((ROOT / "ops" / "deploy" / "sync.sh").read_text(encoding="utf-8"))
+    lines = sync.splitlines()
+    increment = next(i for i, ln in enumerate(lines) if '> "$ATTEMPT_FILE"' in ln)
+
+    # Walk back to the enclosing `if`, counting fi/if to skip nested blocks. An earlier
+    # version of this test just asserted no `fi` appeared between the guard and the
+    # increment — which failed on the perfectly legitimate inner `if ... fi` that checks the
+    # cap. Depth-tracking asks the question the test actually means.
+    depth = 0
+    for i in range(increment - 1, -1, -1):
+        stripped = lines[i].strip()
+        if stripped == "fi":
+            depth += 1
+        elif stripped.startswith("if ") or stripped.startswith("if["):
+            if depth == 0:
+                assert "PIPS_DEPLOY_REEXEC" in lines[i], (
+                    "the attempt increment must sit inside the `-z PIPS_DEPLOY_REEXEC` "
+                    f"guard, so the re-exec does not spend a second attempt; found "
+                    f"{lines[i].strip()!r}"
+                )
+                return
+            depth -= 1
+    raise AssertionError("the attempt increment is not inside any conditional")
