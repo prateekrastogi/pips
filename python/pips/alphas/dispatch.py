@@ -27,7 +27,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from pips.alphas.t1 import a01, a02, a03, a04, a05, a07, a08
+from pips.alphas.forecast import Forecast
+from pips.alphas.t1 import a01, a02, a03, a04, a05, a06, a07, a08
+from pips.fixtures.events import fixture_event_source
 
 if TYPE_CHECKING:
     from pips.alphas.forecast import Forecast
@@ -121,13 +123,35 @@ def _a05(observe_minutes: float, fixed: Built, notes: Notes, bars: int) -> Any:
     )
 
 
+def _a06(hold_minutes: float, fixed: Built, notes: Notes, bars: int) -> Any:
+    del bars, fixed  # A06 works in minutes; every other parameter is the unbounded grid.
+    return a06.A06Params(
+        observe_minutes=int(str(notes["observe_minutes"])),
+        hold_minutes=int(hold_minutes),
+        max_volume_ratio=Decimal(str(notes["max_volume_ratio"])),
+        max_breadth=Decimal(str(notes["max_breadth"])),
+        max_range_continuation=Decimal(str(notes["max_range_continuation"])),
+        horizon_ns=int(hold_minutes) * 60 * _NS,
+    )
+
+
+def _a06_compute(view: Any, params: Any, spec: Any) -> list[Forecast]:
+    """A06 alone takes a fourth argument, so the dispatch binds it here.
+
+    The source is the FIXTURE allowlist: CLEAR for generated names, UNKNOWN for anything else.
+    A06 keeps its refusal intact against real symbols -- the wrapper widens the dispatch, not
+    the rule.
+    """
+    return a06.compute(view, params, spec, fixture_event_source())
+
+
 def _a07(buffer_atr: float, fixed: Built, notes: Notes, bars: int) -> Any:
-    del bars, notes  # A07 works in minutes and takes no unbounded parameters.
+    del bars  # A07 works in minutes directly.
     return a07.A07Params(
         range_end_minutes=int(fixed["range_end_minutes"]),
         buffer_atr=Decimal(str(buffer_atr)),
         hold_minutes=int(fixed["hold_minutes"]),
-        min_participation=Decimal("0.1"),
+        min_participation=Decimal(str(notes["min_participation"])),
         horizon_ns=int(fixed["hold_minutes"]) * 60 * _NS,
     )
 
@@ -188,6 +212,23 @@ DRIVERS: dict[str, AlphaDriver] = {
         # is a gap in the pre-registration, recorded here rather than papered over.
         unchecked={"min_volume_ratio": Decimal("1.2"), "min_breadth": Decimal("0.5")},
     ),
+    "A06": AlphaDriver(
+        "A06",
+        "A06_gap_reversal.yaml",
+        # `hold_minutes` [5, 90] is the only declared range that maps to a parameter. The rest
+        # are the weak-confirmation grid, which the spec declares as prose -- "separate from
+        # A05's, preregistered" -- so they cannot be checked against anything and say so.
+        "hold_minutes",
+        {},
+        _a06_compute,
+        _a06,
+        unchecked={
+            "observe_minutes": 15,
+            "max_volume_ratio": Decimal("3"),
+            "max_breadth": Decimal("0.9"),
+            "max_range_continuation": Decimal("0.9"),
+        },
+    ),
     "A07": AlphaDriver(
         "A07",
         "A07_opening_range_breakout.yaml",
@@ -214,12 +255,6 @@ DRIVERS: dict[str, AlphaDriver] = {
 NOT_RUNNABLE: dict[str, str] = {
     # Each reason was established by running the alpha against the fixture panel and reading
     # what it said -- not by inspecting imports and guessing.
-    "A06": (
-        "compute() takes a fourth argument, `event_status`, which the fixture panel cannot "
-        "supply. By design A06 forecasts nothing without an event source rather than treating "
-        "an absent corporate action as an absent event, so it cannot share the common "
-        "(view, params, spec) dispatch."
-    ),
     "A12": (
         "declares history_sessions [60, 250] and the fixture panel spans five sessions "
         "(2026-06-01 to 06-05). The seasonal profile needs a year of history to estimate; a "

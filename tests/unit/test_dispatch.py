@@ -156,6 +156,14 @@ def test_the_build_reads_the_declared_fixed_values(alpha_id: str) -> None:
     swept = grid_from_domain(spec, driver.swept, count=4)[0]
     baseline = driver.build(swept, bars=1)
 
+    # A06 declares no `fixed` at all — every parameter beside the swept one is the unbounded
+    # weak-confirmation grid — so this loop would iterate nothing and pass. A `for` over an
+    # empty collection asserts nothing, which is how a stubbed `plans=()` once let the whole
+    # turnover wiring go untested.
+    assert driver.fixed or driver.unchecked, (
+        f"{alpha_id} declares neither fixed nor unchecked parameters, so nothing here is checked"
+    )
+
     for name, value in driver.fixed.items():
         # Perturb WITHIN the declared domain. A blanket `value + 1` walks an enumerated
         # parameter off its choices — A07Params rejects `range_end_minutes=16` itself, more
@@ -169,17 +177,19 @@ def test_the_build_reads_the_declared_fixed_values(alpha_id: str) -> None:
         )
 
 
-def test_the_build_reads_the_unchecked_values_too() -> None:
-    """A05's thresholds are recorded as unchecked; they must still be what it runs with.
+@pytest.mark.parametrize("alpha_id", sorted(a for a in IDS if DRIVERS[a].unchecked))
+def test_the_build_reads_the_unchecked_values_too(alpha_id: str) -> None:
+    """Every driver with unbounded parameters, not just A05.
 
     An `unchecked` mapping the builder ignores is documentation of something that is not
-    happening, which is worse than no documentation.
+    happening, which is worse than no documentation — and A06 keeps its entire
+    weak-confirmation grid there, so for it this is the only binding check there is.
     """
-    driver = DRIVERS["A05"]
+    driver = DRIVERS[alpha_id]
     spec = load_alpha_spec(SPECS / driver.spec_file)
     swept = grid_from_domain(spec, driver.swept, count=4)[0]
     baseline = driver.build(swept, bars=1)
 
     for name, value in driver.unchecked.items():
         moved = replace(driver, unchecked={**driver.unchecked, name: Decimal(str(value)) + 1})
-        assert repr(moved.build(swept, bars=1)) != repr(baseline), f"unchecked {name} is ignored"
+        assert repr(moved.build(swept, bars=1)) != repr(baseline), f"{alpha_id}: {name} ignored"

@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 217 files · mypy --strict 217 files · 1410 pytest · clippy clean · cargo test ok
+  ruff 219 files · mypy --strict 219 files · 1427 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,15 +186,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A06 has no dispatch path.** Its `compute()` takes a fourth argument, `event_status`, so it
-   cannot share the common signature. By design — it forecasts nothing without an event source
-   rather than reading an absent corporate action as an absent event — but one family can never
-   enter a search until there is an event source to supply. A fixture-level event stub would
-   let it in; a real one is an M6 data question.
-2. **The fixtures cannot answer questions about correlation.** Two statistics now agree that the
+1. **A12 is the last family outside the search.** It declares `history_sessions: [60, 250]` and
+   the fixture panel spans five sessions. Sessions are the expensive axis — they multiply the
+   decision points and the search runtime, unlike symbols — so a 60-session panel is a real cost
+   to weigh rather than an obvious win. Worth deciding deliberately: either generate one and
+   accept the runtime, or record that A12 stays out until real bars arrive.
+2. **The fixtures cannot answer questions about correlation.** Two statistics agree that the
    correlation among family winners is dominated by preserved-window length rather than by
    cross-section width, on synthetic random walks where the true structure is nil. Anything that
-   turns on how correlated the families really are needs real bars, not a wider synthetic panel.
+   turns on how correlated the families really are needs real bars.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

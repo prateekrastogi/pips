@@ -483,8 +483,16 @@
   # Halving converges to one winner, so a single family can never give S5 more than one
   # candidate -- S5 selects ACROSS families. Six drivers run on the fixture panel (A01-A05,
   # A08); three are excluded with reasons established by RUNNING them, not by guessing:
-  # A06 needs a fourth `event_status` argument the panel cannot supply, and A12 declares
-  # history_sessions [60, 250] against a five-session panel.
+  # Only A12 is excluded now: it declares history_sessions [60, 250] against a five-session
+  # panel, so no value of that parameter is satisfiable here.
+  #
+  # A06 takes a fourth `event_status` argument and forecasts nothing without it -- its spec says
+  # "missing event metadata => EXCLUDE the name, never assume no event". The dispatch binds a
+  # FIXTURE source rather than weakening that: CLEAR is literally true of generated bars (the
+  # enum means "we have coverage and there is no event", and the generator produced every
+  # price), and the source is an ALLOWLIST of synthetic names -- any real symbol gets UNKNOWN
+  # and A06 refuses it exactly as before. A source that answered CLEAR to anything would turn
+  # the refusal into blanket permission through the very object built to work around it.
   #
   # A07 was excluded on a reason that was FALSE: "the panel has no high_paise, low_paise". True
   # of the panel and false of the fixtures, which carry full OHLCV -- `load_panel` was dropping
