@@ -295,3 +295,21 @@
   # per broker x tier, the combined-blotter netting fixed point and order-budget constraints.
   # A row claiming enforcement for a capability no stage invokes is the
   # check_unexplained_ratio_jump failure written into the ledger instead of the code.
+
+- id: C-TURN-01
+  title: "tau* and h* are derived optima under the measured cost line, per broker x tier"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/selection/turnover.py"
+  tests:
+    - "tests/unit/test_turnover.py"
+  status: building
+  owner_milestone: M19
+  # Quantitative Foundations §6.1 (Faustmann rotation condition) and §6.2 (optimal
+  # selectivity). In: the closed form for alpha(h) = a*h^gamma, its identities
+  # (alpha(h*) = c/(1-gamma), net edge = c*gamma/(1-gamma), gross edge = 2c at gamma = 1/2),
+  # a golden-section solver for measured curves that recovers the closed form, and the per
+  # broker x tier planner which refuses an optimum beyond the fitted horizon.
+  #
+  # NOT in: §6.3's joint fixed point (coordinate descent alternating tau|h and h|tau). And
+  # nothing in the search calls the planner yet. `building` for both reasons, stated rather
+  # than implied.

@@ -14,8 +14,11 @@
 **M19 selection + turnover optimizer — the Pareto sort, the 1-corr clustering and the frontier
 reduction that composes them have landed `[C-SEL-01]`.** Still ledgered `building`, precisely:
 `select_frontier` gives the sort and the clustering a caller, but nothing in the SEARCH calls
-`select_frontier` — the chain is connected to itself, not yet to a pipeline. Next in M19: τ*/h*
-per broker × tier, the combined-blotter netting fixed point and order-budget constraints.
+`select_frontier` — the chain is connected to itself, not yet to a pipeline. τ*/h* per broker ×
+tier have landed too `[C-TURN-01]`: §6.1's Faustmann rotation condition, §6.2's selectivity
+threshold, and a planner that refuses an optimum beyond the horizon `alpha(h)` was fitted over.
+Next in M19: §6.3's joint fixed point (coordinate descent alternating τ|h and h|τ), the
+combined-blotter netting fixed point and order-budget constraints.
 
 **M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
 stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
@@ -87,7 +90,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 193 files · mypy --strict 193 files · 1109 pytest · clippy clean · cargo test ok
+  ruff 195 files · mypy --strict 195 files · 1146 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -172,9 +175,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ## Next 3 actions
 1. **Connect the selection chain to a search stage.** `select_frontier` composes the sort and
    the clustering, but no stage invokes it, so `[C-SEL-01]` stays `building`. M19 continues
-   with τ*/h* per broker × tier (threshold economics and the rotation condition), the
-   combined-blotter netting fixed point and order-budget constraints — τ*/h* is the natural
-   next unit, and the reduced frontier is what it costs.
+   with §6.3's joint solve — τ* and h* interact through α(h) and are meant to reach a fixed
+   point by coordinate descent, which is also where the fold-to-fold dispersion of (τ*, h*)
+   becomes a robustness statistic — then the combined-blotter netting fixed point and
+   order-budget constraints.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

@@ -74,6 +74,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "partial-pooling": "pips.validation.partial_pooling",
     "family-pooling": "pips.validation.family_pooling",
     "frontier-selection": "pips.selection.frontier",
+    "turnover-calculus": "pips.selection.turnover",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A
