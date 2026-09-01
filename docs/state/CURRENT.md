@@ -21,7 +21,12 @@ threshold, and a planner that refuses an optimum beyond the horizon `alpha(h)` w
 the last iterate when the map does not contract, and names a cycle as a cycle. The
 combined-blotter netting fixed point has landed too `[C-NET-01]`: the netting window is required
 with no default, and a ratio of 1.0 (nothing reaches the market) is refused rather than priced
-as a zero cost line. Next in M19: order-budget constraints.
+as a zero cost line. Order-budget constraints have landed `[C-OBUD-01]`, measured on a SLIDING
+one-second window: the 5/s governor binds rather than SEBI's ~10/s threshold, because a strategy
+the governor throttles is not the strategy that was validated.
+
+**M19's pieces are all built.** What is missing is not another piece but the WIRING: no search
+stage invokes any of them, which is why every M19 row reads `building`.
 
 **M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
 stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
@@ -93,7 +98,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 199 files · mypy --strict 199 files · 1189 pytest · clippy clean · cargo test ok
+  ruff 201 files · mypy --strict 201 files · 1210 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:

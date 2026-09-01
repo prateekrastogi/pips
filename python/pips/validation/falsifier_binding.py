@@ -77,6 +77,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "turnover-calculus": "pips.selection.turnover",
     "joint-turnover": "pips.selection.turnover",
     "blotter-netting": "pips.selection.netting",
+    "order-budget": "pips.selection.order_budget",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A

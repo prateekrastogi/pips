@@ -328,3 +328,22 @@
     - "tests/unit/test_netting_fixed_point.py"
   status: building
   owner_milestone: M19
+
+- id: C-OBUD-01
+  title: "Order budget is a selection constraint, so research cannot certify an unrunnable strategy"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/selection/order_budget.py"
+  tests:
+    - "tests/unit/test_order_budget.py"
+  status: building
+  owner_milestone: M19
+  # Blueprint §12: "order budget respected as an optimizer constraint, so research never
+  # certifies a strategy the engine may not legally run." Three limits, measured on a SLIDING
+  # one-second window: the 5/s governor (half SEBI's ~10/s registration-free threshold), the
+  # 2/s per-symbol throttle, and the broker's daily cap. The governor binds, not the legal
+  # threshold -- at 7/s a strategy is legal and still inadmissible, because the governor
+  # throttles it and the throttled strategy is not the one that was validated.
+  #
+  # `building`: no stage invokes this yet, and the daily cap (~3000) is the blueprint's
+  # "verify current" number -- a figure to confirm at broker onboarding, not a constant to
+  # trust. Confirming it is an M6/onboarding item, not a code change.
