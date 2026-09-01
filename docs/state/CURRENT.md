@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 219 files · mypy --strict 219 files · 1456 pytest · clippy clean · cargo test ok
+  ruff 220 files · mypy --strict 220 files · 1460 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,15 +186,16 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **The suite is 3:15 and the family searches are most of it.** `test_families.py` alone is
-   1:35 for three full searches, and each is genuine as-of evaluation over thousands of stamps.
-   Jenkins runs this on every push. Worth deciding: a smaller shared panel for the wiring tests
-   (the selection results are noise either way), or accepting the cost as the price of testing
-   the chain end to end rather than in pieces.
-2. **The fixtures cannot answer questions about correlation.** Two statistics agree that the
-   correlation among family winners is dominated by preserved-window length rather than by
-   cross-section width, on synthetic random walks where the true structure is nil. Anything that
-   turns on how correlated the families really are needs real bars.
+1. **The synthetic fixtures are near the end of what they can support.** Three findings now
+   point the same way: correlation between families is dominated by window length rather than
+   anything real; A06 participates only because these particular seeded walks happen to produce
+   gaps (2 of 10 name sets); and A12 cannot run at all without sixty sessions. The chain is
+   wired and tested end to end — what it selects is noise, and no amount of fixture work changes
+   that. The next real step is bars from Breeze, which is M6 territory.
+2. **The suite is 3:15, most of it genuine as-of evaluation.** Accepted deliberately this tick
+   after the compression was abandoned: a cheaper panel silently disabled A06. If it needs to
+   come down, the honest lever is fewer families in the wiring tests, not a panel whose validity
+   depends on symbol-name luck.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

@@ -518,6 +518,14 @@
   # edge" are different findings and the same number, and an alpha yielding nothing would lose
   # a search it never entered.
   #
+  # A06's membership is CONDITIONAL ON THE DATA and now says so. It fades an unconfirmed
+  # idiosyncratic gap, qualifying gaps are rare in a seeded random walk, and the walk depends on
+  # the symbol name -- of ten name sets tried it fired on two (the shipped SMOKE* and the wide
+  # WIDE*), at every session length from 120 to 375 bars. Regenerating the fixtures under a
+  # different seed or different names could drop it silently: no forecasts, a flat series,
+  # excluded at promotion, reading as a fact about the alpha. A test asserts the condition holds
+  # so that when it stops, the failure names the cause.
+  #
   # Each driver DECLARES `minimum_sessions`: boundaries the evaluation window must contain
   # before it can forecast. Zero for the bar-warm-up families; one for A05/A06 (a gap is
   # measured against the prior session's close) and A07 (an opening range needs a session

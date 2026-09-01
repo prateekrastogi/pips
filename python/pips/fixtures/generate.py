@@ -54,6 +54,12 @@ class FixtureSpec:
     tick_paise: int = 5
     second_bar_day: str = "2026-06-05"
     second_bar_symbol: str = "SMOKEA"
+    session_minutes: int = SESSION_MINUTES
+    """Bars in a session. 375 is the real NSE day (09:15 -> 15:30).
+
+    Part of the spec, so part of the manifest hash: two panels differing only in session length
+    are different data and must not share an identity.
+    """
 
     def payload(self) -> dict[str, object]:
         return {
@@ -64,6 +70,7 @@ class FixtureSpec:
             "tick_paise": self.tick_paise,
             "second_bar_day": self.second_bar_day,
             "second_bar_symbol": self.second_bar_symbol,
+            "session_minutes": self.session_minutes,
         }
 
 
@@ -143,14 +150,18 @@ def generate(out_dir: Path, spec: FixtureSpec | None = None) -> Manifest:
         for day in spec.days:
             rel = f"bars/1m/{symbol}_{day}.json"
             files[rel] = _write(
-                out_dir / rel, _stream(spec, symbol, day, NS_PER_MINUTE, SESSION_MINUTES)
+                out_dir / rel, _stream(spec, symbol, day, NS_PER_MINUTE, spec.session_minutes)
             )
 
     rel = f"bars/1s/{spec.second_bar_symbol}_{spec.second_bar_day}.json"
     files[rel] = _write(
         out_dir / rel,
         _stream(
-            spec, spec.second_bar_symbol, spec.second_bar_day, NS_PER_SECOND, SESSION_MINUTES * 60
+            spec,
+            spec.second_bar_symbol,
+            spec.second_bar_day,
+            NS_PER_SECOND,
+            spec.session_minutes * 60,
         ),
     )
 
