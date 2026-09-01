@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 222 files · mypy --strict 222 files · 1473 pytest · clippy clean · cargo test ok
+  ruff 223 files · mypy --strict 223 files · 1489 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,16 +186,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **The container writes to `/srv/pips` as root.** Promoting bronze to silver produced a
-   root-owned parquet the VM's `ubuntu` user could not rewrite, so a second promotion would have
-   failed on permissions — in exactly the case the design promises is safe, since promotion is
-   idempotent. Chowned by hand. The general fix is a `user:` on the compose service, which
-   touches trading-path services and needs its own tick.
-2. **Nothing reads silver.** `[C-SILVER-01]` is `building` for that reason: 2,216 real bars sit
-   in `/srv/pips/silver` and the search still runs on generated fixtures. A loader plus a
-   panel-source switch would let `s1-search` run on real bars — though two symbols over three
-   days is not a panel a cross-sectional alpha can rank, so the honest next step after that is
-   more backfill, not more code.
+1. **Nothing reads silver.** `[C-SILVER-01]` is `building` for that reason: 2,216 real bars sit
+   in `/srv/pips/silver` — two names over three trading days, ICICIBANK and RELIANCE — and the
+   search still runs on generated fixtures. A loader plus a panel-source switch would let
+   `s1-search` run on real bars. Two symbols over three days cannot support a cross-sectional
+   ranking, so the honest step after that is more backfill, not more code.
+2. **Local CI cannot fail on a reader or engine Dockerfile.** `make ci-container` builds
+   RESEARCH only; the other two images are built solely by the deploy rail, which is how a
+   parse error reached the VM today. Two cheap text guards were added, but the structural gap
+   stands: building all three locally, or having Jenkins build them, would close it.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
