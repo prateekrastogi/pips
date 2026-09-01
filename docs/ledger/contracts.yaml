@@ -212,8 +212,38 @@
   # Adequate while the threat is accident (one operator, one VM, DRY_RUN) and content hashing
   # carries the weight; NOT adequate for a plant running unattended against real money, where
   # the verifier must be unable to sign. Ed25519 is a stated prerequisite for that and a
-  # dependency decision this milestone does not need to make. The Rust boot check, the
-  # dossier and the lockbox one-shot run are also still to come.
+  # dependency decision this milestone does not need to make. The Rust boot check and the
+  # lockbox one-shot run are also still to come; the dossier landed as `[C-DOSS-01]`.
+
+- id: C-DOSS-01
+  title: "Certification dossier: eight sections, gate values not verdicts, bound to the bundle"
+  spec: "IMPLEMENTATION.md#391-certification-dossier"
+  code: "python/pips/certification/dossier.py"
+  tests:
+    - "tests/unit/test_certification_dossier.py"
+  status: building
+  owner_milestone: M20
+  # VALUES, NOT VERDICTS. `Measurement` has no field to store an outcome in, so a dossier cannot
+  # claim a pass on a failing number -- nothing in it says "pass". A stored verdict can disagree
+  # with the number printed beside it, and a reader trusts the verdict.
+  #
+  # ABSENCE MUST NOT READ AS A VALUE. `name in section` is true for None, for "" and for "N/A",
+  # so a dossier of placeholders would certify a strategy nobody measured -- the same shape as a
+  # rate-limited HTTP 200 or a NOT_RUN gate read as PASSED. There is deliberately no way to write
+  # "genuinely unavailable": a strategy whose kill thresholds are unknown is not certifiable with
+  # a caveat, it is incomplete. But 0, 0.0 and False are results, and `if not value` erases them.
+  #
+  # COMPLETENESS IS NOT PASSING. `complete` asks whether everything was recorded, never whether
+  # it was good. Conflated, a measured failure looks unmeasured and the rejection dossier -- what
+  # rule 4 counts, and what "top-5 is a maximum, fewer is a valid output" needs -- is unwritable.
+  #
+  # THE BUNDLE'S SIGNATURE DOES NOT PROTECT THE DOSSIER: it covers the dossier's HASH, not its
+  # bytes, so an edited dossier leaves `verify_bundle` saying yes and only `bind_dossier` notices.
+  # The direction is forced -- the dossier is sealed first and the bundle names it, so a dossier
+  # naming the bundle back would need a hash that does not exist until the dossier is sealed.
+  #
+  # `building`: the writers that fill these sections from S5 output do not exist yet, so today
+  # the schema is enforced but nothing populates it end to end.
 
 - id: C-OMS-01
   title: "OrderIntent / ExecutionEvent schemas with idempotency keys"

@@ -391,6 +391,23 @@ signed. On boot the Rust loader executes the bundle's golden fixtures and refuse
 nodes, schema/semantic-version mismatch, missing cost/risk versions, bad checksum, or unequal
 quantized output, before entering READY.
 
+### 3.9.1 Certification dossier `[C-DOSS-01]`
+
+The evidence the bundle's `validation_dossier_hash` names. Eight sections (blueprint §12.2):
+identity, trade context, economics, stability, stress, capacity, operations, decision — holding
+**gate values, not verdicts**. A dossier recording `dsr_passed: true` has discarded the only
+thing anyone can re-check; one recording `0.97 against a 0.95 floor` can be disputed.
+
+Completeness is **not** passing. `complete` asks whether every required field was recorded, never
+whether it was good — conflating them makes a measured failure look unmeasured and makes the
+rejection dossier, which is what rule 4 counts and what "top-5 is a maximum, fewer is a valid
+output" requires, impossible to write. A required field that is absent, `None`, empty or a
+placeholder (`"N/A"`, `"TBD"`) is incomplete; `0`, `0.0` and `False` are results.
+
+The binding is one-directional and cannot be made symmetric: the dossier is sealed first and the
+bundle names its hash, so the bundle's signature covers the dossier's *hash*, not its bytes. An
+edited dossier therefore leaves `verify_bundle` saying yes. Certification runs both checks.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -692,8 +709,8 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   promoted to silver under the exchange's identity `[C-SILVER-01]`; the
   search grid derived from each spec's pre-registered domain `[C-GRID-01]`; one search driver
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
-- **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; certification
-  dossier (report card fields from the reference blueprint §12.2); lockbox one-shot run;
+- **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
+  dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); lockbox one-shot run;
   **top-5 is a maximum — fewer is a valid output**. *Verify:* bundle round-trip; dossier
   completeness check.
 

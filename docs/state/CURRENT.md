@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 227 files · mypy --strict 227 files · 1523 pytest · clippy clean · cargo test ok
+  ruff 229 files · mypy --strict 229 files · 1563 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,16 +186,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Continue M20.** `[C-BNDL-01]` has build/sign/validate and a tamper test; still to come are
-   the certification dossier (report-card fields from the blueprint §12.2), the lockbox one-shot
-   run, and the Rust loader's boot check — which is where "refuses unknown nodes, version
-   mismatch, bad checksum, unequal quantized output" actually gets enforced. **Top-5 is a
-   maximum and fewer is a valid output**, so whatever selects bundles must be able to certify
-   zero.
-2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
-   every measurement above, and widening it means external Breeze calls on a metered budget with
-   the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists; the budget
-   is 100k calls/day and 32 parallel fetches.
+1. **Finish M20.** `[C-BNDL-01]` and `[C-DOSS-01]` are in; what remains is the **lockbox one-shot
+   run** (it raises rather than filters, and the unlock attempt is recorded before the raise) and
+   the **Rust loader's boot check** — golden fixtures replayed, unknown nodes / version mismatch /
+   bad checksum / unequal quantized output refused before READY. Nothing yet POPULATES a dossier
+   from S5 output; the schema is enforced and the writers do not exist.
+2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on every
+   measurement the dossier would record, and widening it means external Breeze calls on a metered
+   budget with the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists;
+   the budget is 100k calls/day and 32 parallel fetches.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
