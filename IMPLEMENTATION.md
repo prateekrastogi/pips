@@ -683,7 +683,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   partial pooling for family means; sealed-lockbox enforcement in the data layer (refuses
   those dates below release stage). *Verify:* Monte-Carlo size/coverage tests; lockbox-refusal
   test; null search on max-Sharpe.
-- **M19 selection + turnover optimizer**: non-dominated (Pareto) sort across net return, DSR,
+- **M19 selection + turnover optimizer** `[C-SEL-01]`: non-dominated (Pareto) sort across net return, DSR,
   MDD/CVaR, cost share, turnover/order count, stability, broker & capital-tier robustness;
   correlation clustering (1−corr) so near-variants form one cluster; τ*, h* per broker × tier
   (threshold economics + rotation condition from the Quant Foundations doc); combined-blotter

@@ -11,10 +11,24 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M16 stress battery — core, falsifier binding and concentration leave-outs landed.** M15 is DONE: Purged/embargoed outer and inner folds, plateau-centroid
-selection, and successive halving that counts every viewed trial (rule 4). M14 is
-complete: F1 state machine, flatten scheduler and F0/F1 reconciliation. M6's masters are complete
-except ASM/GSM/T2T and index membership; all nine T1 alphas have compute plugins.
+**M19 selection + turnover optimizer — the non-dominated (Pareto) sort has landed
+`[C-SEL-01]`, ledgered `building` because nothing consults it yet.** Next in M19: correlation
+clustering (1−corr), τ*/h* per broker × tier, the combined-blotter netting fixed point and
+order-budget constraints.
+
+**M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
+stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
+hierarchical partial pooling for family means. M16 and M17 are done: stress battery, falsifier
+binding with an honest coverage report, concentration leave-outs. M15 is DONE: purged/embargoed
+outer and inner folds, plateau-centroid selection, successive halving that counts every viewed
+trial (rule 4). M14 is complete: F1 state machine, flatten scheduler and F0/F1 reconciliation.
+M6's masters are complete except ASM/GSM/T2T and index membership; all nine T1 alphas have
+compute plugins.
+
+`[G-PROV-01]` closed a defect in the gate itself: `docker compose run research make ci` — the
+command the docs named as THE way to verify — reported `ci: green` from a day-old image. The
+verify image now states which commit it holds and refuses to run the ladder against anything
+else; `make ci-container` is the documented command (ADR-0013).
 
 `pips/data/pit/store.py` gives the project its two clocks: `valid_from` (when a fact was true
 of the world) and `known_from` (when we knew it). The log is append-only in the literal sense —
@@ -72,7 +86,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 186 files · mypy --strict 186 files · 1054 pytest · clippy clean · cargo test ok
+  ruff 189 files · mypy --strict 189 files · 1077 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -155,14 +169,19 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
+1. **Give the Pareto sort a caller.** `pips.selection.pareto` is mutation-verified and ledgered
+   `building`, but nothing in the search consults it yet. M19 continues with correlation
+   clustering (1−corr, so near-variants form one cluster), τ*/h* per broker × tier, and the
+   combined-blotter netting fixed point — the clustering is the natural next unit and the
+   frontier is its input. A capability with no caller is how `check_unexplained_ratio_jump`
+   stayed dead for a milestone.
+2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
    the acceptable failure, but resolution is lost. NSE's own equity list carries listing dates
    and would need its own download decision.
-2. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
+3. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
    rests on an empty list and QC reports its own skipped comparisons because of it.
-3. **Start M19** — M18 is complete and the gate defect is closed, so the §6 order applies.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
