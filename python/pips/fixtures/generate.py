@@ -67,6 +67,35 @@ class FixtureSpec:
         }
 
 
+WIDE_SPEC = FixtureSpec(
+    # Eight names instead of two. `make s5-smoke` runs seven families over a two-symbol panel,
+    # so every alpha trades the same two names, their PnL streams overlap by construction, and
+    # the pairwise gate collapses them almost regardless of merit. A03 (cross-sectional
+    # reversal) and A04 (residual reversion) rank a cross-section of two, which is a tie.
+    #
+    # SESSIONS ARE DELIBERATELY UNCHANGED. The as-of loop iterates TIMESTAMPS, so widening the
+    # cross-section leaves the number of decision points -- and the search runtime -- alone.
+    # Adding sessions multiplies both. Five already give A05 a prior close and A07 an opening
+    # range four times over; A12 needs sixty and is a separate decision.
+    symbols=(
+        "WIDEA",
+        "WIDEB",
+        "WIDEC",
+        "WIDED",
+        "WIDEE",
+        "WIDEF",
+        "WIDEG",
+        "WIDEH",
+    ),
+    second_bar_symbol="WIDEA",
+)
+"""A broader cross-section for `make s5-smoke`, generated on demand rather than committed.
+
+Four times the bars of the default, and the spec hash makes it reproducible from the seed
+(rule 1), so storing the bytes buys nothing.
+"""
+
+
 def _stream(
     spec: FixtureSpec, symbol: str, day: str, interval_ns: int, count: int
 ) -> list[dict[str, int | str]]:
@@ -141,8 +170,12 @@ def generate(out_dir: Path, spec: FixtureSpec | None = None) -> Manifest:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
-    out_dir = Path(args[0]) if args else Path("fixtures")
-    manifest = generate(out_dir)
+    # `--wide` selects the broader cross-section. A flag rather than a second target, so the
+    # spec that produced a panel is visible in the command that made it.
+    wide = "--wide" in args
+    positional = [a for a in args if not a.startswith("-")]
+    out_dir = Path(positional[0]) if positional else Path("fixtures")
+    manifest = generate(out_dir, WIDE_SPEC if wide else None)
     print(f"fixtures written to {out_dir}: {len(manifest['files'])} files")
     print(f"manifest_hash={manifest['manifest_hash']}")
     return 0

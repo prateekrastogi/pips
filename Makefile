@@ -92,6 +92,10 @@ s1-search: ## Run successive halving over A01 variants and RECORD every trial [C
 s5-smoke: ## Search every alpha family, promote the winners, and run S5 across them [C-S5-01]
 	$(PY) -m pips.cli s5-smoke fixtures $(CURDIR)/build/s5-smoke/registry.db
 
+s5-smoke-wide: ## s5-smoke on a wider cross-section (8 symbols), generated on demand
+	$(PY) -m pips.cli fixtures generate --wide $(CURDIR)/build/fixtures-wide
+	$(PY) -m pips.cli s5-smoke $(CURDIR)/build/fixtures-wide $(CURDIR)/build/s5-wide/registry.db
+
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
 	@echo "backtest-smoke: not implemented until M14"; exit 1
 
@@ -108,7 +112,7 @@ JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
 JENKINS_URL ?= http://127.0.0.1:8081
 REF ?= main
 
-.PHONY: provenance ci-container s1-search s5-smoke
+.PHONY: provenance ci-container s1-search s5-smoke s5-smoke-wide
 .PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build install-hooks
 
 jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)

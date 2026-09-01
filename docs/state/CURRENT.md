@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 216 files · mypy --strict 216 files · 1398 pytest · clippy clean · cargo test ok
+  ruff 217 files · mypy --strict 217 files · 1406 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,17 +186,16 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **The fixture panel is still too thin for selection to mean anything.** Two synthetic symbols
-   over five sessions: every alpha trades the same two names, so their PnL streams correlate
-   heavily and the pairwise gate collapses them almost regardless of merit — the frontier drops
-   7 to 3 and clustering 3 to 2 on noise. A05 and A07 cannot trade in any window inside one
-   session. A12 needs 60 sessions and there are five. A wider fixture (more symbols, more
-   sessions) would make `make s5-smoke` exercise selection rather than wiring. The generator
-   already emits OHLCV, so this is breadth, not new fields.
+1. **Does the wider panel actually change the selection?** `make s5-smoke-wide` exists and the
+   cross-section is real (A03/A04 rank eight names, not two), but the effect on M_erank reverses
+   between preserved-window lengths — 900 bars says the wide panel decorrelates, 400 and 500 say
+   the opposite. That is estimation noise in short series, and settling it needs either longer
+   series or a direct measure of pairwise correlation among family winners rather than the
+   effective rank of everything.
 2. **A06 has no dispatch path.** Its `compute()` takes a fourth argument, `event_status`, so it
-   cannot share the common signature. That is by design — it forecasts nothing without an event
-   source rather than reading an absent corporate action as an absent event — but it means one
-   family can never enter a search until there is an event source to supply.
+   cannot share the common signature. By design — it forecasts nothing without an event source
+   rather than reading an absent corporate action as an absent event — but one family can never
+   enter a search until there is an event source to supply.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
