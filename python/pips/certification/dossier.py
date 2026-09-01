@@ -57,6 +57,7 @@ __all__ = [
     "bind_dossier",
     "build_dossier",
     "check_completeness",
+    "is_hollow",
     "require_complete",
 ]
 
@@ -237,7 +238,7 @@ def _canonical(value: Any) -> Any:
     return value
 
 
-def _is_hollow(value: Any) -> bool:
+def is_hollow(value: Any) -> bool:
     """True when something is present but says nothing.
 
     Numbers are never hollow: `0`, `0.0` and `False` are results, and treating them as absences
@@ -286,7 +287,7 @@ def check_completeness(dossier: Dossier) -> CompletenessReport:
             path = f"{section}.{name}"
             if name not in body:
                 missing.append(path)
-            elif _is_hollow(body[name]):
+            elif is_hollow(body[name]):
                 hollow.append(path)
 
     for section, body in dossier.sections.items():

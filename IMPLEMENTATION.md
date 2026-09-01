@@ -469,6 +469,24 @@ four cost/delay stress gates are named *without a bar anywhere*, so they cannot 
 no drafted dossier can pass `[C-CERT-01]` until those six thresholds are decided and recorded.
 Inventing them here is exactly what this module refuses to do.
 
+### 3.9.5 Building a signable bundle `[C-WRIT-02]`
+
+`[C-WRIT-01]` may return a partial dossier, because there the gap is the finding. A bundle has
+no partial form: `build_bundle` signs it, and a signed artifact carrying an invented `code_hash`
+is worse than an unsigned one — the signature is precisely what invites the plant to trust it.
+So the writer either produces a bundle backed by real provenance or refuses, naming everything
+it lacks in one message rather than one per rebuild.
+
+**The dossier hash is derived, never supplied** — a caller who can pass it binds a bundle to
+evidence that does not exist. **An incomplete dossier cannot be signed**, or the bundle certifies
+gaps. **A hash that is not a hash is refused**: `[C-REG-01]`'s argument about snapshot roots
+applies to every hash here, and this is the artifact the plant executes. **An empty or inverted
+validity window is refused** — it is a bundle that is never valid while looking bounded.
+
+The required set is enumerated from `StrategyBundle`'s own fields, so a field added later is
+demanded of the provenance without anyone remembering: a hand-written list does not grow with
+the model, and the field it would miss is the one nobody thought about.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -772,7 +790,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
-  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`;
+  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`;
   **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 

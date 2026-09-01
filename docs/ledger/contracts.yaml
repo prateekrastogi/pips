@@ -305,6 +305,33 @@
   # pass `[C-CERT-01]` until they are decided and recorded. A test pins that list, so closing
   # the gap has to touch a test that says it existed.
 
+- id: C-WRIT-02
+  title: "Bundle writer: real provenance or refusal, never a signed guess"
+  spec: "IMPLEMENTATION.md#395-building-a-signable-bundle"
+  code: "python/pips/certification/bundle_writer.py"
+  tests:
+    - "tests/unit/test_bundle_writer.py"
+  status: building
+  owner_milestone: M20
+  # `[C-WRIT-01]` may return a PARTIAL dossier because there the gap is the finding. A bundle
+  # has no partial form: build_bundle signs it, and a signed artifact carrying an invented
+  # code_hash is worse than an unsigned one -- the signature is what invites the plant to trust
+  # it. Refuse, naming everything missing in one message rather than one per rebuild.
+  #
+  # THE DOSSIER HASH IS DERIVED, NEVER SUPPLIED: a caller who can pass it binds a bundle to
+  # evidence that does not exist. An INCOMPLETE DOSSIER CANNOT BE SIGNED, or the bundle
+  # certifies gaps. A HASH THAT IS NOT A HASH IS REFUSED -- `[C-REG-01]`'s argument about
+  # snapshot roots, applied to the artifact the plant executes. An EMPTY OR INVERTED VALIDITY
+  # WINDOW is refused: it is a bundle that is never valid while looking bounded.
+  #
+  # REQUIRED_PROVENANCE is enumerated from StrategyBundle's own fields, so a field added later
+  # is demanded without anyone remembering. `is_hollow` is imported from `[C-DOSS-01]` rather
+  # than re-implemented: two definitions of "this says nothing" would drift, and the bundle is
+  # the worse place to hold the looser one.
+  #
+  # `building`: nothing calls it yet -- the S6 caller that picks a winner and assembles its
+  # provenance is the remaining piece, and it is blocked on the concentration bar (ADR-0014).
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"
