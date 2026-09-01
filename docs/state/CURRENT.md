@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 223 files · mypy --strict 223 files · 1489 pytest · clippy clean · cargo test ok
+  ruff 225 files · mypy --strict 225 files · 1501 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,15 +186,16 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Nothing reads silver.** `[C-SILVER-01]` is `building` for that reason: 2,216 real bars sit
-   in `/srv/pips/silver` — two names over three trading days, ICICIBANK and RELIANCE — and the
-   search still runs on generated fixtures. A loader plus a panel-source switch would let
-   `s1-search` run on real bars. Two symbols over three days cannot support a cross-sectional
-   ranking, so the honest step after that is more backfill, not more code.
-2. **Local CI cannot fail on a reader or engine Dockerfile.** `make ci-container` builds
-   RESEARCH only; the other two images are built solely by the deploy rail, which is how a
-   parse error reached the VM today. Two cheap text guards were added, but the structural gap
-   stands: building all three locally, or having Jenkins build them, would close it.
+1. **Run a search on the real bars.** The wiring exists — `run_family_searches(silver=...)` reads
+   promoted bars and pins the parquet it read — and it has only been exercised on a synthetic
+   silver file. The real one is on arb-vm: two names over three trading days, 1,108 bars each.
+   Three sessions clear the session floor for A05/A06/A07, but two symbols cannot support a
+   cross-sectional ranking, so expect A03 and A04 to rank a tie. The run is worth doing for what
+   it reveals about the data, not for what it selects.
+2. **More backfill.** Two symbols over three days is the binding constraint on everything above.
+   The Breeze budget is 100k calls/day and 32 parallel fetches; `pips.data.breeze.campaign`
+   exists. Widening the universe and the date range is what turns the chain from wired into
+   useful — and it is an external-call decision, not a code one.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
