@@ -24,8 +24,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import polars as pl
 
 from pips.alphas.forecast import Forecast
 from pips.alphas.t1 import a01, a02, a03, a04, a05, a06, a07, a08
@@ -37,6 +41,7 @@ if TYPE_CHECKING:
 __all__ = ["DRIVERS", "NOT_RUNNABLE", "AlphaDriver"]
 
 _NS = 1_000_000_000
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
 @dataclass(frozen=True)
@@ -252,12 +257,53 @@ DRIVERS: dict[str, AlphaDriver] = {
     ),
 }
 
-NOT_RUNNABLE: dict[str, str] = {
+
+@dataclass(frozen=True)
+class Exclusion:
+    """Why an alpha is not driven, and a predicate that says whether that is still true.
+
+    A07 sat here for a milestone because "the panel has no high_paise, low_paise" -- true of the
+    panel and false of the fixtures, which carried them all along. Nobody caught it because the
+    reason was PROSE, and prose does not fail. ``still_blocked`` does: when the blocker goes
+    away the test fails and the alpha's absence becomes a decision again, rather than a sentence
+    nobody re-read.
+    """
+
+    reason: str
+    still_blocked: Callable[[pl.DataFrame], bool]
+
+
+def _a12_needs_more_sessions(panel: pl.DataFrame) -> bool:
+    """A12 declares ``history_sessions: [60, 250]``; the fixture panel spans five sessions.
+
+    Read from the SPEC rather than hardcoded, so changing the declaration moves the blocker
+    with it.
+    """
+    from pips.alphas.spec import load_alpha_spec
+
+    minimum = load_alpha_spec(
+        Path("config/search_spaces/A12_intraday_seasonal.yaml")
+    ).parameter_domain["history_sessions"][0]
+    sessions = {
+        datetime.fromtimestamp(ts / 1e9, _IST).date() for ts in panel["close_ts_ns"].to_list()
+    }
+    return bool(len(sessions) < minimum)
+
+
+NOT_RUNNABLE: dict[str, Exclusion] = {
     # Each reason was established by running the alpha against the fixture panel and reading
     # what it said -- not by inspecting imports and guessing.
-    "A12": (
-        "declares history_sessions [60, 250] and the fixture panel spans five sessions "
-        "(2026-06-01 to 06-05). The seasonal profile needs a year of history to estimate; a "
-        "run here would be sweeping a parameter no value of which the data can satisfy."
+    "A12": Exclusion(
+        reason=(
+            "declares history_sessions [60, 250] and the fixture panel spans five sessions "
+            "(2026-06-01 to 06-05). Two costs, not one: a 61-session panel is ~22,900 stamps, "
+            "and because sixty sessions of history must elapse before A12's first forecast its "
+            "minimum viable budget is ~56x every other family's -- one `initial_budget` across "
+            "the dispatch cannot serve both. Measured at ~1.1ms per as-of view, that is ~2 "
+            "minutes per family on two symbols and ~8 on eight. Deferred deliberately: on "
+            "synthetic random walks the payoff is a ninth noise series, and real bars supply "
+            "sixty sessions for nothing."
+        ),
+        still_blocked=_a12_needs_more_sessions,
     ),
 }

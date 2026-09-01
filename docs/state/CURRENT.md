@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 219 files · mypy --strict 219 files · 1427 pytest · clippy clean · cargo test ok
+  ruff 219 files · mypy --strict 219 files · 1429 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,11 +186,12 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A12 is the last family outside the search.** It declares `history_sessions: [60, 250]` and
-   the fixture panel spans five sessions. Sessions are the expensive axis — they multiply the
-   decision points and the search runtime, unlike symbols — so a 60-session panel is a real cost
-   to weigh rather than an obvious win. Worth deciding deliberately: either generate one and
-   accept the runtime, or record that A12 stays out until real bars arrive.
+1. **Family-specific budget floors.** `run_family_searches` passes one `initial_budget` to every
+   driver. A12 needs sixty sessions of history before its first forecast, so its floor is ~56x
+   the others' — and any alpha with a long warm-up has the same shape of problem in miniature
+   (A05 and A07 already produce nothing in a window with no session boundary, which the
+   promotion step catches after the fact rather than the schedule anticipating). A per-driver
+   minimum budget would make that a declared property instead of an empirical surprise.
 2. **The fixtures cannot answer questions about correlation.** Two statistics agree that the
    correlation among family winners is dominated by preserved-window length rather than by
    cross-section width, on synthetic random walks where the true structure is nil. Anything that

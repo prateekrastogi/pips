@@ -51,12 +51,6 @@ def test_no_alpha_is_both_driven_and_excluded() -> None:
     assert not set(DRIVERS) & set(NOT_RUNNABLE)
 
 
-@pytest.mark.parametrize("alpha_id", sorted(NOT_RUNNABLE))
-def test_each_exclusion_states_a_reason(alpha_id: str) -> None:
-    # "Not runnable" without a reason is indistinguishable from "not got round to".
-    assert len(NOT_RUNNABLE[alpha_id]) > 30
-
-
 @pytest.mark.parametrize("alpha_id", IDS)
 def test_the_driver_key_matches_its_alpha_and_its_spec(alpha_id: str) -> None:
     driver = DRIVERS[alpha_id]
@@ -193,3 +187,52 @@ def test_the_build_reads_the_unchecked_values_too(alpha_id: str) -> None:
     for name, value in driver.unchecked.items():
         moved = replace(driver, unchecked={**driver.unchecked, name: Decimal(str(value)) + 1})
         assert repr(moved.build(swept, bars=1)) != repr(baseline), f"{alpha_id}: {name} ignored"
+
+
+# ------------------------------------------------------------ falsifiable exclusions --
+#
+# A07 sat in NOT_RUNNABLE for a milestone because "the panel has no high_paise, low_paise" --
+# true of the panel and false of the fixtures, which carried them all along. Nobody caught it
+# because the reason was PROSE, and prose does not fail.
+#
+# Every exclusion now carries a predicate that says whether its blocker still holds. When the
+# blocker goes away the test fails, and the alpha's absence becomes a decision again instead of
+# a sentence nobody re-read.
+
+
+@pytest.mark.parametrize("alpha_id", sorted(NOT_RUNNABLE))
+def test_each_exclusions_blocker_still_holds(alpha_id: str) -> None:
+    panel = load_panel(Path("fixtures"))
+    assert NOT_RUNNABLE[alpha_id].still_blocked(panel), (
+        f"{alpha_id}'s stated blocker no longer holds — it may be runnable now"
+    )
+
+
+@pytest.mark.parametrize("alpha_id", sorted(NOT_RUNNABLE))
+def test_each_blocker_is_falsifiable(alpha_id: str) -> None:
+    """A predicate that is True whatever it is shown is prose with parentheses.
+
+    A12's blocker is "the panel has fewer sessions than the declared minimum history", so a
+    panel with enough sessions must clear it. If the predicate cannot be made False, it is not
+    checking anything and the exclusion is no more verified than the sentence it replaced.
+    """
+    import polars as pl
+
+    day = 24 * 60 * 60 * 1_000_000_000
+    generous = pl.DataFrame(
+        {
+            "close_ts_ns": [i * day for i in range(300)],
+            "symbol": ["AAA"] * 300,
+            "close_paise": [100_000] * 300,
+            "volume": [1] * 300,
+            "open_paise": [100_000] * 300,
+            "high_paise": [100_000] * 300,
+            "low_paise": [100_000] * 300,
+        }
+    )
+    assert not NOT_RUNNABLE[alpha_id].still_blocked(generous)
+
+
+@pytest.mark.parametrize("alpha_id", sorted(NOT_RUNNABLE))
+def test_each_exclusion_still_states_a_reason(alpha_id: str) -> None:
+    assert len(NOT_RUNNABLE[alpha_id].reason) > 30

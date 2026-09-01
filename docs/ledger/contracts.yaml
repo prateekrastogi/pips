@@ -483,8 +483,19 @@
   # Halving converges to one winner, so a single family can never give S5 more than one
   # candidate -- S5 selects ACROSS families. Six drivers run on the fixture panel (A01-A05,
   # A08); three are excluded with reasons established by RUNNING them, not by guessing:
-  # Only A12 is excluded now: it declares history_sessions [60, 250] against a five-session
-  # panel, so no value of that parameter is satisfiable here.
+  # Only A12 is excluded now, and every exclusion carries a FALSIFIABLE predicate rather than
+  # prose: `still_blocked(panel)` says whether the stated blocker holds, and a test requires it
+  # to hold now AND to go False on a panel that removes it. A07 sat here for a milestone on a
+  # reason that was true of the panel and false of the fixtures; nobody caught it because prose
+  # does not fail. When A12's blocker lifts, the suite says so and its absence becomes a
+  # decision again.
+  #
+  # A12 is deferred deliberately, with the cost measured: a 61-session panel is ~22,900 stamps,
+  # and because sixty sessions must elapse before its first forecast its minimum viable budget
+  # is ~56x every other family's -- one `initial_budget` across the dispatch cannot serve both.
+  # At ~1.1ms per as-of view that is ~2 minutes per family on two symbols, ~8 on eight. On
+  # synthetic random walks the payoff is a ninth noise series, and real bars supply sixty
+  # sessions for nothing.
   #
   # A06 takes a fourth `event_status` argument and forecasts nothing without it -- its spec says
   # "missing event metadata => EXCLUDE the name, never assume no event". The dispatch binds a
