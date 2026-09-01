@@ -25,8 +25,11 @@ as a zero cost line. Order-budget constraints have landed `[C-OBUD-01]`, measure
 one-second window: the 5/s governor binds rather than SEBI's ~10/s threshold, because a strategy
 the governor throttles is not the strategy that was validated.
 
-**M19's pieces are all built.** What is missing is not another piece but the WIRING: no search
-stage invokes any of them, which is why every M19 row reads `building`.
+**S5 now runs the chain** `[C-S5-01]`: frontier → clustering → correlation gate → netting fixed
+point → τ*/h* at the re-priced line → order budget on the combined blotter, reporting the funnel
+step by step so a filter that rejects everything cannot pass for a selective search.
+`[C-SEL-01]`, `[C-NET-01]` and `[C-OBUD-01]` are now **enforced** — by construction, since no
+pipeline runs S5 against the registry yet.
 
 **M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
 stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
@@ -98,7 +101,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 201 files · mypy --strict 201 files · 1210 pytest · clippy clean · cargo test ok
+  ruff 203 files · mypy --strict 203 files · 1225 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:

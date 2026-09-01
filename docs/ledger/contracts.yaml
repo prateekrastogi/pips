@@ -286,7 +286,7 @@
     - "tests/unit/test_pareto.py"
     - "tests/unit/test_clustering.py"
     - "tests/unit/test_frontier_selection.py"
-  status: building
+  status: enforced
   owner_milestone: M19
   # The non-dominated sort, the 1-corr clustering and the frontier reduction that composes
   # them are in and mutation-verified. STILL `building`, and precisely: `select_frontier` gives
@@ -295,6 +295,11 @@
   # per broker x tier, the combined-blotter netting fixed point and order-budget constraints.
   # A row claiming enforcement for a capability no stage invokes is the
   # check_unexplained_ratio_jump failure written into the ledger instead of the code.
+  #
+  # ENFORCED as of the S5 stage: `pips.search.s5.run_s5` runs frontier -> clustering ->
+  # correlation gate and reports the funnel. Stated precisely, as [C-DATA-02] was: no pipeline
+  # yet runs S5 against the registry, so the constraint holds BY CONSTRUCTION rather than by
+  # observation. It refuses; it has not yet refused anything real.
 
 - id: C-TURN-01
   title: "tau* and h* are derived optima under the measured cost line, per broker x tier"
@@ -311,13 +316,18 @@
   # a golden-section solver for measured curves that recovers the closed form, and the per
   # broker x tier planner which refuses an optimum beyond the fitted horizon.
   #
-  # §6.3's joint fixed point is now in too: coordinate descent alternating tau|h and h|tau,
-  # which REFUSES rather than returning the last iterate when the map does not contract, and
-  # names a cycle as a cycle rather than as running out of iterations.
+  # §6.3's joint fixed point is in: coordinate descent alternating tau|h and h|tau, which
+  # REFUSES rather than returning the last iterate when the map does not contract, and names a
+  # cycle as a cycle rather than as running out of iterations.
   #
-  # NOT in: nothing in the search calls the planner or the joint solve yet, and the fold-to-fold
-  # dispersion of (tau*, h*) that §6.3 calls a robustness statistic has no consumer. `building`
-  # for those reasons, stated rather than implied.
+  # STILL `building`, and now for a sharper reason than "no caller". S5 invokes
+  # `plan_per_broker_tier`, which solves §6.1 and §6.2 INDEPENDENTLY -- and §6.3 says in terms
+  # that S5 solves them JOINTLY by coordinate descent, because tau* and h* interact through
+  # alpha(h). So the stage currently uses the weaker of the two solvers that exist, and
+  # `solve_joint` has no caller. That is a wiring gap in S5, not a missing capability.
+  #
+  # Also unconsumed: the fold-to-fold dispersion of (tau*, h*) that §6.3 calls a robustness
+  # statistic.
 
 - id: C-NET-01
   title: "Netting is measured on a declared window and re-prices the ensemble's cost line"
@@ -326,8 +336,12 @@
   tests:
     - "tests/unit/test_netting.py"
     - "tests/unit/test_netting_fixed_point.py"
-  status: building
+  status: enforced
   owner_milestone: M19
+  #
+  # ENFORCED as of the S5 stage: S5 solves the netting fixed point on the ensemble's combined
+  # blotter and prices every broker x tier line at the measured ratio. Holds by construction --
+  # no pipeline runs S5 yet.
 
 - id: C-OBUD-01
   title: "Order budget is a selection constraint, so research cannot certify an unrunnable strategy"
@@ -335,7 +349,7 @@
   code: "python/pips/selection/order_budget.py"
   tests:
     - "tests/unit/test_order_budget.py"
-  status: building
+  status: enforced
   owner_milestone: M19
   # Blueprint §12: "order budget respected as an optimizer constraint, so research never
   # certifies a strategy the engine may not legally run." Three limits, measured on a SLIDING
@@ -344,6 +358,23 @@
   # threshold -- at 7/s a strategy is legal and still inadmissible, because the governor
   # throttles it and the throttled strategy is not the one that was validated.
   #
-  # `building`: no stage invokes this yet, and the daily cap (~3000) is the blueprint's
-  # "verify current" number -- a figure to confirm at broker onboarding, not a constant to
-  # trust. Confirming it is an M6/onboarding item, not a code change.
+  # The daily cap (~3000) remains the blueprint's "verify current" number -- a figure to
+  # confirm at broker onboarding, not a constant to trust. Confirming it is an M6/onboarding
+  # item, not a code change.
+  #
+  # ENFORCED as of the S5 stage: S5 measures the budget on the COMBINED blotter of the surviving
+  # ensemble, which is the only measurement that can catch three members at 2/s each breaching
+  # the 5/s governor together. Holds by construction -- no pipeline runs S5 yet.
+
+- id: C-S5-01
+  title: "S5 composes the selection chain and reports the funnel that produced the ensemble"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/search/s5.py"
+  tests:
+    - "tests/unit/test_s5.py"
+  status: building
+  owner_milestone: M19
+  # The stage exists and is mutation-verified; nothing runs it. It reads candidates passed in
+  # rather than pulling completed runs from the registry, and no CLI target or pipeline invokes
+  # it -- so `building`, by the same standard that kept the pieces `building` until this stage
+  # gave them a caller. Turning it on means a registry-backed entry point.
