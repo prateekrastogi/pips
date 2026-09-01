@@ -61,6 +61,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "shuffled-future": "pips.validation.nulls",
     "bh-fdr": "pips.validation.fdr",
     "purged-walk-forward": "pips.validation.walk_forward",
+    "era-stability": "pips.validation.era_stability",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A

@@ -1,8 +1,10 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · **Loop PAUSED** by the owner. The
-security-master download was approved and completed after the pause; see the OPEN QUESTION
-below, which is the first thing to settle tomorrow.
+**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · loop running (5m).
+
+> Rewritten after incremental edits left this file self-contradictory — two "action 2"s, one
+> claiming the QC seam resolved nothing immediately after saying it was done. This is the
+> document every tick orients on, so a stale one poisons the ticks that read it.
 
 > This file is a snapshot, not a log. It had accreted every finished milestone since M0 and
 > still named a branch we left and two owner-actions the owner had already cleared. The
@@ -70,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 158 files · mypy --strict 158 files · 859 pytest · clippy clean · cargo test ok
+  ruff 160 files · mypy --strict 160 files · 870 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -107,6 +109,7 @@ falsifier-binding mutation run — removing the registry's import killed NOTHING
   import is the whole premise: without it "this check exists" is "this name is in a dict I
   wrote". Needed a phantom module entry to observe. Eighth test-level finding this session.
 falsifier coverage — 15 bound, 17 unbound of 32. The unbound are NAMED, not just counted.
+falsifier coverage — 16 bound, 16 unbound of 32; A07 and A12 fully bound
 stress battery — all_run_cases_passed True, certifies False (4 cases cannot run: 3 need
   per-bucket attribution, 1 needs a sector map). With every input provided it certifies.
 stress-battery mutation run — 6 of 6 killed. The drop-best-block fixture could NOT be
@@ -150,36 +153,20 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A LISTING-DATE SOURCE.** The vendor file has a blank `DateOfListing` on all 5,873 rows,
-   so instruments are recorded with `UNKNOWN_LISTING_DATE` (1990-01-01). That makes valid time
-   DEGENERATE for them: a reused code has two overlapping claimants, the master refuses to
-   guess (loudly, which is the acceptable failure), and symbol history is knowledge history.
-   Replacing the sentinel is what restores valid time. NSE's own equity list carries listing
-   dates and would need its own download decision.
-
-2. **DONE — identity clock split, and the security-master download** (approved and completed): The seam is connected (symbol → as-of
-   instrument master → ISIN → action master → verdict) and tested end to end, but no real
-   instruments are loaded, so it still resolves nothing and fails closed. Probing settled how
-   to load them: `get_names` returns no ISIN, and the SDK's own master loader discards every
-   column except code/token/name — so the 2.9 MB `SecurityMaster.zip` must be fetched and its
-   raw `.txt` parsed. See `docs/reports/feasibility/breeze-security-master.md`.
-2. **NSE holiday list** — `holidays_verified: false` today, so every session-state decision
-   rests on an empty list. It is the last unverified placeholder in the calendar.
-3. **Close the remaining falsifier coverage gap** — now 17 of 32 unbound, each named by
-   `coverage_report`. What is left needs: a sector map (M6, blocked on the instrument master),
-   an events/circuit master, era-stability splits, and midquote/next-bar-open confirmation
-   (needs T2 quote data). Several are genuinely blocked on data; the era-stability split is
-   not, and is the next unblocked one.
+1. **A02's "only one lookback works" and A04's half-life stability** — the last two unbound
+   falsifiers that plausibly need no new data. Everything else in the remaining 16 waits on a
+   sector map, an events/circuit master, or T2 quote data.
+2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
+   instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
+   a reused code has two overlapping claimants and the master refuses to guess — loud, which is
+   the acceptable failure, but resolution is lost. NSE's own equity list carries listing dates
+   and would need its own download decision.
+3. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
+   rests on an empty list and QC reports its own skipped comparisons because of it.
 
 ## Blockers / awaiting
-- **ACTION FOR THE OWNER — may I download the ICICI security master to the VM?**
-  `https://directlink.icicidirect.com/MotherAppMaster/SecurityMaster.zip` · 2.9 MB ·
-  `application/zip` · refreshed daily. It is the only source of ISIN/series/lot/tick for the
-  M6 instrument master (`get_names` has none of them, and the SDK's own loader throws them
-  away). Same vendor and same read-only data plane as Breeze, but a different endpoint from
-  the one the GATE-0 attestation names, so I am asking rather than assuming. Fetched by the
-  official SDK's own method; would land on the VM only, per rule 14.
-- Otherwise none blocking. The orphaned `checkout` compose project was cleared with the
+- None blocking. The security-master download was approved and completed; 5,851 instruments
+  are live in the PIT store on arb-vm and the QC verdict seam resolves end to end. The orphaned `checkout` compose project was cleared with the
   owner's go-ahead. All three original owner-actions remain cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
   `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank

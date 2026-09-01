@@ -130,10 +130,13 @@ def test_the_coverage_report_counts_unbound_falsifiers_rather_than_hiding_them()
 def test_unbound_falsifiers_are_named_not_just_counted() -> None:
     # A count tells you there is work; the names tell you what work. A report that only
     # counts gets read as a score.
-    a12 = next(s for s in specs() if s.id == "A12")
-    unbound = unbound_falsifiers(a12)
+    # A04, not A12: A12's three falsifiers are all bound now (family-wise correction,
+    # leave-day-out, era-stability), so it is no longer an example of anything unbound. That
+    # a spec graduating out of this test is what breaks it is the right failure mode.
+    a04 = next(s for s in specs() if s.id == "A04")
+    unbound = unbound_falsifiers(a04)
     assert unbound
-    assert all(text in a12.falsifiers for text in unbound)
+    assert all(text in a04.falsifiers for text in unbound)
 
 
 def test_a_deferred_falsifier_is_not_counted_as_bound() -> None:

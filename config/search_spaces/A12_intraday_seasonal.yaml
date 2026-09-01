@@ -72,6 +72,8 @@ falsifier_checks:
     check: "bh-fdr"
   - falsifier: "Reject if it depends on a handful of expiry days"
     check: "leave-day-out"
+  - falsifier: "Require stability across calendar eras"
+    check: "era-stability"
 
 data_tier: T1
 
