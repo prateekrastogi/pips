@@ -157,7 +157,7 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ## Next 3 actions
 1. **M17 alpha wave 2, or M18's stats stack.** The falsifier work has run to the edge of what
    exists — all ten remaining need data the project does not have. M18 (PSR/DSR, CSCV,
-   SPA/白 reality check) is pure statistics and needs none, which makes it the natural next
+   SPA / White's reality check) is pure statistics and needs none, which makes it the natural next
    milestone; M17 waits on data by its own admission ("as data permits").
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
