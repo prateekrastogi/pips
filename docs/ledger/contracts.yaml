@@ -445,3 +445,11 @@
   # Units are separate: the spec declares minutes and A01Params counts bars. They coincide only
   # on a one-minute panel, so bars_per_unit converts explicitly and refuses an interval that
   # neither divides nor is divided by a minute.
+  #
+  # Extended to EVERY spec, which immediately found a defect the A01-only tests could not see:
+  # A01's declared ranges are all integers, and `int(v)` on A04's `entry_z: [1.5, 3.5]` produced
+  # the grid (1, 2, 3) -- two points BELOW the registered floor, from the module whose job is
+  # keeping the sweep inside it. Integer domains stay integral, float domains do not, and the
+  # endpoints are set exactly rather than trusted to float arithmetic. A03 also declares
+  # `liquidity_floor: 'preregistered'`, a note rather than a bound: unpacked as a range it died
+  # on int('p'), and is now refused by name.

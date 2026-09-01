@@ -35,7 +35,34 @@ __all__ = ["assert_within_domain", "bars_per_unit", "grid_from_domain"]
 _MINUTE_NS = 60 * 1_000_000_000
 
 
-def grid_from_domain(spec: AlphaSpec, parameter: str, *, count: int) -> tuple[int, ...]:
+def _range(spec: AlphaSpec, parameter: str) -> tuple[float, float, bool]:
+    """The declared ``[min, max]`` and whether it was written in whole numbers.
+
+    A domain entry is not always a range: A03 declares ``liquidity_floor: 'preregistered'``, a
+    note rather than a bound. Unpacked as a range it iterates the string's characters and dies
+    on ``int('p')``, which tells the reader nothing.
+
+    And the type matters. ``int(1.5)`` is 1, and 1 is outside A04's declared ``entry_z:
+    [1.5, 3.5]`` — truncating a float bound moves the grid below the registered floor while
+    looking like an ordinary integer sweep. Integer domains stay integral; float domains do not.
+    """
+    domain = spec.parameter_domain[parameter]
+    numeric = (
+        isinstance(domain, list | tuple)
+        and len(domain) == 2
+        and all(isinstance(v, int | float) and not isinstance(v, bool) for v in domain)
+    )
+    if not numeric:
+        raise ValueError(
+            f"{spec.id}.{parameter} declares {domain!r}, which is not a [min, max] range. "
+            "Some entries are pre-registration notes rather than bounds, and a note cannot be "
+            "swept."
+        )
+    integral = all(isinstance(v, int) for v in domain)
+    return float(domain[0]), float(domain[1]), integral
+
+
+def grid_from_domain(spec: AlphaSpec, parameter: str, *, count: int) -> tuple[float, ...]:
     """``count`` geometrically spaced integers spanning the spec's declared range, inclusive."""
     if count < 2:
         raise ValueError(
@@ -50,7 +77,7 @@ def grid_from_domain(spec: AlphaSpec, parameter: str, *, count: int) -> tuple[in
             "look exactly like sweeping a registered space."
         )
 
-    low, high = (int(v) for v in spec.parameter_domain[parameter])
+    low, high, integral = _range(spec, parameter)
     if low > high:
         raise ValueError(f"{parameter} domain [{low}, {high}] is inverted")
     if low <= 0:
@@ -58,10 +85,15 @@ def grid_from_domain(spec: AlphaSpec, parameter: str, *, count: int) -> tuple[in
         # linearly. Stated rather than silently shifted by one, which would put the grid
         # outside the declared range at the bottom end.
         step = (high - low) / (count - 1)
-        values = [round(low + i * step) for i in range(count)]
+        raw = [low + i * step for i in range(count)]
     else:
         ratio = (high / low) ** (1 / (count - 1))
-        values = [round(low * ratio**i) for i in range(count)]
+        raw = [low * ratio**i for i in range(count)]
+
+    # The endpoints are set EXACTLY rather than trusted to float arithmetic, so a rounding error
+    # of 1e-15 at the top cannot put the last point outside the declared range.
+    raw[0], raw[-1] = low, high
+    values: list[float] = [round(v) if integral else v for v in raw]
 
     # Deduplicated, so a narrow integer domain yields FEWER points rather than repeats: a
     # repeated point would make the search report more trials than parameters and inflate the
@@ -108,11 +140,12 @@ def assert_within_domain(spec: AlphaSpec, values: Mapping[str, float]) -> None:
                 f"spec {spec.id} does not declare a domain for {name!r} (it declares "
                 f"{sorted(spec.parameter_domain)})"
             )
-        low, high = spec.parameter_domain[name]
+        low, high, _ = _range(spec, name)
         if not low <= value <= high:
             raise ValueError(
                 f"{spec.id}: {name}={value} is outside the pre-registered domain "
-                f"[{low}, {high}]. The falsifiers attached to this spec were written for the "
+                f"{list(spec.parameter_domain[name])}. The falsifiers attached to this spec "
+                "were written for the "
                 "declared space, so a run outside it cannot be rejected by them — and it looks "
                 "exactly like a run inside it."
             )

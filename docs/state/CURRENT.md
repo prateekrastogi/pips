@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 211 files · mypy --strict 211 files · 1301 pytest · clippy clean · cargo test ok
+  ruff 211 files · mypy --strict 211 files · 1317 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,16 +186,16 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Run S5 on a registry a search populated.** Halving converges to one winner, so a single
-   family can never give S5 more than one candidate — S5 selects ACROSS families, and the alphas
-   have no shared dispatch (each has its own `Params` type, same `compute(view, params, spec)`
-   signature). Either a per-family search driver or an `s5-smoke` that promotes winners from
-   several searches. `[C-S5-01]` stays `building` until something invokes it.
-2. **The other eight specs' fixed parameters are unchecked.** `[C-GRID-01]`'s
-   `assert_within_domain` is called by A01's search and smoke only. A02–A12 have declared
-   domains and plugin tests that construct `Params` directly (`horizon_ns=60 * NS` throughout,
-   against domains that mostly start at 15). Those are plugin unit tests rather than registered
-   sweeps, so it is not the same violation — but nothing checks them either.
+1. **An alpha dispatch, so a search can run per family.** Halving converges to one winner, so a
+   single family can never give S5 more than one candidate — S5 selects ACROSS families. Every
+   alpha shares the `compute(view, params, spec)` signature and has its own `Params` type, with
+   no registry mapping one to the other. Confirmed on the fixture panel: A01–A04 each produce
+   600 forecasts over 300 bars, so four families are runnable there. A05–A08 and A12 need gap,
+   ATR, event or seasonal-slot data the panel lacks, and a dispatch must say so rather than
+   letting them score zero — "produced no forecasts" is not "produced no edge".
+2. **Run S5 on the result.** With four family winners recorded at a promoted stage,
+   `run_s5_from_registry` has a real ensemble to select from and `[C-S5-01]` can leave
+   `building`.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
