@@ -30,15 +30,16 @@ parameters and separate funnel steps.
 
 from __future__ import annotations
 
+import itertools
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
 import polars as pl
 
 from pips.search.registry import Registry
-from pips.selection.cluster import correlation_distance
+from pips.selection.cluster import Cluster, correlation_distance
 from pips.selection.frontier import select_frontier
 from pips.selection.netting import (
     BlotterOrder,
@@ -128,6 +129,14 @@ class S5Result:
     plans: tuple[JointPlan, ...]
     unsolved_venues: tuple[UnsolvedVenue, ...]
     budget: BudgetVerdict
+    pairwise_correlations: Mapping[tuple[str, str], float] = field(default_factory=dict)
+    """Every pair the gate measured, kept and dropped alike. The evidence behind its verdict."""
+    clusters: tuple[Cluster, ...] = ()
+    """Which candidates collapsed together and which one speaks for each.
+
+    The funnel says how many the clustering removed; it does not say which stood in for which,
+    and that is what someone checking a collapsed near-variant needs.
+    """
     intake: RegistryIntake | None = None
     """Present when the candidates came from the registry; None when they were handed in."""
 
@@ -145,7 +154,7 @@ def _correlation_gate(
     survivors: Sequence[Candidate],
     series: Mapping[str, Sequence[float]],
     limit: float,
-) -> tuple[list[Candidate], list[str]]:
+) -> tuple[list[Candidate], list[str], dict[tuple[str, str], float]]:
     """Greedy, in frontier order: keep a candidate unless it is too close to one already kept.
 
     Greedy rather than "drop both of a bad pair": dropping both discards a usable member for the
@@ -154,15 +163,26 @@ def _correlation_gate(
     """
     kept: list[Candidate] = []
     dropped: list[str] = []
+    # EVERY pair among the survivors, not only the offending ones. A gate that reports its
+    # rejections alone cannot be audited for the pairs it let through, which is the half that
+    # decides what runs — and the limit it turns on is a judgement call, so the numbers behind
+    # it are exactly what a reader needs in order to disagree with it.
+    measured: dict[tuple[str, str], float] = {}
+    for left, right in itertools.combinations(survivors, 2):
+        measured[(left.id, right.id)] = 1.0 - correlation_distance(
+            series[left.id], series[right.id]
+        )
+
     for candidate in survivors:
-        if any(
-            1.0 - correlation_distance(series[candidate.id], series[other.id]) > limit
+        against = [
+            measured.get((candidate.id, other.id), measured.get((other.id, candidate.id), 0.0))
             for other in kept
-        ):
+        ]
+        if any(value > limit for value in against):
             dropped.append(candidate.id)
         else:
             kept.append(candidate)
-    return kept, dropped
+    return kept, dropped, measured
 
 
 def run_s5(
@@ -210,7 +230,9 @@ def run_s5(
         )
     )
 
-    ensemble, gated = _correlation_gate(representatives, series, max_pairwise_correlation)
+    ensemble, gated, correlations = _correlation_gate(
+        representatives, series, max_pairwise_correlation
+    )
     funnel.append(
         StageStep(
             name="pairwise-correlation-gate",
@@ -262,6 +284,8 @@ def run_s5(
         netting=netting,
         gross_cost=gross_cost,
         effective_cost=netting.effective_cost,
+        pairwise_correlations=correlations,
+        clusters=selection.clusters,
         plans=planned.plans,
         unsolved_venues=planned.unsolved,
         budget=verdict,

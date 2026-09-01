@@ -386,6 +386,12 @@
   # frontier takes 6 -> 3, clustering collapses a near-variant 3 -> 2, the gate passes both, and
   # M_erank is 2.918 of 48 -- every funnel step doing work on rows a search produced.
   #
+  # The gate REPORTS its evidence: every pairwise correlation it measured, kept and dropped
+  # alike, plus which candidates collapsed into which cluster. A gate that reports only its
+  # rejections cannot be audited for the pairs it let through -- the half that decides what
+  # runs -- and the 0.5 limit is a judgement call, so the numbers behind it are what a reader
+  # needs in order to disagree.
+  #
   # A winner whose PnL series never moves is NOT promoted and is named: A05 needs a session
   # boundary because a gap requires a prior close, so over a window inside one session it
   # produces no trades. Promoting it would hand S5 a flat series, which the clustering correctly

@@ -18,6 +18,7 @@ one at a time passes a combination that cannot run.
 
 from __future__ import annotations
 
+import itertools
 from decimal import Decimal
 
 import pytest
@@ -356,3 +357,63 @@ def test_an_ensemble_with_no_solvable_venue_is_not_admissible() -> None:
     assert result.unsolved_venues != ()
     assert result.budget.admissible, "nothing breached"
     assert not result.admissible, "and still not certifiable"
+
+
+# ------------------------------------------------------------ the gate's evidence -----
+#
+# The gate drops a candidate for being too correlated with one already kept, and reported only
+# that it had. A verdict without its measurement is a verdict nobody can check — and the
+# threshold it turns on (0.5) is a judgement call, so the numbers behind it are exactly what a
+# reader needs to disagree with.
+
+
+def test_the_pairwise_correlations_are_reported() -> None:
+    result = run(series={"a": BASE, "b": OTHER})
+    assert result.pairwise_correlations
+    assert ("a", "b") in result.pairwise_correlations or ("b", "a") in result.pairwise_correlations
+
+
+def test_every_pair_the_gate_considered_appears() -> None:
+    """Not just the offending ones. A gate that reports only its rejections cannot be audited
+    for the pairs it let through, which is the half that decides what runs."""
+    candidates = [
+        cand("a", 0.30, 0.30),
+        cand("b", 0.20, 0.15),
+        cand("c", 0.10, 0.02),
+    ]
+    series = {"a": BASE, "b": blend(BASE, OTHER, 0.5), "c": OTHER}
+    result = run(candidates=candidates, series=series)
+
+    # The REPRESENTATIVES, not the raw frontier: clustering runs first, so the gate never sees
+    # the collapsed near-variants. Asserting against the frontier would demand pairs the gate
+    # had no reason to measure.
+    considered = {frozenset(pair) for pair in result.pairwise_correlations}
+    representatives = [cluster.representative for cluster in result.clusters]
+    expected = {frozenset(p) for p in itertools.combinations(representatives, 2)}
+    assert considered == expected
+
+
+def test_the_reported_number_is_the_one_the_gate_acted_on() -> None:
+    """A dropped candidate must show a correlation above the limit against something kept.
+
+    Reporting a number the decision did not use would be worse than reporting nothing: it would
+    look like the evidence.
+    """
+    candidates = [cand("a", 0.30, 0.30), cand("b", 0.20, 0.12)]
+    result = run(candidates=candidates, series={"a": BASE, "b": blend(BASE, OTHER, 0.5)})
+
+    gate = next(s for s in result.funnel if s.name == "pairwise-correlation-gate")
+    assert gate.dropped == ("b",)
+    kept = {c.id for c in result.ensemble}
+    offending = [
+        value
+        for (left, right), value in result.pairwise_correlations.items()
+        if "b" in (left, right) and (left in kept or right in kept)
+    ]
+    assert offending and max(offending) > 0.5
+
+
+def test_a_passing_pair_is_reported_below_the_limit() -> None:
+    result = run(series={"a": BASE, "b": OTHER})
+    assert all(v <= 0.5 for v in result.pairwise_correlations.values())
+    assert len(result.ensemble) == 2
