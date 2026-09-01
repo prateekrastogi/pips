@@ -1,6 +1,6 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-08-31 · **Branch:** `main` · **Phase:** P0 · loop running (5m).
+**Updated:** 2026-09-01 · **Branch:** `main` · **Phase:** P0 · loop running (5m).
 
 > Rewritten after incremental edits left this file self-contradictory — two "action 2"s, one
 > claiming the QC seam resolved nothing immediately after saying it was done. This is the
