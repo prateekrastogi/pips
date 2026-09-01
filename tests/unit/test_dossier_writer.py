@@ -179,25 +179,19 @@ def test_an_empty_candidate_still_drafts_what_the_caller_knows() -> None:
 # ---------------------------------------------------------- the gap, pinned in a test -----
 
 
-def test_most_hard_gates_have_no_declared_threshold_yet() -> None:
+def test_only_concentration_still_has_no_declared_threshold() -> None:
     """Pinned deliberately, so closing the gap has to touch a test that says it existed.
 
-    P4 states numbers for DSR, PBO and SPA only. Plateau stability, concentration and the four
-    cost/delay stress gates are named without a bar anywhere — prose, `gates.yaml` or code — so
-    the writer cannot draft them and `[C-CERT-01]` cannot pass a drafted dossier. Inventing the
-    six would be exactly the failure this module exists to refuse.
+    ADR-0014 resolved five of the original six from the reference material. Concentration is the
+    one that could not be: its numbers (>30% of PnL from <5% of days, >40% from one name) appear
+    only under §11.4 *Tripwires — auto-flags in every report*, and the certification table gives
+    it no number at all. Promoting a monitoring flag to a hard gate is a stronger claim than the
+    source makes, so it stays a decision.
     """
     from pips.certification.certify import HARD_GATES
 
     assert set(HARD_GATES) > GATE_PATHS
-    assert sorted(set(HARD_GATES) - GATE_PATHS) == [
-        "stability.concentration",
-        "stability.parameter_plateau",
-        "stress.cost_1_5x",
-        "stress.cost_2x",
-        "stress.delay_1_bar",
-        "stress.delay_2_bar",
-    ]
+    assert sorted(set(HARD_GATES) - GATE_PATHS) == ["stability.concentration"]
 
 
 @pytest.mark.parametrize("boolean", [True, False])
@@ -219,3 +213,39 @@ def test_a_supplied_gate_and_a_supplied_ranking_are_refused_for_different_reason
 
     with pytest.raises(UndeclaredEvidenceError, match="caller-chosen ranking"):
         draft(**{"economics.net_return": 9.99})
+
+
+def test_every_threshold_matches_the_gates_ledger() -> None:
+    """The ledger is where a bar is read from; the code only applies it.
+
+    `gates.yaml` says a threshold change means editing that file, the enforcing code and an ADR
+    in one commit. Nothing checked the "and the enforcing code" half, so the two could drift and
+    the ledger would go on describing a bar nobody applies — which is worse than no ledger,
+    because it reads as evidence.
+    """
+    from pathlib import Path
+
+    from pips.ledger.model import load_ledger
+
+    ledger = load_ledger(Path(__file__).resolve().parents[2] / "docs" / "ledger")
+    declared = {
+        row.threshold["path"]: (row.threshold["value"], row.threshold["direction"])
+        for row in ledger.gates
+        if "path" in row.threshold
+    }
+    in_code = {spec.path: (spec.threshold, spec.direction) for spec in GATE_SOURCES}
+
+    assert in_code == declared
+
+
+def test_the_disclosed_fields_have_no_ledger_row() -> None:
+    """A row would be a bar, and the blueprint discloses these rather than gating them."""
+    from pathlib import Path
+
+    from pips.certification.certify import DISCLOSED
+    from pips.ledger.model import load_ledger
+
+    ledger = load_ledger(Path(__file__).resolve().parents[2] / "docs" / "ledger")
+    declared = {row.threshold.get("path") for row in ledger.gates}
+
+    assert not (set(DISCLOSED) & declared)

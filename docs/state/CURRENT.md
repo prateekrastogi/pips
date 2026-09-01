@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 235 files · mypy --strict 235 files · 1644 pytest · clippy clean · cargo test ok
+  ruff 235 files · mypy --strict 235 files · 1652 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,19 +186,19 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Six hard gates have no threshold anywhere — a decision, not a coding task.** P4 names
-   plateau stability, concentration and the four cost/delay stress gates without a bar, in prose
-   or `gates.yaml` or code. `[C-WRIT-01]` can draft 3 of the 9 hard gates; until the other six
-   are decided and recorded (gates.yaml row + enforcing code + ADR, in one commit, per the
-   file's own rule) **no drafted dossier can pass `[C-CERT-01]`**. Also missing from
-   `gates.yaml`: the PBO 0.25 and SPA 0.10 bars, which exist only in P4 prose.
+1. **One open threshold: `stability.concentration`** — the owner's call, and the last thing
+   between the factory and an end-to-end certification. ADR-0014 resolved the other five from
+   the reference material, but concentration's figures (>30% of PnL from <5% of days, >40% from
+   one name) appear only under §11.4 *Tripwires — auto-flags in every report*, and the
+   certification table gives no number. A tripwire fires on a running strategy; a gate refuses
+   one that has never traded. Promoting the flag is a stronger claim than the source makes.
 2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
    every number a dossier would record, and widening it means external Breeze calls on a metered
    budget with the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists;
    the budget is 100k calls/day and 32 parallel fetches.
-3. **The remaining writers.** `[C-WRIT-01]` drafts the dossier; nothing yet builds a bundle from
-   a winning config or calls `[C-LBOX-01]` on the chosen candidate. Blocked behind (1) for the
-   end-to-end run, but the bundle writer itself is not.
+3. **The bundle writer.** `[C-WRIT-01]` drafts the dossier; nothing yet builds a `StrategyBundle`
+   from a winning config, nor calls `[C-LBOX-01]` on the chosen candidate. Not blocked by (1) —
+   only the end-to-end run is.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

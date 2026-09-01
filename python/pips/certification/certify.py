@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from pips.certification.dossier import Dossier
 
 __all__ = [
+    "DISCLOSED",
     "HARD_GATES",
     "MAX_CERTIFIED",
     "Certification",
@@ -67,13 +68,20 @@ HARD_GATES: tuple[str, ...] = (
     "stability.parameter_plateau",
     "stability.concentration",
     "stress.cost_1_5x",
-    "stress.cost_2x",
     "stress.delay_1_bar",
-    "stress.delay_2_bar",
 )
 """The P4 hard gates that live as numbers in the dossier. Each must be a `Measurement`, because
 a gate is a value AND the bar it was held to; a path dropped from this tuple is a gate nothing
-enforces, so a test pins the list against P4's own wording."""
+enforces, so a test pins the list."""
+
+DISCLOSED: tuple[str, ...] = (
+    "stress.cost_2x",
+    "stress.delay_2_bar",
+)
+"""Required to be present, never held to a bar (ADR-0014). The blueprint's certification row
+reads *positive after 1.5x cost and survives +1-bar delay; 2x result DISCLOSED* — gating these
+would reject strategies the specification certifies, which is a defect even though it errs
+strict. A `Measurement` here is refused: the threshold would be one somebody invented."""
 
 _RANK_FIELD = ("economics", "net_return")
 
@@ -140,6 +148,14 @@ def _gate_reasons(dossier: Dossier) -> list[str]:
         require_complete(dossier)
     except IncompleteDossierError as exc:
         reasons.append(str(exc))
+
+    for path in DISCLOSED:
+        section, _, field = path.partition(".")
+        if isinstance(dossier.sections.get(section, {}).get(field), Measurement):
+            reasons.append(
+                f"{path} carries a Measurement, but the blueprint DISCLOSES it rather than "
+                "gating it (ADR-0014) — the threshold is one somebody invented"
+            )
 
     for path in HARD_GATES:
         section, _, field = path.partition(".")

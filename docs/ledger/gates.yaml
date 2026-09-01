@@ -35,7 +35,10 @@
 - id: G-S4-DSR
   title: "Deflated Sharpe >= 0.95 at N=M (report N=M_erank)"
   spec: "IMPLEMENTATION.md#phase-p4"
-  threshold: {dsr_min: 0.95}
+  # `path`/`value`/`direction` added by ADR-0014 so the bar can be COMPARED to the code that
+  # applies it; the value is unchanged. `dsr_min` is kept because removing a published key is a
+  # different kind of edit from adding a machine-readable spelling of it.
+  threshold: {dsr_min: 0.95, path: "economics.dsr", value: 0.95, direction: at_least}
   enforced_by: "python/pips/search/funnel.py::gate_s4"
   evidence: "docs/reports/dossiers/<bundle_id>.md"
   code: null
@@ -66,3 +69,78 @@
   tests: ["tests/unit/test_provenance.py"]
   status: enforced
   owner_milestone: M4
+
+# ---------------------------------------------------------------------------------------------
+# ADR-0014. Five bars that P4 named without a number, resolved from the reference material
+# rather than chosen here. `stability.concentration` is deliberately absent: its figures exist
+# only under §11.4 "Tripwires (auto-flags in every report)", and promoting a monitoring flag to
+# a certification gate is a stronger claim than the source makes.
+#
+# `stress.cost_2x` and `stress.delay_2_bar` are absent for a different reason -- the blueprint
+# DISCLOSES them rather than gating them, so they have no row here and `certify.DISCLOSED`
+# refuses a Measurement in either.
+
+- id: G-P4-PBO
+  title: "Probability of backtest overfitting <= 0.25"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["IMPLEMENTATION.md P4 gate", "ADR-0014"]
+  threshold: {path: "stability.pbo", value: 0.25, direction: at_most}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/certification/certify.py"
+  tests: ["tests/unit/test_certify.py"]
+  status: building
+  owner_milestone: M20
+  # Existed only in P4 prose until ADR-0014; a threshold that lives in a paragraph cannot be
+  # compared to the code that applies it.
+
+- id: G-P4-SPA
+  title: "SPA p-value <= 0.10"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["IMPLEMENTATION.md P4 gate", "ADR-0014"]
+  threshold: {path: "stability.spa_p", value: 0.10, direction: at_most}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/certification/certify.py"
+  tests: ["tests/unit/test_certify.py"]
+  status: building
+  owner_milestone: M20
+
+- id: G-P4-PLATEAU
+  title: "Parameter plateau: median perturbed net SR >= 0.70 x centre"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["Meta-Algorithm_Blueprint_NSE_Intraday §S3 robustness battery", "ADR-0014"]
+  threshold: {path: "stability.parameter_plateau", value: 0.70, direction: at_least}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/certification/certify.py"
+  tests: ["tests/unit/test_certify.py"]
+  status: building
+  owner_milestone: M20
+  # Cited, not chosen: "median perturbed net SR >= 70% of center" under +/-20-30% perturbation.
+
+- id: G-P4-COST15
+  title: "Net return still positive at 1.5x cost"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["Indian_Cash_Equity_Intraday_Meta_Algorithm_Blueprint certification table", "ADR-0014"]
+  threshold: {path: "stress.cost_1_5x", value: 0.0, direction: at_least}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/certification/certify.py"
+  tests: ["tests/unit/test_certify.py"]
+  status: building
+  owner_milestone: M20
+  # "Positive after 1.5x cost". The 2x figure on the same row is DISCLOSED, not gated.
+
+- id: G-P4-DELAY1
+  title: "Net return still positive at +1 bar delay"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["Indian_Cash_Equity_Intraday_Meta_Algorithm_Blueprint certification table", "ADR-0014"]
+  threshold: {path: "stress.delay_1_bar", value: 0.0, direction: at_least}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/certification/certify.py"
+  tests: ["tests/unit/test_certify.py"]
+  status: building
+  owner_milestone: M20
+  # "survives +1-bar delay". The +2 figure is DISCLOSED, not gated.

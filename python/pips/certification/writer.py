@@ -21,11 +21,15 @@ Otherwise the writer is a way to inject a passing `Measurement`, which is the on
 writer that believes it filled what `check_completeness` calls hollow is a writer whose report
 nobody can act on.
 
-**On the thresholds that are missing.** P4 states numbers for DSR (0.95), PBO (0.25) and SPA
-(0.10) — only `dsr_min` also appears in `gates.yaml`. Plateau stability, concentration and the
-four cost/delay stress gates are named in P4 *without a bar anywhere*, so they cannot be drafted
-and no drafted dossier can pass `[C-CERT-01]` yet. That is a real gap in the specification, and
-inventing six thresholds to close it here is precisely the failure this module refuses.
+**On the thresholds.** ADR-0014 resolved five of the six bars P4 named without a number, citing
+the reference material rather than choosing them here — and found that two of the nine "gates"
+are disclosures the blueprint never asked anyone to gate. Six of the seven remaining hard gates
+can now be drafted; the bars live in `gates.yaml` and a test holds them equal to the ones here,
+because a ledger describing a threshold nobody applies reads as evidence and is worse than none.
+`stability.concentration` still cannot be drafted: its figures exist only under §11.4
+*Tripwires (auto-flags in every report)*, and promoting a monitoring flag to a certification
+gate is a stronger claim than the source makes. Inventing it to make the pipeline run is
+precisely the failure this module refuses.
 """
 
 from __future__ import annotations
@@ -70,11 +74,15 @@ class MetricSource:
 
 
 METRIC_SOURCES: tuple[MetricSource, ...] = (
-    # Gates. Only the three P4 puts a number on -- see the module docstring: the other six hard
-    # gates have no declared threshold, and drafting them would mean inventing one.
+    # Gates. Six of the seven; `stability.concentration` still has no declared bar (ADR-0014),
+    # and drafting it would mean inventing one.
     MetricSource("dsr", "economics.dsr", 0.95, "at_least"),
     MetricSource("pbo", "stability.pbo", 0.25, "at_most"),
     MetricSource("spa_p", "stability.spa_p", 0.10, "at_most"),
+    # ADR-0014: cited from the reference material rather than chosen here.
+    MetricSource("parameter_plateau", "stability.parameter_plateau", 0.70, "at_least"),
+    MetricSource("cost_1_5x", "stress.cost_1_5x", 0.0, "at_least"),
+    MetricSource("delay_1_bar", "stress.delay_1_bar", 0.0, "at_least"),
     # Plain values that the factory produces today. `net_return` is DERIVED rather than supplied
     # because `[C-CERT-01]` ranks on it: a caller-supplied one is a caller-chosen ranking, which
     # is the same objection as a caller-supplied gate one step further along.

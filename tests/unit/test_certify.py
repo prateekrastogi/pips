@@ -26,6 +26,7 @@ import pytest
 
 from pips.bundle import IrNode, build_bundle
 from pips.certification.certify import (
+    DISCLOSED,
     HARD_GATES,
     MAX_CERTIFIED,
     Certification,
@@ -44,9 +45,14 @@ PASSING: dict[str, Measurement] = {
     "stability.parameter_plateau": Measurement(0.80, 0.50, "at_least"),
     "stability.concentration": Measurement(0.30, 0.40, "at_most"),
     "stress.cost_1_5x": Measurement(0.60, 0.00, "at_least"),
-    "stress.cost_2x": Measurement(0.20, 0.00, "at_least"),
     "stress.delay_1_bar": Measurement(0.55, 0.00, "at_least"),
-    "stress.delay_2_bar": Measurement(0.10, 0.00, "at_least"),
+}
+
+DISCLOSURES: dict[str, float] = {
+    # Reported, never gated (ADR-0014). A Measurement here would be refused, which is what
+    # `test_a_measurement_in_a_disclosed_field_is_refused` holds.
+    "stress.cost_2x": 0.20,
+    "stress.delay_2_bar": 0.10,
 }
 
 
@@ -62,9 +68,9 @@ def dossier_for(**over: object) -> Dossier:
         name: {field: f"{name}.{field}" for field in fields}
         for name, fields in REQUIRED_FIELDS.items()
     }
-    for path, measurement in PASSING.items():
+    for path, value in {**PASSING, **DISCLOSURES}.items():
         section, _, field = path.partition(".")
-        sections[section][field] = measurement
+        sections[section][field] = value
     sections["economics"]["net_return"] = net_return
     for path, value in over.items():
         section, _, field = path.partition(".")
@@ -211,19 +217,41 @@ def test_a_failing_candidate_hears_every_reason_at_once() -> None:
     assert "stability.spa_p" in reasons
 
 
-def test_the_hard_gates_cover_the_p4_list() -> None:
-    """Structural: a gate dropped from this tuple is a gate nothing enforces."""
-    assert set(HARD_GATES) >= {
+def test_the_hard_gates_match_the_blueprints_gate_table() -> None:
+    """Structural: a gate dropped from this tuple is a gate nothing enforces.
+
+    `stress.cost_2x` and `stress.delay_2_bar` are deliberately absent. The blueprint's own
+    certification row reads *positive after 1.5x cost and survives +1-bar delay; 2x result
+    DISCLOSED* — gating the 2x cases would reject strategies the specification certifies, which
+    is a defect even though it errs strict.
+    """
+    assert set(HARD_GATES) == {
         "economics.dsr",
         "stability.pbo",
         "stability.spa_p",
         "stability.parameter_plateau",
         "stability.concentration",
         "stress.cost_1_5x",
-        "stress.cost_2x",
         "stress.delay_1_bar",
-        "stress.delay_2_bar",
     }
+
+
+def test_gated_and_disclosed_are_disjoint() -> None:
+    """A field cannot be both held to a bar and merely reported."""
+    assert not set(HARD_GATES) & set(DISCLOSED)
+
+
+def test_a_disclosed_field_is_reported_not_gated() -> None:
+    """A bare number in `cost_2x` is the CORRECT shape: it has no bar to be held to."""
+    result = certify([candidate("A01", **{"stress.cost_2x": -0.20})], key=KEY)
+    assert [c.strategy_id for c in result.certified] == ["A01"]
+
+
+def test_a_disclosed_field_must_still_be_present() -> None:
+    """Disclosure is an obligation. An absent 2x result is an undisclosed one."""
+    result = certify([candidate("A01", **{"stress.cost_2x": None})], key=KEY)
+    assert result.certified == ()
+    assert "stress.cost_2x" in reason_for(result, "A01")
 
 
 # ---------------------------------------------------------------------- integrity -----
@@ -292,3 +320,12 @@ def test_a_boolean_net_return_is_not_a_rankable_number(boolean: bool) -> None:
 
     assert result.certified == ()
     assert "net_return" in reason_for(result, "A01")
+
+
+def test_a_measurement_in_a_disclosed_field_is_refused() -> None:
+    """A bar on a disclosure is a bar somebody invented (ADR-0014)."""
+    result = certify(
+        [candidate("A01", **{"stress.cost_2x": Measurement(0.2, 0.0, "at_least")})], key=KEY
+    )
+    assert result.certified == ()
+    assert "stress.cost_2x" in reason_for(result, "A01")

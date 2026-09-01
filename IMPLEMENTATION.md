@@ -778,7 +778,9 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 
 **P4 gate (human):** 0–5 bundles; every certified one passes hard gates (integrity,
 feasibility incl. broker capability, evidence, DSR ≥ 0.95 at N = M and sane at N = M_erank,
-PBO ≤ 0.25, SPA p ≤ 0.10, cost/delay stress, plateau stability, concentration, lockbox; capital-tier robustness —
+PBO ≤ 0.25 `[G-P4-PBO]`, SPA p ≤ 0.10 `[G-P4-SPA]`, cost stress `[G-P4-COST15]` and delay stress
+`[G-P4-DELAY1]` (the 2× cost and +2-bar results are DISCLOSED, not gated — ADR-0014), plateau
+stability `[G-P4-PLATEAU]`, concentration (no bar declared yet — ADR-0014), lockbox; capital-tier robustness —
 cross-broker robustness is not assessable with one venue, ADR-0010);
 pairwise PnL corr ≤ 0.5.
 
