@@ -406,3 +406,10 @@
   #
   # Preserving daily returns per trial makes Multiplicity.bracket() formable for the first time;
   # without them it raises, naming this gap in its own message.
+  #
+  # `make s1-search` is the first real caller: successive halving over A01 variants on the
+  # fixtures, every look recorded, and the bracket computed from the rows it wrote. Running it
+  # for real exposed a coverage defect no unit test had -- preserving returns only for completed
+  # trials left M_erank measured on 1 of 7 series, which is 1.0 by construction and reads
+  # exactly like 1.0 by measurement. The invariant is now on the LENGTHS (equal, so the series
+  # are correlatable) rather than on which trials count, and the effective rank is 1.815 of 7.

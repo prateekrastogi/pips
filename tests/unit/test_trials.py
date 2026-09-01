@@ -236,8 +236,13 @@ def test_daily_returns_are_preserved_when_supplied(
         returns_for=returns_for,
         returns_dir=tmp_path / "returns",
     )
-    refs = [r["daily_returns_ref"] for r in reg.all_runs()]
-    assert all(refs), "every row carries a returns reference"
+    rows = reg.all_runs()
+    refs = [r["daily_returns_ref"] for r in rows]
+
+    # EVERY non-failed trial, not just the completed ones. Restricting to completed would leave
+    # M_erank computed over a strict subset, and an effective rank of 1 over 1 of 7 trials reads
+    # exactly like an effective rank of 1 over all 7.
+    assert all(refs), "every trial carries a returns reference"
 
     # DISTINCT paths, not just non-empty ones. Writing every trial to one file leaves each row
     # pointing at the last trial's returns: M_erank would see identical series and report an
@@ -283,6 +288,30 @@ def test_the_bracket_is_unavailable_without_preserved_returns(
     record_halving_trials(reg, halving(), metrics_for=metrics_for, context=context)
     with pytest.raises(RuntimeError, match="M_erank"):
         multiplicity(reg).bracket()
+
+
+def test_series_of_unequal_length_are_refused_by_the_recorder(
+    reg: Registry, context: TrialContext, tmp_path: Path
+) -> None:
+    """The invariant lives here rather than in a rule about which trials count.
+
+    Correlating unequal series needs a truncation that aligns at index 0, and M_erank over
+    incomparable series is not a measurement of anything. Supplying equal-length series is the
+    caller's job, so it is checked rather than assumed.
+    """
+
+    def ragged(config: str, budget: int) -> np.ndarray:
+        return np.zeros(20 if config == "a01-lb5" else 30)
+
+    with pytest.raises(ValueError, match="Refusing"):
+        record_halving_trials(
+            reg,
+            halving(),
+            metrics_for=metrics_for,
+            context=context,
+            returns_for=ragged,
+            returns_dir=tmp_path / "returns",
+        )
 
 
 def test_recording_twice_appends_because_the_ledger_is_append_only(

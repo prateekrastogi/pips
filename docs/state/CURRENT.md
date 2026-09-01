@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 207 files · mypy --strict 207 files · 1264 pytest · clippy clean · cargo test ok
+  ruff 208 files · mypy --strict 208 files · 1276 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,12 +186,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Wire the recorder into a real search run.** `record_halving_trials` writes one row per
-   (config, budget) look and `[C-TRIAL-01]` is `enforced`, but the S1 smoke still returns a dict
-   and records nothing — so `multiplicity()` reads zero on any registry the project actually
-   produces. Making `s1-smoke` (or a `make s5-smoke`) run a halving schedule and record it is
-   what turns the DSR bracket from formable into formed, and gives `run_s5_from_registry` real
-   rows to select from. `[C-S5-01]` stays `building` until then.
+1. **Run S5 on a registry a search populated.** `make s1-search` writes real trials and the
+   multiplicity bracket is computed from them (7 literal, 1.815 effective), but those rows are
+   stage S1 and `run_s5_from_registry` selects from what survived the LATER stages — and it has
+   no CLI target. Either a stage ladder that promotes S1 survivors, or an `s5-smoke` reading the
+   stage `s1-search` actually writes. `[C-S5-01]` stays `building` until something invokes it.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

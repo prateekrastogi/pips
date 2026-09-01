@@ -20,6 +20,14 @@ the search spent a look on it, and a look that errored is not a look that never 
 **Only the final rung completes.** An early rung is a look at REDUCED fidelity, so its status is
 ``viewed`` — it counts for multiplicity and is not evidence about the config's performance,
 which is how :func:`pooled_family_means` and S5 already treat that status.
+
+**Every non-failed trial keeps its returns, and they must all be the same length.** The recorder
+does not decide which trials are worth preserving — restricting to completed ones would leave
+M_erank computed over a strict subset, and an effective rank of 1 over 1 of 7 trials reads
+exactly like an effective rank of 1 over all 7. It is the LENGTHS that have to match, so that is
+what is enforced here: correlating unequal series needs a truncation aligning at index 0, which
+is only correct if every trial covers the same window. Supplying equal-length series is the
+caller's job and is checked rather than assumed.
 """
 
 from __future__ import annotations
@@ -100,6 +108,7 @@ def record_halving_trials(
     """Write one row per (config, budget) look the search took."""
     final_round = result.rounds[-1].round_index if result.rounds else -1
     rows = completed = viewed = failures = 0
+    length: int | None = None
 
     for rung in result.rounds:
         for config in rung.configs:
@@ -118,10 +127,19 @@ def record_halving_trials(
             ref: str | None = None
             if returns_for is not None and returns_dir is not None and status != "failed":
                 digest = hashlib.sha256(f"{config}:{rung.budget}".encode()).hexdigest()[:16]
-                ref = str(
-                    registry.write_daily_returns(
-                        returns_dir / f"{digest}.parquet", returns_for(config, rung.budget)
+                preserved = returns_for(config, rung.budget)
+                if length is None:
+                    length = len(preserved)
+                elif len(preserved) != length:
+                    raise ValueError(
+                        f"trial {config!r} at budget {rung.budget} preserved "
+                        f"{len(preserved)} returns where earlier trials preserved {length}. "
+                        "Refusing: correlating unequal series needs a truncation that aligns "
+                        "at index 0, and M_erank computed over incomparable series is not a "
+                        "measurement of anything."
                     )
+                ref = str(
+                    registry.write_daily_returns(returns_dir / f"{digest}.parquet", preserved)
                 )
 
             registry.record(

@@ -969,7 +969,7 @@ milestone section of IMPLEMENTATION.md → its ledger rows. Everything else on d
 Reference docs in docs/reference/ are consulted by section, never ingested.
 
 Commands (Make targets): make setup · test · lint · typecheck · ci · ci-container · provenance ·
-determinism · tdd-check ·
+determinism · tdd-check · s1-search ·
 ledger-check · s1-smoke · backtest-smoke · parity DAY=<day> · qc
 
 Constitution (full text IMPLEMENTATION.md §2): TEST-FIRST — every behavioural change starts

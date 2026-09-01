@@ -86,6 +86,9 @@ qc: ## Quality-check bronze and quarantine failures (§6 M5)
 s1-smoke: ## Stage-1 screening smoke run on fixtures (§6 M12 Verify)
 	$(PY) -m pips.cli s1-smoke fixtures
 
+s1-search: ## Run successive halving over A01 variants and RECORD every trial [C-TRIAL-01]
+	$(PY) -m pips.cli s1-search fixtures $(CURDIR)/build/s1-search/registry.db
+
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
 	@echo "backtest-smoke: not implemented until M14"; exit 1
 
@@ -102,7 +105,7 @@ JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
 JENKINS_URL ?= http://127.0.0.1:8081
 REF ?= main
 
-.PHONY: provenance ci-container
+.PHONY: provenance ci-container s1-search
 .PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build install-hooks
 
 jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)
