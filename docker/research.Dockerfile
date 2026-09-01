@@ -52,4 +52,20 @@ ARG PIPS_DIRTY="0"
 ENV PIPS_IMAGE_SHA=$PIPS_SHA \
     PIPS_IMAGE_DIRTY=$PIPS_DIRTY
 RUN printf '%s' "$PIPS_SHA" > /app/.pips-image-sha
+
+# NOT root. This image had no USER at all, so it wrote files into the bind-mounted /srv/pips
+# that the VM's own user could not replace -- and promotion is meant to be idempotent, so the
+# second run would have failed in exactly the case the design calls safe.
+#
+# The uid differs from reader (10002) and engine (10001) deliberately: two planes, two
+# processes (rule 7), and one identity for all three would make that separation nominal. The
+# GROUP is shared, which is what lets one service rewrite another's files without any of them
+# being root.
+#
+# /app is chowned because the venv, the caches pytest writes and the marker file all live there
+# and are created during the build as root.
+RUN groupadd --system --gid 10000 pips \
+    && useradd --system --create-home --uid 10003 --gid 10000 pips \
+    && chown -R pips:pips /app
+USER pips
 CMD ["make", "ci"]
