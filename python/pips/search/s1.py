@@ -14,17 +14,23 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import polars as pl
 
 from pips.alphas.spec import AlphaSpec, load_alpha_spec
+from pips.alphas.t1._common import IST
 from pips.alphas.t1.a01 import A01Params, compute
 from pips.core.asof import AsOfPanelView
 from pips.validation.fdr import benjamini_hochberg
 from pips.validation.nulls import rank_ic, shuffled_future_control
+
+if TYPE_CHECKING:
+    from pips.data.lockbox import SealedLockbox
 
 __all__ = [
     "apply_family_fdr",
@@ -87,7 +93,19 @@ def apply_family_fdr(candidates: list[dict[str, object]], q: float) -> list[dict
     return out
 
 
-def _load_panel(fixtures: Path) -> pl.DataFrame:
+def load_panel(
+    fixtures: Path, lockbox: SealedLockbox | None = None, stage: str | None = None
+) -> pl.DataFrame:
+    """Load the fixture panel, consulted against the sealed lockbox when one is configured.
+
+    The lockbox is checked HERE, at the read, because that is the only place it can bite. A
+    holdout enforced anywhere else is a convention, and `check_unexplained_ratio_jump` already
+    demonstrated what happens to a check nothing calls: written at M5, unit-tested, and never
+    invoked by the runner for an entire milestone.
+
+    ``lockbox=None`` means no holdout has been DECLARED, which is a different thing from a
+    holdout that permits everything — and the default must not quietly become the latter.
+    """
     rows: list[dict[str, object]] = []
     for path in sorted((fixtures / "bars" / "1m").glob("*.json")):
         for bar in json.loads(path.read_text(encoding="utf-8")):
@@ -103,7 +121,22 @@ def _load_panel(fixtures: Path) -> pl.DataFrame:
             )
     if not rows:
         raise FileNotFoundError(f"no 1m fixtures under {fixtures} — run `make fixtures`")
+
+    if lockbox is not None:
+        if stage is None:
+            raise ValueError(
+                "a lockbox was supplied without a stage. A read of unknown provenance cannot "
+                "be authorised against a holdout, and defaulting the stage would authorise it."
+            )
+        stamps = [int(r["close_ts_ns"]) for r in rows]  # type: ignore[call-overload]
+        first = datetime.fromtimestamp(min(stamps) / 1e9, IST).date()
+        last = datetime.fromtimestamp(max(stamps) / 1e9, IST).date()
+        lockbox.check(stage=stage, start=first, end=last + timedelta(days=1))
+
     return pl.DataFrame(rows).sort(["close_ts_ns", "symbol"])
+
+
+_load_panel = load_panel
 
 
 def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
