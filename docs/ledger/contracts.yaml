@@ -374,16 +374,22 @@
   code: "python/pips/search/s5.py"
   tests:
     - "tests/unit/test_s5.py"
-  status: building
+  status: enforced
   owner_milestone: M19
   # `run_s5_from_registry` is the registry-backed entry point: it reads completed runs at a
   # NAMED stage with preserved daily returns, counts every exclusion (other stage, not
   # completed, viewed, no returns) as the funnel's first step, and refuses series of unequal
   # length rather than truncating them the way `daily_returns_matrix` does.
   #
-  # STILL `building`, and the remaining gap is narrow: no CLI target or scheduled pipeline calls
-  # it, so it has still never run against a registry that a search actually populated. The
-  # constraint is reachable now rather than merely constructible -- but nothing has reached it.
+  # ENFORCED: `make s5-smoke` runs a search per family (six drivers, [C-DISP-01]), promotes each
+  # winner to S4, and runs S5 across the promoted rows. 48 trials recorded, 6 promoted, the
+  # frontier takes 6 -> 3, clustering collapses a near-variant 3 -> 2, the gate passes both, and
+  # M_erank is 2.918 of 48 -- every funnel step doing work on rows a search produced.
+  #
+  # A winner whose PnL series never moves is NOT promoted and is named: A05 needs a session
+  # boundary because a gap requires a prior close, so over a window inside one session it
+  # produces no trades. Promoting it would hand S5 a flat series, which the clustering correctly
+  # refuses -- from three modules away, naming nothing.
 
 - id: C-TRIAL-01
   title: "Every viewed trial is recorded, eliminated and failed ones included"

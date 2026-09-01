@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import TYPE_CHECKING, Final
 import numpy as np
 import polars as pl
 
+from pips.alphas.forecast import Forecast
 from pips.alphas.spec import AlphaSpec, load_alpha_spec
 from pips.alphas.t1._common import IST
 from pips.alphas.t1.a01 import A01Params, compute
@@ -158,10 +160,11 @@ def _evaluate(
     panel: pl.DataFrame,
     closes: dict[str, dict[int, int]],
     stamps: list[int],
-    params: A01Params,
+    params: object,
     spec: AlphaSpec,
     *,
     bar_interval_ns: int,
+    compute_fn: ComputeFn = compute,
 ) -> tuple[list[float], list[float], int]:
     """Score every forecast against the move over the horizon it DECLARED, as-of at each decision.
 
@@ -174,22 +177,23 @@ def _evaluate(
     Shared by the smoke and the recorded search: two copies of a causality-sensitive loop is two
     places for the AsOf discipline to drift, and only one of them would be the one under test.
     """
-    if params.horizon_ns <= 0:
-        raise ValueError(f"horizon_ns must be positive, got {params.horizon_ns}")
-    if params.horizon_ns % bar_interval_ns:
+    horizon_ns = int(params.horizon_ns)  # type: ignore[attr-defined]
+    if horizon_ns <= 0:
+        raise ValueError(f"horizon_ns must be positive, got {horizon_ns}")
+    if horizon_ns % bar_interval_ns:
         raise ValueError(
-            f"horizon_ns={params.horizon_ns} is not a whole number of {bar_interval_ns}ns bars. "
+            f"horizon_ns={horizon_ns} is not a whole number of {bar_interval_ns}ns bars. "
             "Rounding would score the forecast against a window it did not declare, and the "
             "difference would be invisible in the output."
         )
-    horizon_bars = params.horizon_ns // bar_interval_ns
+    horizon_bars = horizon_ns // bar_interval_ns
 
     scores: list[float] = []
     outcomes: list[float] = []
     n_forecasts = 0
     for i, ts in enumerate(stamps[:-horizon_bars]):
         view = AsOfPanelView(panel, decision_ts=ts)
-        for forecast in compute(view, params, spec):
+        for forecast in compute_fn(view, params, spec):
             n_forecasts += 1
             series = closes[forecast.instrument_id]
             here, later = series.get(ts), series.get(stamps[i + horizon_bars])
@@ -307,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+ComputeFn = Callable[..., list[Forecast]]
+
 _GRID_POINTS: Final = 4
 _INITIAL_BUDGET: Final = 400
 """Bars in the first rung. With eta=2 and four candidates the ladder is 4@400, 2@800, 1@1600 —
@@ -326,8 +332,9 @@ def _pnl_series(
     panel: pl.DataFrame,
     closes: dict[str, dict[int, int]],
     stamps: list[int],
-    params: A01Params,
+    params: object,
     spec: AlphaSpec,
+    compute_fn: ComputeFn = compute,
 ) -> list[float]:
     """Per-bar realised PnL of taking every forecast's sign, zero where there was no forecast.
 
@@ -338,7 +345,7 @@ def _pnl_series(
     series = [0.0] * (len(stamps) - 1)
     for i, ts in enumerate(stamps[:-1]):
         view = AsOfPanelView(panel, decision_ts=ts)
-        for forecast in compute(view, params, spec):
+        for forecast in compute_fn(view, params, spec):
             prices = closes[forecast.instrument_id]
             here, nxt = prices.get(ts), prices.get(stamps[i + 1])
             if here in (None, 0) or nxt is None:

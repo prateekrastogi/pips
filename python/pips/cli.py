@@ -53,6 +53,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.ops.deploy_guard import main as guard_main
 
         return guard_main(rest[1:])
+    if command == "s5-smoke":
+        from pips.search.families import main as families_main
+
+        return families_main(rest)
     if command == "s1-search":
         from pips.search.s1 import search_main
 

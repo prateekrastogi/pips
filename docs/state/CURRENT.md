@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 213 files · mypy --strict 213 files · 1366 pytest · clippy clean · cargo test ok
+  ruff 215 files · mypy --strict 215 files · 1377 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,15 +186,17 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Run a search per family and hand the winners to S5.** `[C-DISP-01]` gives six drivers that
-   run on the fixture panel; `run_s1_search` still hardcodes A01. Driving it from `DRIVERS`
-   produces six family winners, which promoted to a later stage is the real ensemble
-   `run_s5_from_registry` has been waiting for. `[C-S5-01]` leaves `building` at that point.
-2. **Enumerated domains.** A12 declares `clock_bin_minutes: [5, 10, 15]` — a set of candidate
-   values, not a `[min, max]` range — and `grid_from_domain` refuses it as malformed. That is
-   safe but wrong: an explicit enumeration is a perfectly good pre-registration. Two elements
-   stay ambiguous (range or pair?), so the rule would be: exactly two means a range, more than
-   two means an enumeration.
+1. **Enumerated domains.** A12 declares `clock_bin_minutes: [5, 10, 15]` — a set of candidate
+   values, not a `[min, max]` range — and `grid_from_domain` refuses it as malformed. Safe but
+   wrong: an explicit enumeration is a perfectly good pre-registration. Two elements stay
+   ambiguous (range or pair?), so the rule would be: exactly two means a range, more than two
+   means an enumeration.
+2. **The fixture panel is too thin for the selection to mean anything.** Two synthetic symbols
+   over five sessions: every alpha trades the same two names, so their PnL streams correlate
+   heavily and the pairwise gate collapses them almost regardless of merit. A05 cannot trade in
+   any window inside one session; A07 and A12 cannot run at all. A wider fixture (more symbols,
+   more sessions, high/low columns) would make `make s5-smoke` exercise selection rather than
+   just wiring.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

@@ -89,6 +89,9 @@ s1-smoke: ## Stage-1 screening smoke run on fixtures (§6 M12 Verify)
 s1-search: ## Run successive halving over A01 variants and RECORD every trial [C-TRIAL-01]
 	$(PY) -m pips.cli s1-search fixtures $(CURDIR)/build/s1-search/registry.db
 
+s5-smoke: ## Search every alpha family, promote the winners, and run S5 across them [C-S5-01]
+	$(PY) -m pips.cli s5-smoke fixtures $(CURDIR)/build/s5-smoke/registry.db
+
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
 	@echo "backtest-smoke: not implemented until M14"; exit 1
 
@@ -105,7 +108,7 @@ JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
 JENKINS_URL ?= http://127.0.0.1:8081
 REF ?= main
 
-.PHONY: provenance ci-container s1-search
+.PHONY: provenance ci-container s1-search s5-smoke
 .PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build install-hooks
 
 jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)
