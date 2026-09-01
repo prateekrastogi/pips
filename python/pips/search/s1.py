@@ -144,38 +144,65 @@ def load_panel(
 _load_panel = load_panel
 
 
+_SCALE_WINDOW_M: Final = 20
+_HOLD_MINUTES: Final = 15
+"""The declared floor of A01's `hold_minutes: [15, 120]`.
+
+NOT the one minute this file used from M12 until now. A parameter outside the pre-registered
+domain cannot be rejected by the falsifiers attached to that spec — they were written for the
+declared space — and it looks exactly like a parameter inside it.
+"""
+
+
 def _evaluate(
     panel: pl.DataFrame,
     closes: dict[str, dict[int, int]],
     stamps: list[int],
     params: A01Params,
     spec: AlphaSpec,
+    *,
+    bar_interval_ns: int,
 ) -> tuple[list[float], list[float], int]:
-    """Score every forecast against the NEXT bar's realised move, as-of at each decision.
+    """Score every forecast against the move over the horizon it DECLARED, as-of at each decision.
+
+    The horizon is DERIVED from ``params.horizon_ns``, never passed alongside it: two copies of
+    one parameter drift, and the copy that drifts is the one nobody is looking at. A forecast
+    carries ``valid_until_ns = decision_ts + horizon_ns``, so that is the window its result has
+    to be read over — scoring it against the next bar measures something the forecast did not
+    claim, and the number looks exactly the same.
 
     Shared by the smoke and the recorded search: two copies of a causality-sensitive loop is two
     places for the AsOf discipline to drift, and only one of them would be the one under test.
     """
+    if params.horizon_ns <= 0:
+        raise ValueError(f"horizon_ns must be positive, got {params.horizon_ns}")
+    if params.horizon_ns % bar_interval_ns:
+        raise ValueError(
+            f"horizon_ns={params.horizon_ns} is not a whole number of {bar_interval_ns}ns bars. "
+            "Rounding would score the forecast against a window it did not declare, and the "
+            "difference would be invisible in the output."
+        )
+    horizon_bars = params.horizon_ns // bar_interval_ns
+
     scores: list[float] = []
     outcomes: list[float] = []
     n_forecasts = 0
-    for i, ts in enumerate(stamps[:-1]):
+    for i, ts in enumerate(stamps[:-horizon_bars]):
         view = AsOfPanelView(panel, decision_ts=ts)
         for forecast in compute(view, params, spec):
             n_forecasts += 1
             series = closes[forecast.instrument_id]
-            here, nxt = series.get(ts), series.get(stamps[i + 1])
-            if here in (None, 0) or nxt is None:
+            here, later = series.get(ts), series.get(stamps[i + horizon_bars])
+            if here in (None, 0) or later is None:
                 continue
             scores.append(float(forecast.expected_return_bps))
-            outcomes.append((nxt - here) / here)
+            outcomes.append((later - here) / here)
     return scores, outcomes, n_forecasts
 
 
 def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
     """Run A01 across the fixture panel and return the smoke report."""
     spec = load_alpha_spec(spec_path)
-    params = A01Params(residual_lookback=5, scale_window=20, horizon_ns=60 * NS)
     panel = _load_panel(fixtures)
 
     stamps = sorted(set(panel["close_ts_ns"].to_list()))
@@ -190,7 +217,23 @@ def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
         for s in sorted(set(panel["symbol"].to_list()))
     }
 
-    scores, outcomes, n_forecasts = _evaluate(panel, closes, stamps, params, spec)
+    # The parameters are checked against the spec's PRE-REGISTERED domain before anything runs.
+    # This target ran A01 at a one-minute horizon from M12 until now, against a declared
+    # `hold_minutes: [15, 120]` — fifteen times below the floor. The falsifiers attached to the
+    # spec were written for the declared space, so they could not reject it, and it looked
+    # exactly like a conforming run.
+    interval = stamps[1] - stamps[0]
+    bars = bars_per_unit(interval)
+    declared = {"residual_lookback_m": 5, "scale_window_m": 20, "hold_minutes": _HOLD_MINUTES}
+    assert_within_domain(spec, declared)
+    params = A01Params(
+        residual_lookback=declared["residual_lookback_m"] * bars,
+        scale_window=declared["scale_window_m"] * bars,
+        horizon_ns=_HOLD_MINUTES * 60 * NS,
+    )
+    scores, outcomes, n_forecasts = _evaluate(
+        panel, closes, stamps, params, spec, bar_interval_ns=interval
+    )
 
     registered = enumerate_specs(spec_path.parent)
     with_plugin = specs_with_plugins()
@@ -204,6 +247,12 @@ def run_s1_smoke(fixtures: Path, spec_path: Path = _SPEC) -> dict[str, object]:
         "symbols": sorted(closes),
         "forecasts": n_forecasts,
         "scored_pairs": len(scores),
+        "hold_minutes": _HOLD_MINUTES,
+        # Overlap. Fifteen-minute forecasts made every minute share fourteen-fifteenths of their
+        # window, so the pair count overstates the evidence by roughly the horizon. Reported
+        # beside it, because a rank IC over 1,800 heavily-overlapping pairs is not 1,800
+        # observations' worth of anything and the raw count invites reading it as though it were.
+        "independent_windows": len(scores) // (_HOLD_MINUTES * bars) if scores else 0,
     }
     if len(scores) >= 20:
         control = shuffled_future_control(
@@ -262,15 +311,6 @@ _GRID_POINTS: Final = 4
 _INITIAL_BUDGET: Final = 400
 """Bars in the first rung. With eta=2 and four candidates the ladder is 4@400, 2@800, 1@1600 —
 inside the 1875-bar fixture panel, so the final rung is never silently truncated."""
-
-_SCALE_WINDOW_M: Final = 20
-_HOLD_MINUTES: Final = 15
-"""The declared floor of A01's `hold_minutes: [15, 120]`.
-
-NOT the one minute the smoke uses. A parameter outside the pre-registered domain cannot be
-rejected by the falsifiers attached to that spec, because they were written for the declared
-space — and it looks exactly like a parameter inside it. `assert_within_domain` now refuses it.
-"""
 
 
 def _params_for(config: str, bars: int) -> A01Params:
@@ -352,7 +392,12 @@ def run_s1_search(
         key = (config, budget)
         if key not in seen:
             scores, outcomes, _ = _evaluate(
-                panel, closes, stamps[:budget], _params_for(config, bars), spec
+                panel,
+                closes,
+                stamps[:budget],
+                _params_for(config, bars),
+                spec,
+                bar_interval_ns=interval,
             )
             seen[key] = (
                 Decimal(str(rank_ic(np.array(scores), np.array(outcomes))))

@@ -428,10 +428,19 @@
   # The grid `make s1-search` shipped a tick ago was (3, 5, 8, 13) against a declared [3, 120] --
   # the bottom eleven percent -- and the winner it now finds, lb=35, was not expressible in it.
   #
-  # assert_within_domain covers the parameters held FIXED during a sweep, which nothing checked:
-  # A01 declares hold_minutes [15, 120] and the S1 SMOKE still runs at a one-minute horizon,
-  # fifteen times below the floor. The search conforms; the smoke does not, and that is recorded
-  # as next action 1 rather than silently changed under a target with its own goldens.
+  # assert_within_domain covers the parameters held FIXED during a sweep, which nothing checked.
+  # BOTH callers now conform: the search and the smoke. The smoke ran A01 at a one-minute
+  # horizon against a declared hold_minutes [15, 120] from M12 until this row was written, and
+  # it had no test at all -- which is how that lasted a milestone. It has one now, and the test
+  # exercises the GUARD (monkeypatching the constant out of range and requiring a refusal)
+  # rather than the constant, because a test that checks today's value passes with the guard
+  # deleted.
+  #
+  # Scoring now happens at the horizon the forecast DECLARED, derived from params.horizon_ns
+  # rather than passed beside it. The smoke reports `independent_windows` next to
+  # `scored_pairs`: at a 15-minute horizon sampled every minute, 3,680 pairs are ~245
+  # non-overlapping windows, and the same rank IC of 0.048 reads as 2.9 sigma against the
+  # former and 0.76 against the latter -- on a seeded random walk where the true IC is zero.
   #
   # Units are separate: the spec declares minutes and A01Params counts bars. They coincide only
   # on a one-minute panel, so bars_per_unit converts explicitly and refuses an interval that

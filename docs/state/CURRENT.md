@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 210 files · mypy --strict 210 files · 1293 pytest · clippy clean · cargo test ok
+  ruff 211 files · mypy --strict 211 files · 1301 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,17 +186,16 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **The S1 smoke runs A01 outside its pre-registered domain.** A01 declares
-   `hold_minutes: [15, 120]`; `run_s1_smoke` uses `horizon_ns = 60 * NS` — one minute, fifteen
-   times below the floor, since M12. `assert_within_domain` `[C-GRID-01]` refuses this and the
-   SEARCH now conforms, but the smoke is an existing verified target with its own goldens and
-   was not changed in passing. Fixing it means moving the horizon into the domain AND scoring at
-   the matching horizon — `_evaluate` currently scores every forecast against the NEXT bar
-   whatever horizon it declared, which is its own mismatch.
-2. **Run S5 on a registry a search populated.** Halving converges to one winner, so a single
+1. **Run S5 on a registry a search populated.** Halving converges to one winner, so a single
    family can never give S5 more than one candidate — S5 selects ACROSS families, and the alphas
-   have no shared dispatch (each has its own `Params` type). Either a per-family search driver
-   or an `s5-smoke` that promotes winners from several searches. `[C-S5-01]` stays `building`.
+   have no shared dispatch (each has its own `Params` type, same `compute(view, params, spec)`
+   signature). Either a per-family search driver or an `s5-smoke` that promotes winners from
+   several searches. `[C-S5-01]` stays `building` until something invokes it.
+2. **The other eight specs' fixed parameters are unchecked.** `[C-GRID-01]`'s
+   `assert_within_domain` is called by A01's search and smoke only. A02–A12 have declared
+   domains and plugin tests that construct `Params` directly (`horizon_ns=60 * NS` throughout,
+   against domains that mostly start at 15). Those are plugin unit tests rather than registered
+   sweeps, so it is not the same violation — but nothing checks them either.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
