@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 180 files · mypy --strict 180 files · 1005 pytest · clippy clean · cargo test ok
+  ruff 184 files · mypy --strict 107 files · 1031 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -155,9 +155,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Finish M18** — hierarchical partial pooling for family means is the last item. PSR/DSR,
-   CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf stepdown and the sealed
-   lockbox have all landed.
+1. **The documented verify command is green without testing your code.** `docker compose run
+   research make ci` printed `ci: green` from `pips/research:current`, an image built
+   2026-08-31 from `4d4916f` whose `validation/` package predates M16 and M18 — 511 tests of
+   day-old code, indistinguishable in the output from a real green. `${PIPS_SHA:-current}` is a
+   floating tag with no bind mount and no build-on-run, so every laptop invocation gets it.
+   CLAUDE.md names this command as THE way to verify. Fix is a design choice — refuse to run on
+   a tag that does not match the working tree, or build on run — so it needs its own tick.
+   (M18 is COMPLETE: PSR/DSR, CSCV/PBO, stationary bootstrap, SPA, Romano-Wolf, the sealed
+   lockbox and hierarchical partial pooling have all landed.)
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

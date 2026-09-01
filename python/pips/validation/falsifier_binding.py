@@ -71,6 +71,8 @@ CHECK_REGISTRY: dict[str, str] = {
     "stationary-bootstrap": "pips.validation.bootstrap",
     "spa-test": "pips.validation.spa",
     "romano-wolf": "pips.validation.romano_wolf",
+    "partial-pooling": "pips.validation.partial_pooling",
+    "family-pooling": "pips.validation.family_pooling",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A
