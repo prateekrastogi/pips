@@ -688,7 +688,8 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   correlation clustering (1−corr) so near-variants form one cluster; τ*, h* per broker × tier
   (threshold economics + rotation condition from the Quant Foundations doc) `[C-TURN-01]`; combined-blotter
   netting fixed point `[C-NET-01]`; order-budget constraints `[C-OBUD-01]`; the S5 stage that composes them and reports the
-  funnel `[C-S5-01]`; the trial recorder that gives rule 4 something to count `[C-TRIAL-01]`; the
+  funnel `[C-S5-01]`; the trial recorder that gives rule 4 something to count `[C-TRIAL-01]`; bronze
+  promoted to silver under the exchange's identity `[C-SILVER-01]`; the
   search grid derived from each spec's pre-registered domain `[C-GRID-01]`; one search driver
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; certification

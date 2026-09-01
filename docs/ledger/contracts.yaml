@@ -546,3 +546,29 @@
   # `unchecked` carries only parameters the SPEC declines to bound (A05's
   # `confirmation_thresholds: 'coarse grid, preregistered'` is prose, not a range), and a test
   # refuses anything with a real declared range parked there.
+
+- id: C-SILVER-01
+  title: "Bronze becomes silver under the exchange's identity, or it is quarantined with a reason"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/silver.py"
+  tests:
+    - "tests/unit/test_silver.py"
+  status: building
+  owner_milestone: M6
+  # Three trading days of real RELIND minute bars sat in bronze on arb-vm with silver empty --
+  # fetched and never turned into anything. normalize_candles already produced close-labelled
+  # integer-paise bars (ADR-0001: Breeze is OPEN-labelled, ingest adds one interval); nothing
+  # persisted them or gave them an identity.
+  #
+  # THE VENDOR CODE IS NOT THE SYMBOL. Bronze is keyed by RELIND and the exchange says RELIANCE;
+  # only 172 of 5,851 names have the two equal. A bar written under the vendor code joins to no
+  # universe, cost model or corporate action while looking perfectly ordinary, so an
+  # unresolvable code is quarantined rather than passed through.
+  #
+  # A reply that is not data is never written as data -- Breeze answers rate limits with HTTP
+  # 200 and a body, and a throttled fetch written as bars becomes a day indistinguishable from
+  # a holiday. Promotion is idempotent and independent of filesystem listing order, including
+  # the quarantine list, so identical bronze hashes identically on the laptop and on arb-vm.
+  #
+  # `building`: nothing reads silver yet. The search still runs on generated fixtures, and one
+  # symbol over three days is not a panel a cross-sectional alpha can rank.
