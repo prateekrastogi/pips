@@ -58,6 +58,12 @@ falsifiers:
   - "Reject if residualization adds no value over raw reversal"
   - "Reject if event-day exclusions erase the result"
 
+# Which check EVALUATES which falsifier (§6 M16). Only where the named check
+# genuinely tests the stated condition; the rest are left unbound on purpose.
+falsifier_checks:
+  - falsifier: "Reject if residualization adds no value over raw reversal"
+    check: "beats-declared-null"
+
 data_tier: T1
 
 cost_context:

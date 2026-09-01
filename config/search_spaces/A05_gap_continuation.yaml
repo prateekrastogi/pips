@@ -66,6 +66,8 @@ falsifiers:
 falsifier_checks:
   - falsifier: "Reject if it disappears after realistic opening spread stress"
     check: "fill-degraded"
+  - falsifier: "Reject if it is not distinct from market direction"
+    check: "beats-declared-null"
 
 data_tier: T1
 

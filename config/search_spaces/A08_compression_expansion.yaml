@@ -64,6 +64,8 @@ falsifiers:
 falsifier_checks:
   - falsifier: "Reject if nearby threshold surfaces lack a plateau"
     check: "plateau-centroid"
+  - falsifier: "Reject if direction adds no information beyond a volatility forecast"
+    check: "beats-declared-null"
 
 data_tier: T1
 
