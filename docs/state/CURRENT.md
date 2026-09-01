@@ -162,6 +162,7 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    and would need its own download decision.
 2. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
    rests on an empty list and QC reports its own skipped comparisons because of it.
+3. **Start M19** — M18 is complete and the gate defect is closed, so the §6 order applies.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
@@ -175,4 +176,3 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   100k/day and 32 parallel fetches), and the NSE holiday list (empty). Each is an M6 item.
 - **Never measured, deliberately:** Breeze's true per-minute limit, WS subscription capacity,
   BSE support. Each would cost live calls to learn and none blocks current work.
-3. **Start M19** — M18 is complete and the gate defect is closed, so the §6 order applies.
