@@ -63,6 +63,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "purged-walk-forward": "pips.validation.walk_forward",
     "era-stability": "pips.validation.era_stability",
     "beats-declared-null": "pips.validation.incremental_value",
+    "family-sensitivity": "pips.validation.family_sensitivity",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A

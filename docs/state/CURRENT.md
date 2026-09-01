@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 162 files · mypy --strict 162 files · 882 pytest · clippy clean · cargo test ok
+  ruff 164 files · mypy --strict 164 files · 893 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -109,7 +109,7 @@ falsifier-binding mutation run — removing the registry's import killed NOTHING
   import is the whole premise: without it "this check exists" is "this name is in a dict I
   wrote". Needed a phantom module entry to observe. Eighth test-level finding this session.
 falsifier coverage — 15 bound, 17 unbound of 32. The unbound are NAMED, not just counted.
-falsifier coverage — 19 bound, 13 unbound of 32; A07 and A12 fully bound
+falsifier coverage — 20 bound, 12 unbound of 32; A02, A07 and A12 fully bound
 stress battery — all_run_cases_passed True, certifies False (4 cases cannot run: 3 need
   per-bucket attribution, 1 needs a sector map). With every input provided it certifies.
 stress-battery mutation run — 6 of 6 killed. The drop-best-block fixture could NOT be
@@ -153,10 +153,12 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A02's "only one lookback works"** — a parameter-family sensitivity check (more than one
-   predeclared lookback must work), and A04's half-life stability. The last unbound falsifiers
-   that plausibly need no new data; the remaining 13 wait on a sector map, an events/circuit
-   master, or T2 quote data.
+1. **Structural falsifiers** — A05's *"depends on the first untradeable print"* and A06's
+   *"selected ex post by realized sign"* are arguably satisfied BY CONSTRUCTION already (the
+   gap is measured to the first bar's close; the pair is written with independent gates). The
+   honest check asserts the construction rather than measuring a result. Of the remaining 12,
+   only these and A01's beta-window are unblocked; the rest need a sector map, an
+   events/circuit master, T2 quote data, or an out-of-sample refit — see today's log.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

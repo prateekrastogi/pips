@@ -69,6 +69,8 @@ falsifier_checks:
     check: "delay-1bar"
   - falsifier: "Reject if results are dominated by open gaps"
     check: "leave-session-out"
+  - falsifier: "Reject if only one lookback works"
+    check: "family-sensitivity"
 
 data_tier: T1
 
