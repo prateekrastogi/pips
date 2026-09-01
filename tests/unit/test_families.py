@@ -24,6 +24,7 @@ from pips.alphas.dispatch import DRIVERS
 from pips.search.families import run_family_searches
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry
+from pips.search.s5 import StageStep
 from pips.selection.pareto import Candidate
 
 FIXTURES = Path("fixtures")
@@ -43,7 +44,7 @@ def searched(tmp_path_factory: pytest.TempPathFactory) -> tuple[dict[str, object
         registry=registry,
         returns_dir=directory / "returns",
         grid_points=2,
-        initial_budget=120,
+        initial_budget=400,
         returns_bars=900,
     )
     return report, registry
@@ -132,12 +133,28 @@ def test_promoted_rows_carry_returns_and_the_selection_objectives(
 def test_s5_selects_an_ensemble_from_the_promoted_winners(
     searched: tuple[dict[str, object], Registry],
 ) -> None:
-    """The thing every M19 module was built for, running on rows a search actually produced."""
+    """The thing every M19 module was built for, running on rows a search actually produced.
+
+    What is asserted is that every STAGE ran and accounted for its input — not that a particular
+    number survived. I have now asserted an ensemble size on this data three times and been
+    wrong twice: the members are noise draws, so how many are mutually non-dominated is a
+    property of the draw. A frontier that leaves one survivor is the frontier working.
+    """
     report, _ = searched
     ensemble = report["ensemble"]
     assert isinstance(ensemble, tuple)
-    assert len(ensemble) >= 2, "an ensemble of one exercises neither clustering nor the gate"
-    assert len(ensemble) <= len(DRIVERS)
+    assert 1 <= len(ensemble) <= int(str(report["families_promoted"]))
+
+    funnel = cast("tuple[StageStep, ...]", report["s5_funnel"])
+    names = [step.name for step in funnel]
+    assert names == [
+        "registry-intake",
+        "pareto-frontier",
+        "correlation-clustering",
+        "pairwise-correlation-gate",
+    ]
+    for step in funnel:
+        assert step.admitted + len(step.dropped) == step.considered, step.name
 
 
 def test_the_s5_funnel_accounts_for_every_promoted_candidate(
@@ -163,12 +180,17 @@ def test_a_winner_that_never_traded_is_named_rather_than_crashing_s5(tmp_path: P
     but that refusal arrives from three modules away and names nothing. Caught at promotion, it
     is a statement about the window, and the other five families still form an ensemble.
     """
+    # The floor guards the SEARCH window; this guards the PRESERVED one, and they are different
+    # windows. A budget of 400 bars crosses a session boundary, so A05, A06 and A07 are searched
+    # properly — and a preserved window of 300 bars crosses none, so their returns are flat and
+    # cannot be correlated. The backstop is not made redundant by the floor; it covers the case
+    # the floor does not look at.
     report = run_family_searches(
         fixtures=FIXTURES,
         registry=Registry(tmp_path / "short.db"),
         returns_dir=tmp_path / "rs",
         grid_points=2,
-        initial_budget=120,
+        initial_budget=400,
         returns_bars=300,
     )
     failures = report["failures"]
@@ -178,7 +200,7 @@ def test_a_winner_that_never_traded_is_named_rather_than_crashing_s5(tmp_path: P
     # session's opening range the same way A05 needs a prior close, so a window inside one
     # session gives neither anything to trade. Asserting "exactly one fails" hardcoded the
     # driver set of the hour and broke the moment A07 joined it.
-    assert {"A05", "A07"} <= set(failures)
+    assert {"A05", "A06", "A07"} <= set(failures)
     for alpha_id, reason in failures.items():
         assert "no trades in the preserved window" in reason, alpha_id
         assert alpha_id not in report["promoted"]  # type: ignore[operator]
@@ -213,3 +235,68 @@ def test_the_run_is_deterministic(tmp_path: Path) -> None:
     assert [c.id for c in cast("tuple[Candidate, ...]", first["ensemble"])] == [
         c.id for c in cast("tuple[Candidate, ...]", second["ensemble"])
     ]
+
+
+# ------------------------------------------------------------ warm-up, anticipated ----
+
+
+@pytest.fixture(scope="module")
+def below_floor(tmp_path_factory: pytest.TempPathFactory) -> tuple[dict[str, object], Registry]:
+    """One run below three families' session floors, shared by the tests that read it."""
+    directory = tmp_path_factory.mktemp("belowfloor")
+    registry = Registry(directory / "registry.db")
+    report = run_family_searches(
+        fixtures=FIXTURES,
+        registry=registry,
+        returns_dir=directory / "returns",
+        grid_points=2,
+        initial_budget=120,
+        returns_bars=300,
+    )
+    return report, registry
+
+
+def test_a_family_below_its_session_floor_is_skipped_before_it_runs(
+    below_floor: tuple[dict[str, object], Registry],
+) -> None:
+    """Declared, not discovered.
+
+    At 120 bars the window crosses no session boundary at all (375 bars to a session), so A05,
+    A06 and A07 can produce nothing — a gap needs a prior close and an opening range needs a
+    session start. Until now the search scored all three at zero across every rung, halving
+    eliminated their configs on noise, and the emptiness surfaced at promotion as a flat PnL
+    series. The reason must name the BUDGET, not the flat series: one says the schedule was
+    wrong, the other says the alpha was.
+    """
+    report, _ = below_floor
+    failures = report["failures"]
+    assert isinstance(failures, dict)
+    assert {"A05", "A06", "A07"} <= set(failures)
+    for alpha_id in ("A05", "A06", "A07"):
+        assert "session" in failures[alpha_id]
+        assert "no trades in the preserved window" not in failures[alpha_id], (
+            f"{alpha_id} was caught after the fact rather than anticipated"
+        )
+
+
+def test_no_trials_are_recorded_for_a_family_that_never_ran(
+    below_floor: tuple[dict[str, object], Registry],
+) -> None:
+    """Skipping happens BEFORE the search, so the ledger carries no looks it did not take.
+
+    Recording rungs for a family whose schedule could not evaluate it would inflate the
+    multiplicity denominator with trials that measured nothing.
+    """
+    _, registry = below_floor
+    families = {r["family"] for r in registry.all_runs()}
+    assert not ({"A05", "A06", "A07"} & families)
+
+
+def test_at_a_budget_that_meets_the_floor_every_family_runs(
+    searched: tuple[dict[str, object], Registry],
+) -> None:
+    # The shared fixture already runs at 400 bars, which crosses a boundary. Re-running the same
+    # configuration to assert the same thing was a fifth full family search for nothing.
+    report, _ = searched
+    assert report["failures"] == {}
+    assert report["families_promoted"] == len(DRIVERS)

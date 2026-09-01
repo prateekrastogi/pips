@@ -58,6 +58,19 @@ class AlphaDriver:
     _build: Callable[[float, Mapping[str, float], Mapping[str, object], int], Any]
     unchecked: Mapping[str, object] = field(default_factory=dict)
     """Parameters the spec declines to bound numerically. Recorded, and their exemption tested."""
+    minimum_sessions: int = 0
+    """Session BOUNDARIES the evaluation window must contain before this alpha can forecast.
+
+    Zero for the bar-warm-up families, whose warm-up is a bar count their params already
+    enforce. One for the session-structure families: A05 and A06 measure a GAP against the prior
+    session's close, and A07 breaks out of an OPENING RANGE, so each needs something from a
+    session it did not start in.
+
+    Declared rather than discovered. A budget of 120 or 300 bars crosses no boundary at all (375
+    bars to a session) and those families produced flat PnL series, which the promotion step
+    caught after the search had already spent itself scoring them at zero. That was knowable in
+    advance and nothing knew it.
+    """
 
     def build(self, swept_value: float, *, bars: int) -> Any:
         """`bars` converts the spec's MINUTES into panel bars; they coincide only at one minute.
@@ -212,6 +225,7 @@ DRIVERS: dict[str, AlphaDriver] = {
         {"hold_minutes": 30},
         a05.compute,
         _a05,
+        minimum_sessions=1,
         # A05 declares `confirmation_thresholds: 'coarse grid, preregistered'` -- prose, not a
         # range -- so its volume and breadth thresholds cannot be checked against anything. That
         # is a gap in the pre-registration, recorded here rather than papered over.
@@ -227,6 +241,7 @@ DRIVERS: dict[str, AlphaDriver] = {
         {},
         _a06_compute,
         _a06,
+        minimum_sessions=1,
         unchecked={
             "observe_minutes": 15,
             "max_volume_ratio": Decimal("3"),
@@ -244,6 +259,7 @@ DRIVERS: dict[str, AlphaDriver] = {
         {"range_end_minutes": 15, "hold_minutes": 30},
         a07.compute,
         _a07,
+        minimum_sessions=1,
         # A07 declares no domain for min_participation, so it cannot be checked against one.
         unchecked={"min_participation": Decimal("0.1")},
     ),

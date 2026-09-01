@@ -518,6 +518,19 @@
   # edge" are different findings and the same number, and an alpha yielding nothing would lose
   # a search it never entered.
   #
+  # Each driver DECLARES `minimum_sessions`: boundaries the evaluation window must contain
+  # before it can forecast. Zero for the bar-warm-up families; one for A05/A06 (a gap is
+  # measured against the prior session's close) and A07 (an opening range needs a session
+  # start). A budget of 120 or 300 bars crosses none -- 375 bars to a session -- so those three
+  # scored zero at every rung, halving eliminated their configs on noise, and the emptiness
+  # surfaced at promotion as a flat series reading like a fact about the alpha. The floor is
+  # checked BEFORE the search and no trials are recorded for a family that never ran, so the
+  # multiplicity denominator carries no looks nobody took.
+  #
+  # The floor guards the SEARCH window; the flat-series check at promotion guards the PRESERVED
+  # window. Different windows, and they disagree: a 400-bar budget with a 300-bar preserved
+  # window searches those families properly and still cannot correlate their returns.
+  #
   # `fixed` is checked against the declared ranges and PASSED to the builder rather than
   # repeated inside it. A mutation run caught that: the builders originally hardcoded the same
   # numbers, so a driver could declare hold_minutes 15, pass the domain check, and construct a

@@ -236,3 +236,53 @@ def test_each_blocker_is_falsifiable(alpha_id: str) -> None:
 @pytest.mark.parametrize("alpha_id", sorted(NOT_RUNNABLE))
 def test_each_exclusion_still_states_a_reason(alpha_id: str) -> None:
     assert len(NOT_RUNNABLE[alpha_id].reason) > 30
+
+
+# ------------------------------------------------------------ warm-up, declared -------
+#
+# A05 and A07 produce nothing in a window with no session boundary — a gap needs a prior close
+# and an opening range needs a session start. Until now that was discovered AFTER the search, as
+# a flat PnL series caught at promotion. A budget of 120 or 300 bars crosses zero boundaries
+# (375 bars to a session); 400 crosses one. That was knowable in advance and nothing knew it.
+
+
+@pytest.mark.parametrize("alpha_id", IDS)
+def test_every_driver_declares_its_session_requirement(alpha_id: str) -> None:
+    assert DRIVERS[alpha_id].minimum_sessions >= 0
+
+
+@pytest.mark.parametrize("alpha_id", ["A05", "A06", "A07"])
+def test_the_session_structure_families_need_a_boundary(alpha_id: str) -> None:
+    """Each needs something from a session it did not start in.
+
+    A05 and A06 fade or follow a GAP, which is measured against the prior session's close. A07
+    breaks out of an OPENING RANGE, which requires a session start inside the window.
+    """
+    assert DRIVERS[alpha_id].minimum_sessions >= 1
+
+
+@pytest.mark.parametrize("alpha_id", ["A01", "A02", "A03", "A04", "A08"])
+def test_the_bar_warmup_families_need_no_boundary(alpha_id: str) -> None:
+    # Their warm-up is a bar count the params already enforce; nothing about it spans sessions.
+    assert DRIVERS[alpha_id].minimum_sessions == 0
+
+
+@pytest.mark.parametrize("alpha_id", IDS)
+def test_the_declared_floor_agrees_with_what_the_alpha_does(alpha_id: str) -> None:
+    """The floor is a claim about behaviour, so it is checked against behaviour.
+
+    A declaration nobody measures is the prose problem again, one field along: at a budget that
+    MEETS the floor the driver must actually produce forecasts, or the number is decoration.
+    """
+    driver = DRIVERS[alpha_id]
+    spec = load_alpha_spec(SPECS / driver.spec_file)
+    swept = grid_from_domain(spec, driver.swept, count=4)[0]
+    params = driver.build(swept, bars=1)
+
+    bars_per_session = 375
+    window = max(400, (driver.minimum_sessions + 1) * bars_per_session)
+    produced = sum(
+        len(driver.compute(AsOfPanelView(PANEL, decision_ts=ts), params, spec))
+        for ts in STAMPS[:window][-120:]
+    )
+    assert produced > 0, f"{alpha_id} declares {driver.minimum_sessions} sessions and made nothing"

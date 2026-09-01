@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -60,6 +61,7 @@ PROMOTED_STAGE = "S4"
 _PROMOTED_RANK = 5
 _SECOND = _NS
 _OPEN = 1_772_000_000 * _NS
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 _OBJECTIVES = [
     Objective("net_return", Direction.MAXIMIZE),
@@ -235,7 +237,26 @@ def run_family_searches(
 
     families: list[_Family] = []
     failures: dict[str, str] = {}
+    # Session boundaries the first rung's window actually contains. A05 and A06 measure a gap
+    # against the prior session's close and A07 breaks out of an opening range, so each needs
+    # something from a session it did not start in -- and a budget that crosses no boundary
+    # gives them nothing. Checked BEFORE the search: otherwise every rung scores zero, halving
+    # eliminates their configs on noise, and the emptiness surfaces at promotion as a flat
+    # series, which reads as a fact about the alpha rather than about the schedule.
+    budget_sessions = len(
+        {datetime.fromtimestamp(ts / 1e9, _IST).date() for ts in stamps[:initial_budget]}
+    )
+    boundaries = budget_sessions - 1
+
     for alpha_id, driver in sorted(DRIVERS.items()):
+        if boundaries < driver.minimum_sessions:
+            failures[alpha_id] = (
+                f"declares minimum_sessions={driver.minimum_sessions} and the first rung's "
+                f"budget of {initial_budget} bars spans {budget_sessions} session(s), crossing "
+                f"{boundaries}. Not searched: every rung would score zero and halving would "
+                "eliminate its configs on noise."
+            )
+            continue
         context = TrialContext(
             stage="S1",
             stage_rank=1,
