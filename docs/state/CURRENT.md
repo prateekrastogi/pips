@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 211 files · mypy --strict 211 files · 1317 pytest · clippy clean · cargo test ok
+  ruff 213 files · mypy --strict 213 files · 1366 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,16 +186,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **An alpha dispatch, so a search can run per family.** Halving converges to one winner, so a
-   single family can never give S5 more than one candidate — S5 selects ACROSS families. Every
-   alpha shares the `compute(view, params, spec)` signature and has its own `Params` type, with
-   no registry mapping one to the other. Confirmed on the fixture panel: A01–A04 each produce
-   600 forecasts over 300 bars, so four families are runnable there. A05–A08 and A12 need gap,
-   ATR, event or seasonal-slot data the panel lacks, and a dispatch must say so rather than
-   letting them score zero — "produced no forecasts" is not "produced no edge".
-2. **Run S5 on the result.** With four family winners recorded at a promoted stage,
-   `run_s5_from_registry` has a real ensemble to select from and `[C-S5-01]` can leave
-   `building`.
+1. **Run a search per family and hand the winners to S5.** `[C-DISP-01]` gives six drivers that
+   run on the fixture panel; `run_s1_search` still hardcodes A01. Driving it from `DRIVERS`
+   produces six family winners, which promoted to a later stage is the real ensemble
+   `run_s5_from_registry` has been waiting for. `[C-S5-01]` leaves `building` at that point.
+2. **Enumerated domains.** A12 declares `clock_bin_minutes: [5, 10, 15]` — a set of candidate
+   values, not a `[min, max]` range — and `grid_from_domain` refuses it as malformed. That is
+   safe but wrong: an explicit enumeration is a perfectly good pre-registration. Two elements
+   stay ambiguous (range or pair?), so the rule would be: exactly two means a range, more than
+   two means an enumeration.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

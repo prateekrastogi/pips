@@ -453,3 +453,33 @@
   # endpoints are set exactly rather than trusted to float arithmetic. A03 also declares
   # `liquidity_floor: 'preregistered'`, a note rather than a bound: unpacked as a range it died
   # on int('p'), and is now refused by name.
+
+- id: C-DISP-01
+  title: "Every alpha with a plugin is either driven by a search or excluded with a reason"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/alphas/dispatch.py"
+  tests:
+    - "tests/unit/test_dispatch.py"
+  status: enforced
+  owner_milestone: M12
+  # Halving converges to one winner, so a single family can never give S5 more than one
+  # candidate -- S5 selects ACROSS families. Six drivers run on the fixture panel (A01-A05,
+  # A08); three are excluded with reasons established by RUNNING them, not by guessing:
+  # A06 needs a fourth `event_status` argument the panel cannot supply, A07 refuses because the
+  # panel has no high/low so no true range exists, A12 declares history_sessions [60, 250]
+  # against a five-session panel.
+  #
+  # The register is complete by test: every spec with a plugin is driven or excluded, never
+  # both, so adding a plugin and forgetting a driver cannot silently narrow the search.
+  #
+  # A driver that produces no forecasts is refused -- "produced no forecasts" and "produced no
+  # edge" are different findings and the same number, and an alpha yielding nothing would lose
+  # a search it never entered.
+  #
+  # `fixed` is checked against the declared ranges and PASSED to the builder rather than
+  # repeated inside it. A mutation run caught that: the builders originally hardcoded the same
+  # numbers, so a driver could declare hold_minutes 15, pass the domain check, and construct a
+  # one-minute horizon -- the check saw the declaration and the run used the literal.
+  # `unchecked` carries only parameters the SPEC declines to bound (A05's
+  # `confirmation_thresholds: 'coarse grid, preregistered'` is prose, not a range), and a test
+  # refuses anything with a real declared range parked there.
