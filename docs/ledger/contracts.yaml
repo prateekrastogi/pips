@@ -245,6 +245,64 @@
   # `building`: the writers that fill these sections from S5 output do not exist yet, so today
   # the schema is enforced but nothing populates it end to end.
 
+- id: C-DATA-03
+  title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
+  spec: "IMPLEMENTATION.md#36-experiment-registry"
+  code: "python/pips/data/lockbox.py"
+  tests:
+    - "tests/unit/test_lockbox.py"
+  status: enforced
+  owner_milestone: M18
+  # Landed at M18 with tests and no row -- found while writing `[C-LBOX-01]`, which needed to
+  # cite it and could not. Not a systemic hole: `code:` names ONE representative module per
+  # contract, and 72 of 98 modules are unnamed by design (the multiplicity math under
+  # `[C-REG-01]`, the validators under their gates). `ledger-check` rule 4 is a liveness check
+  # on that pointer, not a coverage claim -- making it one would mean `code:` became a manifest
+  # and every refactor became a ledger edit. This row exists because the sealed lockbox is a
+  # distinct enforced CONTRACT with its own tests, not because the file was unlisted.
+  #
+  # IT RAISES, IT DOES NOT FILTER. Silently returning the portion outside the holdout lets a
+  # caller compute a valid-looking result over a window it did not choose, with a shorter series
+  # as its only clue -- and a shorter series is not an error message.
+  #
+  # Every attempt that touches the holdout is recorded, refused ones included, BEFORE the raise.
+  # An unknown stage is refused: a stage nobody recognises is not evidence of authority. The
+  # stage ordering is imported from `STAGE_RANKS` rather than copied -- two hand-maintained
+  # orderings drift, and a lockbox that thinks S5 outranks S6 opens early with nothing noticing.
+
+- id: C-LBOX-01
+  title: "Lockbox one-shot run: record before evaluate, refusals cost nothing"
+  spec: "IMPLEMENTATION.md#392-lockbox-one-shot-run"
+  code: "python/pips/certification/lockbox_run.py"
+  tests:
+    - "tests/unit/test_lockbox_run.py"
+  status: building
+  owner_milestone: M20
+  # The third half. `[C-REG-01]` records unlocks, `[C-DATA-03]`'s SealedLockbox refuses the
+  # bytes, and neither of them RUNS the holdout -- the gap between them is where a second look
+  # still fits.
+  #
+  # RECORD BEFORE EVALUATE. Recording a successful unlock is the natural order and the wrong
+  # one: an evaluation that crashes has still fetched the sealed window, and a retry then gets a
+  # fresh "first" unlock. Crash-and-retry reads the holdout as often as it likes with one row to
+  # show for it. The runner cannot know how far the evaluation got before it died, and the only
+  # assumption that cannot silently permit a second look is that it got all the way -- so a
+  # crashed run consumes the cycle and the retry is told VOID.
+  #
+  # A REFUSAL COSTS NOTHING. The mirror: if a stray S3 call burned the cycle's one unlock, any
+  # process could void every certification in flight by asking politely and being told no.
+  #
+  # THE WINDOW AND THE CYCLE COME FROM THE SEAL. A run that evaluates the training window and
+  # reports it as the holdout is what makes the gate theatre, so the runner takes no dates at
+  # all; a caller supplying the cycle too could unlock cycle A while reading cycle B's holdout.
+  # Both are asserted structurally, on the signature, because the cheapest way to make the wrong
+  # dates impossible is to have nowhere to pass them.
+  #
+  # AN EMPTY RESULT IS NOT A PASS -- and it still consumes the unlock, because it looked.
+  #
+  # `building`: nothing calls this yet. The S6 caller that picks the one candidate and hands it
+  # here lands with the dossier writers.
+
 - id: C-OMS-01
   title: "OrderIntent / ExecutionEvent schemas with idempotency keys"
   spec: "IMPLEMENTATION.md#310-order-plane"

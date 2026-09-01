@@ -408,6 +408,26 @@ The binding is one-directional and cannot be made symmetric: the dossier is seal
 bundle names its hash, so the bundle's signature covers the dossier's *hash*, not its bytes. An
 edited dossier therefore leaves `verify_bundle` saying yes. Certification runs both checks.
 
+### 3.9.2 Lockbox one-shot run `[C-LBOX-01]`
+
+M11 records unlocks; M18 refuses the bytes. Neither *runs* the holdout, and the gap between them
+is where the one thing a lockbox exists to prevent still fits.
+
+**The unlock is recorded before the evaluation.** Recording only a successful unlock is the
+natural order and the wrong one: an evaluation that crashes has still fetched the sealed window,
+and a caller who retries gets a fresh "first" unlock — crash-and-retry reads the holdout as often
+as it likes with one row to show for it. The runner cannot know how far the evaluation got, and
+the only assumption that cannot silently permit a second look is that it got all the way.
+
+**A refusal costs nothing.** If a stray S3 call burned the cycle's one unlock, any process could
+void every certification in flight by asking and being told no. The seal records the attempt;
+the ledger is untouched.
+
+**The window and the cycle come from the seal, never the caller.** A run that evaluates the
+training window and reports it as the holdout is what makes the gate theatre, and a caller
+supplying both could unlock cycle A's ledger while reading cycle B's holdout. **An empty result
+is not a pass** — a run that measured nothing is not a run that measured nothing bad.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -697,7 +717,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 - **M18 stats stack**: PSR/DSR (kurtosis convention: γ₄ raw; excess+... guard in code), CSCV/
   PBO with boundary purge, SPA with Hansen recentering + **Romano–Wolf stepdown / model
   confidence set** for final survivors, stationary bootstrap (day/week blocks), hierarchical
-  partial pooling for family means; sealed-lockbox enforcement in the data layer (refuses
+  partial pooling for family means; sealed-lockbox enforcement in the data layer `[C-DATA-03]` (refuses
   those dates below release stage). *Verify:* Monte-Carlo size/coverage tests; lockbox-refusal
   test; null search on max-Sharpe.
 - **M19 selection + turnover optimizer** `[C-SEL-01]`: non-dominated (Pareto) sort across net return, DSR,
@@ -710,7 +730,8 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   search grid derived from each spec's pre-registered domain `[C-GRID-01]`; one search driver
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
-  dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); lockbox one-shot run;
+  dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
+  one-shot run `[C-LBOX-01]`;
   **top-5 is a maximum — fewer is a valid output**. *Verify:* bundle round-trip; dossier
   completeness check.
 

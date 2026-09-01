@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 229 files · mypy --strict 229 files · 1563 pytest · clippy clean · cargo test ok
+  ruff 231 files · mypy --strict 231 files · 1585 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,13 +186,14 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Finish M20.** `[C-BNDL-01]` and `[C-DOSS-01]` are in; what remains is the **lockbox one-shot
-   run** (it raises rather than filters, and the unlock attempt is recorded before the raise) and
-   the **Rust loader's boot check** — golden fixtures replayed, unknown nodes / version mismatch /
-   bad checksum / unequal quantized output refused before READY. Nothing yet POPULATES a dossier
-   from S5 output; the schema is enforced and the writers do not exist.
-2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on every
-   measurement the dossier would record, and widening it means external Breeze calls on a metered
+1. **Finish M20.** `[C-BNDL-01]`, `[C-DOSS-01]` and `[C-LBOX-01]` are in. What remains is the
+   **Rust loader's boot check** — golden fixtures replayed, unknown nodes / schema-version
+   mismatch / missing cost/risk versions / bad checksum / unequal quantized output all refused
+   before READY (§3.9) — and the **writers**: nothing yet POPULATES a dossier from S5 output or
+   calls the lockbox runner. The schema and the runner are enforced; the S6 caller that picks
+   the one candidate and hands it over does not exist.
+2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
+   every number a dossier would record, and widening it means external Breeze calls on a metered
    budget with the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists;
    the budget is 100k calls/day and 32 parallel fetches.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
