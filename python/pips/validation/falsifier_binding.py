@@ -68,6 +68,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "ex-post-selection": "pips.validation.ex_post_selection",
     "deflated-sharpe": "pips.validation.deflated_sharpe",
     "pbo-cscv": "pips.validation.pbo",
+    "stationary-bootstrap": "pips.validation.bootstrap",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A
