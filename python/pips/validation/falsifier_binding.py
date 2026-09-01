@@ -73,6 +73,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "romano-wolf": "pips.validation.romano_wolf",
     "partial-pooling": "pips.validation.partial_pooling",
     "family-pooling": "pips.validation.family_pooling",
+    "frontier-selection": "pips.selection.frontier",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A

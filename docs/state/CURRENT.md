@@ -11,10 +11,11 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**M19 selection + turnover optimizer — the non-dominated (Pareto) sort has landed
-`[C-SEL-01]`, ledgered `building` because nothing consults it yet.** Next in M19: correlation
-clustering (1−corr), τ*/h* per broker × tier, the combined-blotter netting fixed point and
-order-budget constraints.
+**M19 selection + turnover optimizer — the Pareto sort, the 1-corr clustering and the frontier
+reduction that composes them have landed `[C-SEL-01]`.** Still ledgered `building`, precisely:
+`select_frontier` gives the sort and the clustering a caller, but nothing in the SEARCH calls
+`select_frontier` — the chain is connected to itself, not yet to a pipeline. Next in M19: τ*/h*
+per broker × tier, the combined-blotter netting fixed point and order-budget constraints.
 
 **M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
 stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
@@ -86,7 +87,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 189 files · mypy --strict 189 files · 1077 pytest · clippy clean · cargo test ok
+  ruff 193 files · mypy --strict 193 files · 1109 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -169,12 +170,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Give the Pareto sort a caller.** `pips.selection.pareto` is mutation-verified and ledgered
-   `building`, but nothing in the search consults it yet. M19 continues with correlation
-   clustering (1−corr, so near-variants form one cluster), τ*/h* per broker × tier, and the
-   combined-blotter netting fixed point — the clustering is the natural next unit and the
-   frontier is its input. A capability with no caller is how `check_unexplained_ratio_jump`
-   stayed dead for a milestone.
+1. **Connect the selection chain to a search stage.** `select_frontier` composes the sort and
+   the clustering, but no stage invokes it, so `[C-SEL-01]` stays `building`. M19 continues
+   with τ*/h* per broker × tier (threshold economics and the rotation condition), the
+   combined-blotter netting fixed point and order-budget constraints — τ*/h* is the natural
+   next unit, and the reduced frontier is what it costs.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

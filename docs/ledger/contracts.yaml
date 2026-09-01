@@ -281,13 +281,17 @@
 - id: C-SEL-01
   title: "Selection compares on declared objectives; no weights are invented to break ties"
   spec: "IMPLEMENTATION.md#6-milestone-plan"
-  code: "python/pips/selection/pareto.py"
+  code: "python/pips/selection/frontier.py"
   tests:
     - "tests/unit/test_pareto.py"
+    - "tests/unit/test_clustering.py"
+    - "tests/unit/test_frontier_selection.py"
   status: building
   owner_milestone: M19
-  # The non-dominated sort is in and mutation-verified; the rest of M19 (correlation
-  # clustering, tau*/h* per broker x tier, the netting fixed point, order-budget constraints)
-  # is not. Deliberately `building` rather than `enforced`: nothing in the search calls the
-  # sort yet, and a row claiming enforcement for a capability with no caller is the
-  # check_unexplained_ratio_jump failure written into the ledger.
+  # The non-dominated sort, the 1-corr clustering and the frontier reduction that composes
+  # them are in and mutation-verified. STILL `building`, and precisely: `select_frontier` gives
+  # the sort and the clustering a caller, but nothing in the SEARCH calls `select_frontier`.
+  # The chain is connected to itself and not yet to a pipeline. What remains in M19 is tau*/h*
+  # per broker x tier, the combined-blotter netting fixed point and order-budget constraints.
+  # A row claiming enforcement for a capability no stage invokes is the
+  # check_unexplained_ratio_jump failure written into the ledger instead of the code.
