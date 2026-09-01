@@ -66,3 +66,35 @@ def test_the_planes_keep_separate_identities() -> None:
         for image in IMAGES
     }
     assert len(set(uids.values())) == len(uids), uids
+
+
+# ------------------------------------------------------------ the build must parse ---
+
+
+@pytest.mark.parametrize("image", IMAGES)
+def test_no_line_ends_in_an_escaped_backslash(image: str) -> None:
+    r"""A line ending `\\` is an escaped backslash, not a continuation.
+
+    Adding the shared group, I wrote `\\` into reader and engine and `\` into research — the
+    edit went through two different quoting paths and I only noticed one. Docker read
+    `&& groupadd ... pips \\` as a completed instruction and the next line's `&&` as a new one:
+    `dockerfile parse error: unknown instruction: &&`.
+
+    Local CI passed, because `make ci-container` builds RESEARCH — the one file that was
+    correct. The deploy rail caught it, failed three times and stopped with "human needed",
+    which is the rail working; the running services stayed on the last good image. But the
+    check that would have caught it before the push costs nothing.
+    """
+    for number, line in enumerate(dockerfile(image).splitlines(), start=1):
+        assert not line.rstrip().endswith("\\\\"), f"{image}.Dockerfile:{number} ends in \\\\"
+
+
+@pytest.mark.parametrize("image", IMAGES)
+def test_a_continuation_is_followed_by_a_continuing_line(image: str) -> None:
+    # The other half: a line ending in a single backslash must be continued, not left dangling
+    # at the end of the file or before a blank line.
+    lines = dockerfile(image).splitlines()
+    for number, line in enumerate(lines, start=1):
+        if line.rstrip().endswith("\\") and not line.rstrip().endswith("\\\\"):
+            assert number < len(lines), f"{image}.Dockerfile:{number} continues into nothing"
+            assert lines[number].strip(), f"{image}.Dockerfile:{number} continues into a blank"

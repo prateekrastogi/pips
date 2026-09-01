@@ -15,7 +15,7 @@ RUN cargo build --release --workspace
 FROM debian:bookworm-slim AS reader
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system --gid 10000 pips \\
+    && groupadd --system --gid 10000 pips \
     && useradd --system --create-home --uid 10002 --gid 10000 pips
 COPY --from=builder /build/target/release/ /usr/local/lib/pips/
 USER pips
