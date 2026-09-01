@@ -202,7 +202,7 @@ def test_a_winner_that_never_traded_is_named_rather_than_crashing_s5(tmp_path: P
     # driver set of the hour and broke the moment A07 joined it.
     assert {"A05", "A06", "A07"} <= set(failures)
     for alpha_id, reason in failures.items():
-        assert "no trades in the preserved window" in reason, alpha_id
+        assert "produced no trades" in reason, alpha_id
         assert alpha_id not in report["promoted"]  # type: ignore[operator]
     assert report["families_promoted"] == report["families_run"] - len(failures)  # type: ignore[operator]
 
@@ -274,7 +274,7 @@ def test_a_family_below_its_session_floor_is_skipped_before_it_runs(
     assert {"A05", "A06", "A07"} <= set(failures)
     for alpha_id in ("A05", "A06", "A07"):
         assert "session" in failures[alpha_id]
-        assert "no trades in the preserved window" not in failures[alpha_id], (
+        assert "produced no trades" not in failures[alpha_id], (
             f"{alpha_id} was caught after the fact rather than anticipated"
         )
 
@@ -300,3 +300,52 @@ def test_at_a_budget_that_meets_the_floor_every_family_runs(
     report, _ = searched
     assert report["failures"] == {}
     assert report["families_promoted"] == len(DRIVERS)
+
+
+# ------------------------------------------------------------ why it was flat ---------
+
+
+def test_a_truncated_window_is_reported_as_a_window_limit() -> None:
+    """Two different findings wear the same symptom.
+
+    A flat PnL series means the winner never traded. If the preserved window is a TRUNCATION of
+    the panel, the window may simply be too short to hold what the alpha needs — A05 needs a
+    session boundary because a gap requires a prior close.
+    """
+    from pips.search.families import flat_series_reason
+
+    reason = flat_series_reason("A05", "A05-observe_minutes=30", window=300, total=1875)
+    assert "300" in reason
+    assert "1875" in reason
+    assert "window" in reason
+
+
+def test_the_whole_panel_being_flat_is_reported_as_a_fact_about_the_data() -> None:
+    """When the window IS the panel, the window cannot be the limitation.
+
+    On three real trading days of ICICIBANK and RELIANCE, A06 found no qualifying idiosyncratic
+    gap in all 1,108 bars available. Saying "this is a statement about the window" there would
+    be plainly false, and would point the reader at a knob that is already at its limit.
+    """
+    from pips.search.families import flat_series_reason
+
+    reason = flat_series_reason("A06", "A06-hold_minutes=5", window=1108, total=1108)
+    assert "all 1108" in reason
+    # "too short" is the window-limit message's distinguishing phrase. Asserting on the literal
+    # words "about the window" fails on a message that says "this is NOT about the window",
+    # which is the correct thing to say — the substring is present inside its own negation.
+    assert "too short" not in reason
+    assert "every bar available" in reason
+
+
+def test_the_reason_never_names_an_alpha_other_than_the_one_that_failed() -> None:
+    """The message used to explain A05's gap requirement whatever family had gone flat.
+
+    On real bars it was A06 that failed and the reason talked about A05 — an explanation of the
+    wrong alpha reads as a diagnosis, and it sends the reader to look at the wrong thing.
+    """
+    from pips.search.families import flat_series_reason
+
+    reason = flat_series_reason("A06", "A06-hold_minutes=5", window=1108, total=1108)
+    assert "A06" in reason
+    assert "A05" not in reason

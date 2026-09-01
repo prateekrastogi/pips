@@ -213,6 +213,38 @@ def _search_one(
     )
 
 
+def flat_series_reason(alpha_id: str, winner: str, *, window: int, total: int) -> str:
+    """Why a winner's PnL never moved — and the two cases wear the same symptom.
+
+    If the preserved window is a TRUNCATION of the panel, the window may simply be too short to
+    hold what the alpha needs: A05 and A06 measure a gap against the prior session's close, A07
+    breaks out of an opening range, and a window inside one session offers none of that.
+
+    If the window IS the panel, the window cannot be the limitation. The alpha looked at
+    everything there is and found nothing it trades on — a statement about the DATA. On three
+    real trading days of ICICIBANK and RELIANCE, A06 found no qualifying idiosyncratic gap in
+    all 1,108 bars; saying "this is a statement about the window" there would be plainly false
+    and would send the reader to a knob already at its limit.
+
+    The message also used to explain A05's gap requirement whatever family had gone flat. An
+    explanation of the wrong alpha reads as a diagnosis.
+    """
+    head = (
+        f"winner {winner!r} produced no trades, so its PnL series is flat and cannot be "
+        f"correlated. {alpha_id} is not promoted. "
+    )
+    if window < total:
+        return head + (
+            f"The preserved window is {window} of {total} bars, so it may simply be too short "
+            f"to contain what {alpha_id} needs — the gap and opening-range families require a "
+            "session boundary inside the window."
+        )
+    return head + (
+        f"The window is the whole panel, all {total} bars, so this is not about the window: "
+        f"{alpha_id} found nothing it trades on in every bar available."
+    )
+
+
 def run_family_searches(
     *,
     fixtures: Path,
@@ -315,11 +347,8 @@ def run_family_searches(
     tradeable: list[_Family] = []
     for family in families:
         if len(set(family.series)) <= 1:
-            failures[family.driver.alpha_id] = (
-                f"winner {family.winner!r} produced no trades in the preserved window of "
-                f"{window} bars, so its PnL series is flat and cannot be correlated. Not "
-                "promoted. This is a statement about the window, not about the alpha: A05 needs "
-                "a session boundary because a gap requires a prior close."
+            failures[family.driver.alpha_id] = flat_series_reason(
+                family.driver.alpha_id, family.winner, window=window, total=len(stamps)
             )
         else:
             tradeable.append(family)

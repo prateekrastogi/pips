@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 225 files · mypy --strict 225 files · 1501 pytest · clippy clean · cargo test ok
+  ruff 225 files · mypy --strict 225 files · 1504 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,16 +186,15 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Run a search on the real bars.** The wiring exists — `run_family_searches(silver=...)` reads
-   promoted bars and pins the parquet it read — and it has only been exercised on a synthetic
-   silver file. The real one is on arb-vm: two names over three trading days, 1,108 bars each.
-   Three sessions clear the session floor for A05/A06/A07, but two symbols cannot support a
-   cross-sectional ranking, so expect A03 and A04 to rank a tie. The run is worth doing for what
-   it reveals about the data, not for what it selects.
-2. **More backfill.** Two symbols over three days is the binding constraint on everything above.
-   The Breeze budget is 100k calls/day and 32 parallel fetches; `pips.data.breeze.campaign`
-   exists. Widening the universe and the date range is what turns the chain from wired into
-   useful — and it is an external-call decision, not a code one.
+1. **More backfill — the binding constraint on everything.** Two symbols over three days makes
+   A03 and A04 rank a tie, collapses the frontier to one noise draw, and gave A06 nothing to
+   trade. Three separate measurements now point here. `pips.data.breeze.campaign` exists and the
+   budget is 100k calls/day with 32 parallel fetches; widening the universe and the date range
+   is an external-call decision to take deliberately, not a code change.
+2. **A06's participation is data-dependent and now demonstrated.** It produced nothing on three
+   real days of two large-caps — an ordinary answer for a gap-fade alpha over that sample, not a
+   defect. Worth revisiting once there are enough sessions for gaps to actually occur, because
+   until then its absence from every ensemble says nothing either way.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
