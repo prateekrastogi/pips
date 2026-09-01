@@ -25,7 +25,7 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
 5. Otherwise → advance the active milestone (or start the next per §6 order): plan briefly,
    then TDD ONE coherent chunk — write the failing test FIRST, run it, keep the red output;
    write the least code that turns it green; refactor under green. Then run that milestone's
-   Verify commands (`docker compose run research make ci` or the milestone-specific target)
+   Verify commands (`make ci-container` or the milestone-specific target)
    and commit on m/<id>-<slug>.
 
 ## 2 · Close the tick (mandatory, even for "nothing to do")

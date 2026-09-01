@@ -25,6 +25,12 @@ services:
       context: .
       dockerfile: docker/research.Dockerfile
       target: research
+      args:
+        # Empty by default ON PURPOSE: an image built without these is refused by
+        # `make provenance`, not quietly treated as a host run. `make ci-container` supplies
+        # them from the working tree.
+        PIPS_SHA: ${PIPS_SHA:-}
+        PIPS_DIRTY: ${PIPS_DIRTY:-0}
     image: pips/research:${PIPS_SHA:-current}
     # The Breeze DATA-plane credentials, per ADR-0011. env_file is a runtime read, so this
     # does not put the token in the image — .dockerignore still excludes it and a test pins
@@ -33,6 +39,9 @@ services:
     environment:
       PIPS_ENV: ${PIPS_ENV:-dev}
       PIPS_DATA_ROOT: /srv/pips
+      # Reaches the process as "" when unset, which `check_provenance` treats as UNSET rather
+      # than as a value that could match an image that also failed to bake one.
+      PIPS_EXPECTED_SHA: ${PIPS_EXPECTED_SHA:-}
     volumes:
       - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
     working_dir: /app

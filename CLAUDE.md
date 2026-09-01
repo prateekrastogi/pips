@@ -11,14 +11,16 @@ first (`make install-hooks`; `--no-verify` is the loud, logged bypass). A local 
 "it works here"; the Jenkins green says "it works from what you actually pushed" — that
 difference has already caught two clean-checkout failures. Merge to main only on green;
 arb-vm's deploy rail auto-builds and runs every new main SHA (trading-path services never
-restart during market hours). Verify commands run inside the container:
-`docker compose run research make ci`.
+restart during market hours). Verify inside the container with `make ci-container`: it builds
+the image FROM the working tree and the image refuses the ladder unless it matches. A raw
+`docker compose run` resolves a floating tag and has reported `ci: green` from a day-old build.
 
 LOAD ORDER (strict, to protect context): docs/INDEX.md → docs/state/CURRENT.md → the active
 milestone section of IMPLEMENTATION.md → its ledger rows. Everything else on demand only.
 Reference docs in docs/reference/ are consulted by section, never ingested.
 
-Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · tdd-check ·
+Commands (Make targets): make setup · test · lint · typecheck · ci · ci-container · provenance ·
+determinism · tdd-check ·
 ledger-check · s1-smoke · backtest-smoke · parity DAY=<day> · qc
 
 Constitution (full text IMPLEMENTATION.md §2): TEST-FIRST — every behavioural change starts

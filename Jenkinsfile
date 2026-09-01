@@ -34,10 +34,13 @@ pipeline {
       steps {
         // --target research: the same stage the developer and arb-vm build. One image,
         // one ladder, three places (§2.2).
-        sh 'docker build -f docker/research.Dockerfile --target research -t "$IMAGE" .'
+        sh 'docker build -f docker/research.Dockerfile --target research --build-arg PIPS_SHA="$GIT_COMMIT" -t "$IMAGE" .'
       }
     }
 
+    // First, before any verdict: the image must prove it holds the commit we checked out.
+    // A green from an image built elsewhere is the failure this whole stage exists to stop.
+    stage('provenance')   { steps { sh 'docker run --rm -e PIPS_EXPECTED_SHA="$GIT_COMMIT" "$IMAGE" make provenance' } }
     stage('lint')         { steps { sh 'docker run --rm "$IMAGE" make lint' } }
     stage('typecheck')    { steps { sh 'docker run --rm "$IMAGE" make typecheck' } }
 

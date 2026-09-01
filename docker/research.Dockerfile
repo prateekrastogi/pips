@@ -38,4 +38,18 @@ RUN uv sync --group dev --no-install-project
 FROM deps AS research
 COPY . .
 RUN uv sync --group dev --frozen || uv sync --group dev
+
+# Provenance. The image states which commit it holds so `make provenance` can refuse to run
+# the ladder against code that is not the code under test — `pips/research:current` once
+# reported `ci: green` from a day-old build and nothing in the output said so.
+#
+# The MARKER FILE is written unconditionally, even when the arg is empty. Its existence is what
+# proves we are in a pips image; its contents are the claim. An image built without the arg is
+# therefore refused rather than mistaken for a host run, which is the hole that would otherwise
+# reopen the first time someone forgets --build-arg.
+ARG PIPS_SHA=""
+ARG PIPS_DIRTY="0"
+ENV PIPS_IMAGE_SHA=$PIPS_SHA \
+    PIPS_IMAGE_DIRTY=$PIPS_DIRTY
+RUN printf '%s' "$PIPS_SHA" > /app/.pips-image-sha
 CMD ["make", "ci"]

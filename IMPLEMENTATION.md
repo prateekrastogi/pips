@@ -572,7 +572,8 @@ its absence means the loop holds at the gate and only re-verifies). Ledger rows 
   research container, root `Jenkinsfile` (declarative pipeline, native Jenkins) whose stages
   are the `make ci` ladder + image build,
   local Jenkins wired to the repo. From this point every milestone's Verify commands run in
-  the container. *Verify:* `docker compose run research make ci` green; Jenkins pipeline
+  the container, which states the commit it was built from so a verify of unknown
+  provenance cannot report a verdict `[G-PROV-01]` (ADR-0013). *Verify:* `make ci-container` green; Jenkins pipeline
   green on a scratch commit.
 - **M1 harvest audit**: §1.2 → `ledger/salvage.yaml` + `docs/SALVAGE.md` + needs-coverage
   table. *Verify:* every repo covered **including its full git history (all branches, tags,
@@ -959,14 +960,16 @@ first (`make install-hooks`; `--no-verify` is the loud, logged bypass). A local 
 "it works here"; the Jenkins green says "it works from what you actually pushed" — that
 difference has already caught two clean-checkout failures. Merge to main only on green;
 arb-vm's deploy rail auto-builds and runs every new main SHA (trading-path services never
-restart during market hours). Verify commands run inside the container:
-`docker compose run research make ci`.
+restart during market hours). Verify inside the container with `make ci-container`: it builds
+the image FROM the working tree and the image refuses the ladder unless it matches. A raw
+`docker compose run` resolves a floating tag and has reported `ci: green` from a day-old build.
 
 LOAD ORDER (strict, to protect context): docs/INDEX.md → docs/state/CURRENT.md → the active
 milestone section of IMPLEMENTATION.md → its ledger rows. Everything else on demand only.
 Reference docs in docs/reference/ are consulted by section, never ingested.
 
-Commands (Make targets): make setup · test · lint · typecheck · ci · determinism · tdd-check ·
+Commands (Make targets): make setup · test · lint · typecheck · ci · ci-container · provenance ·
+determinism · tdd-check ·
 ledger-check · s1-smoke · backtest-smoke · parity DAY=<day> · qc
 
 Constitution (full text IMPLEMENTATION.md §2): TEST-FIRST — every behavioural change starts
@@ -1116,7 +1119,7 @@ this delivery as a heartbeat. Otherwise run ONE bounded work unit:
 5. Otherwise → advance the active milestone (or start the next per §6 order): plan briefly,
    then TDD ONE coherent chunk — write the failing test FIRST, run it, keep the red output;
    write the least code that turns it green; refactor under green. Then run that milestone's
-   Verify commands (`docker compose run research make ci` or the milestone-specific target)
+   Verify commands (`make ci-container` or the milestone-specific target)
    and commit on m/<id>-<slug>.
 
 ## 2 · Close the tick (mandatory, even for "nothing to do")

@@ -45,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.core.authority import main as authority_main
 
         return authority_main(rest[1:])
+    if command == "provenance":
+        from pips.ops.provenance import main as provenance_main
+
+        return provenance_main(rest)
     if command == "deploy" and rest[:1] == ["guard"]:
         from pips.ops.deploy_guard import main as guard_main
 

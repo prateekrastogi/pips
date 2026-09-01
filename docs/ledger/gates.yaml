@@ -54,3 +54,15 @@
   tests: ["tests/unit/test_tdd.py"]
   status: enforced
   owner_milestone: M0
+
+- id: G-PROV-01
+  title: "A verify of unknown provenance cannot report a verdict"
+  spec: "IMPLEMENTATION.md#phase-p0-foundation-authority"
+  source_refs: ["docs/decisions/ADR-0013-image-provenance.md", "IMPLEMENTATION.md §2 rule 10"]
+  threshold: {image_sha_must_match_expected: true, absent_expectation_is_refusal: true}
+  enforced_by: "python/pips/ops/provenance.py::check_provenance"
+  evidence: "docs/state/log/<date>.md"
+  code: "python/pips/ops/provenance.py"
+  tests: ["tests/unit/test_provenance.py"]
+  status: enforced
+  owner_milestone: M4

@@ -54,8 +54,23 @@ rust-test: ## cargo clippy -D warnings + cargo test
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo test --workspace
 
-ci: lint typecheck tdd-check test rust-test determinism ledger-check ## The full ladder Jenkins runs
+provenance: ## Refuse to run the ladder against code that is not the code under test
+	$(PY) -m pips.cli provenance
+
+ci: provenance lint typecheck tdd-check test rust-test determinism ledger-check ## The full ladder Jenkins runs
 	@echo "ci: green"
+
+ci-container: ## The documented verify: build the image FROM the working tree, then run the ladder
+	@mkdir -p $(CURDIR)/.devdata
+	@sha=$$(git rev-parse HEAD); \
+	 dirty=$$(git diff --quiet HEAD 2>/dev/null && echo 0 || echo 1); \
+	 echo "ci-container: building $$sha (dirty=$$dirty)"; \
+	 PIPS_SHA=$$sha PIPS_DIRTY=$$dirty PIPS_EXPECTED_SHA=$$sha \
+	 PIPS_DATA_DIR=$${PIPS_DATA_DIR:-$(CURDIR)/.devdata} \
+	 docker compose build research && \
+	 PIPS_SHA=$$sha PIPS_EXPECTED_SHA=$$sha \
+	 PIPS_DATA_DIR=$${PIPS_DATA_DIR:-$(CURDIR)/.devdata} \
+	 docker compose run --rm research make ci
 
 refs-extract: ## Cache pandoc extractions of docs/reference/*.docx (needs pandoc)
 	@mkdir -p docs/reference/_extracted
@@ -87,6 +102,7 @@ JENKINS_COMPOSE := docker compose -f ops/jenkins/docker-compose.yml
 JENKINS_URL ?= http://127.0.0.1:8081
 REF ?= main
 
+.PHONY: provenance ci-container
 .PHONY: jenkins-up jenkins-down jenkins-logs jenkins-build install-hooks
 
 jenkins-up: ## Build and start the pips Jenkins controller (loopback :8081)

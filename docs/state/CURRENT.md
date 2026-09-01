@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 184 files · mypy --strict 107 files · 1031 pytest · clippy clean · cargo test ok
+  ruff 186 files · mypy --strict 186 files · 1054 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -155,21 +155,12 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **The documented verify command is green without testing your code.** `docker compose run
-   research make ci` printed `ci: green` from `pips/research:current`, an image built
-   2026-08-31 from `4d4916f` whose `validation/` package predates M16 and M18 — 511 tests of
-   day-old code, indistinguishable in the output from a real green. `${PIPS_SHA:-current}` is a
-   floating tag with no bind mount and no build-on-run, so every laptop invocation gets it.
-   CLAUDE.md names this command as THE way to verify. Fix is a design choice — refuse to run on
-   a tag that does not match the working tree, or build on run — so it needs its own tick.
-   (M18 is COMPLETE: PSR/DSR, CSCV/PBO, stationary bootstrap, SPA, Romano-Wolf, the sealed
-   lockbox and hierarchical partial pooling have all landed.)
-2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
+1. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
    the acceptable failure, but resolution is lost. NSE's own equity list carries listing dates
    and would need its own download decision.
-3. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
+2. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
    rests on an empty list and QC reports its own skipped comparisons because of it.
 
 ## Blockers / awaiting
@@ -184,3 +175,4 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   100k/day and 32 parallel fetches), and the NSE holiday list (empty). Each is an M6 item.
 - **Never measured, deliberately:** Breeze's true per-minute limit, WS subscription capacity,
   BSE support. Each would cost live calls to learn and none blocks current work.
+3. **Start M19** — M18 is complete and the gate defect is closed, so the §6 order applies.
