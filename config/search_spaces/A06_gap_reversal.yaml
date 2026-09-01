@@ -75,6 +75,8 @@ falsifiers_deferred:
 falsifier_checks:
   - falsifier: "Reject if the edge fails a protected-market-limit fill model"
     check: "f0-f1-reconciliation"
+  - falsifier: "Reject if continuation and reversal rules are selected ex post by realized sign"
+    check: "ex-post-selection"
 
 data_tier: T1
 

@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 166 files · mypy --strict 166 files · 902 pytest · clippy clean · cargo test ok
+  ruff 168 files · mypy --strict 168 files · 912 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -109,7 +109,9 @@ falsifier-binding mutation run — removing the registry's import killed NOTHING
   import is the whole premise: without it "this check exists" is "this name is in a dict I
   wrote". Needed a phantom module entry to observe. Eighth test-level finding this session.
 falsifier coverage — 15 bound, 17 unbound of 32. The unbound are NAMED, not just counted.
-falsifier coverage — 21 bound, 11 unbound of 32; A02, A05, A07 and A12 fully bound
+falsifier coverage — 22 bound, 10 unbound of 32; A02, A05, A07 and A12 fully bound.
+  NOTHING LEFT IS UNBLOCKED: the last ten need a sector map, T2 quote data, an events or
+  circuit master, or an out-of-sample refit.
 stress battery — all_run_cases_passed True, certifies False (4 cases cannot run: 3 need
   per-bucket attribution, 1 needs a sector map). With every input provided it certifies.
 stress-battery mutation run — 6 of 6 killed. The drop-best-block fixture could NOT be
@@ -153,11 +155,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **A06's *"selected ex post by realized sign"*** — the last structural falsifier, and the
-   harder one: it needs a check that the A05/A06 partition of names is NOT explained by the
-   realized sign. A01's beta-window perturbation is the other unblocked one. Of the remaining
-   11, everything else needs a sector map, an events/circuit master, T2 quote data, or an
-   out-of-sample refit — see the 2026-09-01 log for the breakdown.
+1. **M17 alpha wave 2, or M18's stats stack.** The falsifier work has run to the edge of what
+   exists — all ten remaining need data the project does not have. M18 (PSR/DSR, CSCV,
+   SPA/白 reality check) is pure statistics and needs none, which makes it the natural next
+   milestone; M17 waits on data by its own admission ("as data permits").
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
