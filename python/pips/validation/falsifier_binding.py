@@ -79,6 +79,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "blotter-netting": "pips.selection.netting",
     "order-budget": "pips.selection.order_budget",
     "s5-ensemble": "pips.search.s5",
+    "strategy-bundle": "pips.bundle",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A

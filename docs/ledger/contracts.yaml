@@ -189,10 +189,31 @@
 - id: C-BNDL-01
   title: "StrategyBundle: signed, content-hashed, registered-IR-only, golden boot check"
   spec: "IMPLEMENTATION.md#39-strategybundle"
-  code: "schemas/strategy_bundle"
-  tests: []
-  status: planned
+  code: "python/pips/bundle.py"
+  tests:
+    - "tests/unit/test_strategy_bundle.py"
+  status: building
   owner_milestone: M20
+  # Build/sign/validate with a tamper test, registered-IR-only. The content hash is computed
+  # over the model's OWN fields rather than a hand-written list, so a field added later is
+  # hashed without anyone remembering to add it -- and a test enumerates the fields and requires
+  # each one to change the hash, because a field outside it can change with nothing noticing.
+  #
+  # Verification RECOMPUTES. A validator comparing the stored hash to the stored hash validates
+  # nothing and passes every tamper test written against it. The realistic tamper is not a
+  # forger but someone editing the JSON, and an editor does not re-sign.
+  #
+  # REGISTERED_OPS is closed and holds no escape hatch: an entry like `eval` or `call_python`
+  # would satisfy every other check while granting exactly what §3.9 forbids, which is "no
+  # generative AI in the trading loop" made structural. Unregistered ops are refused at BUILD,
+  # so an unsignable bundle never exists to be shipped.
+  #
+  # `building`: the signature is HMAC-SHA256, which is SYMMETRIC -- whoever verifies can forge.
+  # Adequate while the threat is accident (one operator, one VM, DRY_RUN) and content hashing
+  # carries the weight; NOT adequate for a plant running unattended against real money, where
+  # the verifier must be unable to sign. Ed25519 is a stated prerequisite for that and a
+  # dependency decision this milestone does not need to make. The Rust boot check, the
+  # dossier and the lockbox one-shot run are also still to come.
 
 - id: C-OMS-01
   title: "OrderIntent / ExecutionEvent schemas with idempotency keys"
