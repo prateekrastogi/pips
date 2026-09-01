@@ -413,3 +413,26 @@
   # trials left M_erank measured on 1 of 7 series, which is 1.0 by construction and reads
   # exactly like 1.0 by measurement. The invariant is now on the LENGTHS (equal, so the series
   # are correlatable) rather than on which trials count, and the effective rank is 1.815 of 7.
+
+- id: C-GRID-01
+  title: "The search grid is derived from the spec's pre-registered parameter domain"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/search/grid.py"
+  tests:
+    - "tests/unit/test_search_grid.py"
+  status: enforced
+  owner_milestone: M12
+  # C2: rules are the argmax of a stated objective over a STATED domain, never round numbers
+  # that felt right. Every AlphaSpec declares parameter_domain as [min, max]; a grid hardcoded
+  # in a search driver sweeps a space nobody registered and looks exactly like one that did.
+  # The grid `make s1-search` shipped a tick ago was (3, 5, 8, 13) against a declared [3, 120] --
+  # the bottom eleven percent -- and the winner it now finds, lb=35, was not expressible in it.
+  #
+  # assert_within_domain covers the parameters held FIXED during a sweep, which nothing checked:
+  # A01 declares hold_minutes [15, 120] and the S1 SMOKE still runs at a one-minute horizon,
+  # fifteen times below the floor. The search conforms; the smoke does not, and that is recorded
+  # as next action 1 rather than silently changed under a target with its own goldens.
+  #
+  # Units are separate: the spec declares minutes and A01Params counts bars. They coincide only
+  # on a one-minute panel, so bars_per_unit converts explicitly and refuses an interval that
+  # neither divides nor is divided by a minute.

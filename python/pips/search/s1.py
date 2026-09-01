@@ -26,6 +26,7 @@ from pips.alphas.spec import AlphaSpec, load_alpha_spec
 from pips.alphas.t1._common import IST
 from pips.alphas.t1.a01 import A01Params, compute
 from pips.core.asof import AsOfPanelView
+from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_domain
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry
@@ -257,15 +258,27 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-_LOOKBACKS: Final = (3, 5, 8, 13)
+_GRID_POINTS: Final = 4
 _INITIAL_BUDGET: Final = 400
 """Bars in the first rung. With eta=2 and four candidates the ladder is 4@400, 2@800, 1@1600 —
 inside the 1875-bar fixture panel, so the final rung is never silently truncated."""
 
+_SCALE_WINDOW_M: Final = 20
+_HOLD_MINUTES: Final = 15
+"""The declared floor of A01's `hold_minutes: [15, 120]`.
 
-def _params_for(config: str) -> A01Params:
+NOT the one minute the smoke uses. A parameter outside the pre-registered domain cannot be
+rejected by the falsifiers attached to that spec, because they were written for the declared
+space — and it looks exactly like a parameter inside it. `assert_within_domain` now refuses it.
+"""
+
+
+def _params_for(config: str, bars: int) -> A01Params:
+    """`bars` converts the spec's MINUTES into panel bars; they coincide only at one-minute."""
     return A01Params(
-        residual_lookback=int(config.rsplit("-lb", 1)[1]), scale_window=20, horizon_ns=60 * NS
+        residual_lookback=int(config.rsplit("-lb", 1)[1]) * bars,
+        scale_window=_SCALE_WINDOW_M * bars,
+        horizon_ns=_HOLD_MINUTES * 60 * NS,
     )
 
 
@@ -322,7 +335,14 @@ def run_s1_search(
         )
         for s in sorted(set(panel["symbol"].to_list()))
     }
-    candidates = tuple(f"a01-lb{n}" for n in _LOOKBACKS)
+    # The grid comes from the spec's pre-registered `parameter_domain`, not from a tuple in
+    # this file. A hardcoded grid is a sweep over a space nobody registered: the one this
+    # replaced was (3, 5, 8, 13), the bottom eleven percent of a domain declared as [3, 120].
+    interval = stamps[1] - stamps[0]
+    bars = bars_per_unit(interval)
+    lookbacks = grid_from_domain(spec, "residual_lookback_m", count=_GRID_POINTS)
+    assert_within_domain(spec, {"scale_window_m": _SCALE_WINDOW_M, "hold_minutes": _HOLD_MINUTES})
+    candidates = tuple(f"a01-lb{n}" for n in lookbacks)
 
     # Memoised so `metrics_for` reports the score that actually DECIDED the elimination rather
     # than a recomputation of it — and so the search does not evaluate every rung twice.
@@ -332,7 +352,7 @@ def run_s1_search(
         key = (config, budget)
         if key not in seen:
             scores, outcomes, _ = _evaluate(
-                panel, closes, stamps[:budget], _params_for(config), spec
+                panel, closes, stamps[:budget], _params_for(config, bars), spec
             )
             seen[key] = (
                 Decimal(str(rank_ic(np.array(scores), np.array(outcomes))))
@@ -356,7 +376,7 @@ def run_s1_search(
         # looks, and that gap is exactly what the bracket is for.
         del budget
         if config not in pnl:
-            pnl[config] = _pnl_series(panel, closes, stamps, _params_for(config), spec)
+            pnl[config] = _pnl_series(panel, closes, stamps, _params_for(config, bars), spec)
         return np.array(pnl[config])
 
     recorded = record_halving_trials(

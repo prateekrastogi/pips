@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 208 files · mypy --strict 208 files · 1276 pytest · clippy clean · cargo test ok
+  ruff 210 files · mypy --strict 210 files · 1293 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,18 +186,21 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Run S5 on a registry a search populated.** `make s1-search` writes real trials and the
-   multiplicity bracket is computed from them (7 literal, 1.815 effective), but those rows are
-   stage S1 and `run_s5_from_registry` selects from what survived the LATER stages — and it has
-   no CLI target. Either a stage ladder that promotes S1 survivors, or an `s5-smoke` reading the
-   stage `s1-search` actually writes. `[C-S5-01]` stays `building` until something invokes it.
-2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
+1. **The S1 smoke runs A01 outside its pre-registered domain.** A01 declares
+   `hold_minutes: [15, 120]`; `run_s1_smoke` uses `horizon_ns = 60 * NS` — one minute, fifteen
+   times below the floor, since M12. `assert_within_domain` `[C-GRID-01]` refuses this and the
+   SEARCH now conforms, but the smoke is an existing verified target with its own goldens and
+   was not changed in passing. Fixing it means moving the horizon into the domain AND scoring at
+   the matching horizon — `_evaluate` currently scores every forecast against the NEXT bar
+   whatever horizon it declared, which is its own mismatch.
+2. **Run S5 on a registry a search populated.** Halving converges to one winner, so a single
+   family can never give S5 more than one candidate — S5 selects ACROSS families, and the alphas
+   have no shared dispatch (each has its own `Params` type). Either a per-family search driver
+   or an `s5-smoke` that promotes winners from several searches. `[C-S5-01]` stays `building`.
+3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
-   the acceptable failure, but resolution is lost. NSE's own equity list carries listing dates
-   and would need its own download decision.
-3. **NSE holiday list** — still `holidays_verified: false`, so every session-state decision
-   rests on an empty list and QC reports its own skipped comparisons because of it.
+   the acceptable failure, but resolution is lost.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
