@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 204 files · mypy --strict 204 files · 1239 pytest · clippy clean · cargo test ok
+  ruff 205 files · mypy --strict 205 files · 1249 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,11 +186,14 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Connect the selection chain to a search stage.** `select_frontier`, `plan_per_broker_tier`
-   `solve_joint` and `solve_netting_fixed_point` are all mutation-verified and none is invoked
-   by a stage, so `[C-SEL-01]`, `[C-TURN-01]` and `[C-NET-01]` all stay `building`. M19's one
-   remaining piece is order-budget constraints; the fold-to-fold dispersion of (τ*, h*) that
-   §6.3 calls a robustness statistic also has no consumer yet.
+1. **Give S5 a CLI target and a populated registry.** `run_s5_from_registry` reads completed
+   runs at a named stage, counts every intake exclusion (other stage, not completed, `viewed`,
+   no preserved returns) and refuses unequal series rather than truncating them — so the
+   constraint is *reachable* rather than merely constructible. What is missing is that nothing
+   has reached it: no CLI target invokes it and no search has populated a registry for it to
+   read, which is why `[C-S5-01]` alone stays `building`. The fold-to-fold dispersion of
+   (τ*, h*) that §6.3 calls a robustness statistic — an optimum that teleports between folds
+   fails S3 — still has no consumer either.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
