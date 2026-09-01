@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 170 files · mypy --strict 170 files · 931 pytest · clippy clean · cargo test ok
+  ruff 172 files · mypy --strict 172 files · 947 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -155,10 +155,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Continue M18** — PSR/DSR landed with the raw-vs-excess kurtosis guard §6 M18 asks for.
-   Next: CSCV/PBO with boundary purge, then the stationary bootstrap. All pure statistics, no
-   data required, which is why M18 is the milestone to run while everything else waits on the
-   archive.
+1. **Continue M18** — PSR/DSR and CSCV/PBO have landed. Next: the stationary bootstrap
+   (day/week blocks), then SPA with Hansen recentering and Romano–Wolf stepdown. All pure
+   statistics, no data required, which is why M18 is the milestone to run while everything
+   else waits on the archive.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is
