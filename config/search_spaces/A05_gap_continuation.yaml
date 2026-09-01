@@ -68,6 +68,8 @@ falsifier_checks:
     check: "fill-degraded"
   - falsifier: "Reject if it is not distinct from market direction"
     check: "beats-declared-null"
+  - falsifier: "Reject if the result depends on the first untradeable print"
+    check: "field-invariance"
 
 data_tier: T1
 

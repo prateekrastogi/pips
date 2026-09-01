@@ -64,6 +64,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "era-stability": "pips.validation.era_stability",
     "beats-declared-null": "pips.validation.incremental_value",
     "family-sensitivity": "pips.validation.family_sensitivity",
+    "field-invariance": "pips.validation.field_invariance",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A
