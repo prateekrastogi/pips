@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from pips.alphas.t1 import a01, a02, a03, a04, a05, a08
+from pips.alphas.t1 import a01, a02, a03, a04, a05, a07, a08
 
 if TYPE_CHECKING:
     from pips.alphas.forecast import Forecast
@@ -121,6 +121,17 @@ def _a05(observe_minutes: float, fixed: Built, notes: Notes, bars: int) -> Any:
     )
 
 
+def _a07(buffer_atr: float, fixed: Built, notes: Notes, bars: int) -> Any:
+    del bars, notes  # A07 works in minutes and takes no unbounded parameters.
+    return a07.A07Params(
+        range_end_minutes=int(fixed["range_end_minutes"]),
+        buffer_atr=Decimal(str(buffer_atr)),
+        hold_minutes=int(fixed["hold_minutes"]),
+        min_participation=Decimal("0.1"),
+        horizon_ns=int(fixed["hold_minutes"]) * 60 * _NS,
+    )
+
+
 def _a08(compression_window_m: float, fixed: Built, notes: Notes, bars: int) -> Any:
     del notes
     return a08.A08Params(
@@ -177,6 +188,19 @@ DRIVERS: dict[str, AlphaDriver] = {
         # is a gap in the pre-registration, recorded here rather than papered over.
         unchecked={"min_volume_ratio": Decimal("1.2"), "min_breadth": Decimal("0.5")},
     ),
+    "A07": AlphaDriver(
+        "A07",
+        "A07_opening_range_breakout.yaml",
+        # Swept on the ATR buffer, a real [0.0, 1.0] range. `range_end_minutes` is an
+        # ENUMERATION [5, 10, 15, 30] and is held fixed at one of its declared choices --
+        # membership-checked, not range-checked.
+        "volatility_buffer_atr",
+        {"range_end_minutes": 15, "hold_minutes": 30},
+        a07.compute,
+        _a07,
+        # A07 declares no domain for min_participation, so it cannot be checked against one.
+        unchecked={"min_participation": Decimal("0.1")},
+    ),
     "A08": AlphaDriver(
         "A08",
         "A08_compression_expansion.yaml",
@@ -195,11 +219,6 @@ NOT_RUNNABLE: dict[str, str] = {
         "supply. By design A06 forecasts nothing without an event source rather than treating "
         "an absent corporate action as an absent event, so it cannot share the common "
         "(view, params, spec) dispatch."
-    ),
-    "A07": (
-        "refuses on this panel: 'panel has no high_paise, low_paise column(s), so no true range "
-        "can be computed'. The opening-range buffer is measured in ATR and the fixtures carry "
-        "closes and volume only. Correctly a refusal rather than a zero."
     ),
     "A12": (
         "declares history_sessions [60, 250] and the fixture panel spans five sessions "

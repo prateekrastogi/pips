@@ -452,6 +452,12 @@
   # on a one-minute panel, so bars_per_unit converts explicitly and refuses an interval that
   # neither divides nor is divided by a minute.
   #
+  # Enumerated domains are supported: A07 declares range_end_minutes [5, 10, 15, 30] and A12
+  # clock_bin_minutes [5, 10, 15] -- sets of choices, not bounds. An enumeration is TIGHTER than
+  # a range (20 lies inside [5, 30] and is not a choice), so conformance is membership. Exactly
+  # two elements stay a range: [5, 15] is genuinely ambiguous and the convention across these
+  # specs is [min, max]. Stated as a convention, not deduced.
+  #
   # Extended to EVERY spec, which immediately found a defect the A01-only tests could not see:
   # A01's declared ranges are all integers, and `int(v)` on A04's `entry_z: [1.5, 3.5]` produced
   # the grid (1, 2, 3) -- two points BELOW the registered floor, from the module whose job is
@@ -471,9 +477,14 @@
   # Halving converges to one winner, so a single family can never give S5 more than one
   # candidate -- S5 selects ACROSS families. Six drivers run on the fixture panel (A01-A05,
   # A08); three are excluded with reasons established by RUNNING them, not by guessing:
-  # A06 needs a fourth `event_status` argument the panel cannot supply, A07 refuses because the
-  # panel has no high/low so no true range exists, A12 declares history_sessions [60, 250]
-  # against a five-session panel.
+  # A06 needs a fourth `event_status` argument the panel cannot supply, and A12 declares
+  # history_sessions [60, 250] against a five-session panel.
+  #
+  # A07 was excluded on a reason that was FALSE: "the panel has no high_paise, low_paise". True
+  # of the panel and false of the fixtures, which carry full OHLCV -- `load_panel` was dropping
+  # open, high and low, exactly as it had once dropped volume (its own comment says so). An
+  # alpha excluded for a reason that is not true is worse than one excluded for a reason that
+  # is, because the reason reads as a fact about the data. Seven drivers now.
   #
   # The register is complete by test: every spec with a plugin is driven or excluded, never
   # both, so adding a plugin and forgetting a driver cannot silently narrow the search.

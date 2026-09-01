@@ -35,6 +35,26 @@ __all__ = ["assert_within_domain", "bars_per_unit", "grid_from_domain"]
 _MINUTE_NS = 60 * 1_000_000_000
 
 
+def _values(spec: AlphaSpec, parameter: str) -> tuple[float, ...] | None:
+    """The declared choices when the domain is an ENUMERATION, else ``None``.
+
+    A07 declares ``range_end_minutes: [5, 10, 15, 30]`` and A12 ``clock_bin_minutes:
+    [5, 10, 15]`` — sets of candidate values, not bounds. An enumeration is a TIGHTER
+    pre-registration than a range: 20 lies inside [5, 30] and is not one of the choices, so
+    reading an enumeration as its own min and max would admit values nobody registered.
+
+    Exactly two elements stay a RANGE. ``[5, 15]`` is genuinely ambiguous and the convention
+    across these specs is ``[min, max]``, so the rule is: two means a range, more than two means
+    an enumeration. A convention, stated, not a deduction.
+    """
+    domain = spec.parameter_domain[parameter]
+    if not isinstance(domain, list | tuple) or len(domain) <= 2:
+        return None
+    if not all(isinstance(v, int | float) and not isinstance(v, bool) for v in domain):
+        return None
+    return tuple(sorted({float(v) for v in domain}))
+
+
 def _range(spec: AlphaSpec, parameter: str) -> tuple[float, float, bool]:
     """The declared ``[min, max]`` and whether it was written in whole numbers.
 
@@ -76,6 +96,14 @@ def grid_from_domain(spec: AlphaSpec, parameter: str, *, count: int) -> tuple[fl
             "the pre-registration is a parameter the spec never bounded, and sweeping it would "
             "look exactly like sweeping a registered space."
         )
+
+    choices = _values(spec, parameter)
+    if choices is not None:
+        # The enumeration IS the domain, so `count` has nothing to sample. Returning a subset
+        # would sweep less than was pre-registered while reporting as though the declared space
+        # had been covered -- the defect this module was written for.
+        integral_choices = all(isinstance(v, int) for v in spec.parameter_domain[parameter])
+        return tuple(int(v) if integral_choices else v for v in choices)
 
     low, high, integral = _range(spec, parameter)
     if low > high:
@@ -140,6 +168,16 @@ def assert_within_domain(spec: AlphaSpec, values: Mapping[str, float]) -> None:
                 f"spec {spec.id} does not declare a domain for {name!r} (it declares "
                 f"{sorted(spec.parameter_domain)})"
             )
+        choices = _values(spec, name)
+        if choices is not None:
+            if float(value) not in choices:
+                raise ValueError(
+                    f"{spec.id}: {name}={value} is not one of the pre-registered choices "
+                    f"{list(spec.parameter_domain[name])}. An enumeration is tighter than a "
+                    "range: a value between two choices lies inside their span and was still "
+                    "never registered."
+                )
+            continue
         low, high, _ = _range(spec, name)
         if not low <= value <= high:
             raise ValueError(

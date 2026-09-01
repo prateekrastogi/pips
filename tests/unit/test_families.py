@@ -171,10 +171,18 @@ def test_a_winner_that_never_traded_is_named_rather_than_crashing_s5(tmp_path: P
         initial_budget=120,
         returns_bars=300,
     )
-    assert "A05" in report["failures"]  # type: ignore[operator]
-    assert "no trades in the preserved window" in report["failures"]["A05"]  # type: ignore[index]
-    assert "A05" not in report["promoted"]  # type: ignore[operator]
-    assert report["families_promoted"] == len(DRIVERS) - 1
+    failures = report["failures"]
+    assert isinstance(failures, dict)
+
+    # BOTH session-structure families, not just A05. A07 is opening-range breakout and needs a
+    # session's opening range the same way A05 needs a prior close, so a window inside one
+    # session gives neither anything to trade. Asserting "exactly one fails" hardcoded the
+    # driver set of the hour and broke the moment A07 joined it.
+    assert {"A05", "A07"} <= set(failures)
+    for alpha_id, reason in failures.items():
+        assert "no trades in the preserved window" in reason, alpha_id
+        assert alpha_id not in report["promoted"]  # type: ignore[operator]
+    assert report["families_promoted"] == report["families_run"] - len(failures)  # type: ignore[operator]
 
     # S5 RAN on the rest rather than dying on the flat series, which is the point here. How many
     # survive is a separate question and belongs to the longer-window test: over 300 bars of one

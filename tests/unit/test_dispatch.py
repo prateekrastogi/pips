@@ -157,7 +157,13 @@ def test_the_build_reads_the_declared_fixed_values(alpha_id: str) -> None:
     baseline = driver.build(swept, bars=1)
 
     for name, value in driver.fixed.items():
-        moved = replace(driver, fixed={**driver.fixed, name: value + 1})
+        # Perturb WITHIN the declared domain. A blanket `value + 1` walks an enumerated
+        # parameter off its choices — A07Params rejects `range_end_minutes=16` itself, more
+        # strictly than the dispatch does — and the test would then fail for the wrong reason.
+        domain = spec.parameter_domain[name]
+        enumerated = isinstance(domain, list | tuple) and len(domain) > 2
+        other = next(v for v in domain if v != value) if enumerated else value + 1
+        moved = replace(driver, fixed={**driver.fixed, name: other})
         assert repr(moved.build(swept, bars=1)) != repr(baseline), (
             f"{alpha_id}: changing declared {name} changed nothing in the built params"
         )

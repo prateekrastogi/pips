@@ -116,14 +116,22 @@ def load_panel(
     rows: list[dict[str, object]] = []
     for path in sorted((fixtures / "bars" / "1m").glob("*.json")):
         for bar in json.loads(path.read_text(encoding="utf-8")):
+            # EVERY field the bar carries, not a subset chosen by whoever last needed one.
+            # This loader already bore a note about volume -- "the fixtures always had it; this
+            # loader was dropping it on the floor" -- and open, high and low were still being
+            # dropped, which cost A07 its place in the search: it was recorded as not runnable
+            # because "the panel has no high_paise, low_paise", true of the panel and false of
+            # the fixtures. An alpha excluded for a reason that is not true is worse than one
+            # excluded for a reason that is, because the reason reads as a fact about the data.
             rows.append(
                 {
                     "close_ts_ns": int(bar["close_ts_ns"]),
                     "symbol": str(bar["symbol"]),
-                    "close_paise": int(bar["close_paise"]),
-                    # Carried because the session-structure family (A05-A08) needs it. The
-                    # fixtures always had it; this loader was dropping it on the floor.
-                    "volume": int(bar["volume"]),
+                    **{
+                        key: int(value)
+                        for key, value in bar.items()
+                        if key not in ("close_ts_ns", "symbol")
+                    },
                 }
             )
     if not rows:

@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 215 files · mypy --strict 215 files · 1377 pytest · clippy clean · cargo test ok
+  ruff 216 files · mypy --strict 216 files · 1398 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,17 +186,17 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Enumerated domains.** A12 declares `clock_bin_minutes: [5, 10, 15]` — a set of candidate
-   values, not a `[min, max]` range — and `grid_from_domain` refuses it as malformed. Safe but
-   wrong: an explicit enumeration is a perfectly good pre-registration. Two elements stay
-   ambiguous (range or pair?), so the rule would be: exactly two means a range, more than two
-   means an enumeration.
-2. **The fixture panel is too thin for the selection to mean anything.** Two synthetic symbols
+1. **The fixture panel is still too thin for selection to mean anything.** Two synthetic symbols
    over five sessions: every alpha trades the same two names, so their PnL streams correlate
-   heavily and the pairwise gate collapses them almost regardless of merit. A05 cannot trade in
-   any window inside one session; A07 and A12 cannot run at all. A wider fixture (more symbols,
-   more sessions, high/low columns) would make `make s5-smoke` exercise selection rather than
-   just wiring.
+   heavily and the pairwise gate collapses them almost regardless of merit — the frontier drops
+   7 to 3 and clustering 3 to 2 on noise. A05 and A07 cannot trade in any window inside one
+   session. A12 needs 60 sessions and there are five. A wider fixture (more symbols, more
+   sessions) would make `make s5-smoke` exercise selection rather than wiring. The generator
+   already emits OHLCV, so this is breadth, not new fields.
+2. **A06 has no dispatch path.** Its `compute()` takes a fourth argument, `event_status`, so it
+   cannot share the common signature. That is by design — it forecasts nothing without an event
+   source rather than reading an absent corporate action as an absent event — but it means one
+   family can never enter a search until there is an event source to supply.
 3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

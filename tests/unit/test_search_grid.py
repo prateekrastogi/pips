@@ -246,14 +246,21 @@ class _Spec:
         self.parameter_domain = domain
 
 
-def test_a_range_with_three_bounds_is_refused() -> None:
-    """`[1, 2, 3]` unpacks as a range only by ignoring the third value.
+def test_three_numeric_elements_are_an_enumeration_not_a_malformed_range() -> None:
+    """This test previously asserted the opposite, and the convention changed deliberately.
 
-    Silently taking the first two would sweep `[1, 2]` while the spec author wrote something
-    else, and the grid would look perfectly well-formed.
+    Under the old rule anything but two elements was malformed, which refused A07's
+    `range_end_minutes: [5, 10, 15, 30]` and A12's `clock_bin_minutes: [5, 10, 15]` — both
+    perfectly good pre-registrations. Three numeric elements are now three choices. What stays
+    malformed is a domain that is not a list of numbers at all.
     """
+    assert grid_from_domain(_Spec({"x": [1, 2, 3]}), "x", count=3) == (1, 2, 3)  # type: ignore[arg-type]
+
+
+def test_a_single_element_domain_is_still_refused() -> None:
+    # Not a range (needs two) and not a search (one point is a hardcoded value).
     with pytest.raises(ValueError, match="not a \\[min, max\\] range"):
-        grid_from_domain(_Spec({"x": [1, 2, 3]}), "x", count=3)  # type: ignore[arg-type]
+        grid_from_domain(_Spec({"x": [7]}), "x", count=2)  # type: ignore[arg-type]
 
 
 def test_a_boolean_pair_is_not_a_numeric_range() -> None:
@@ -269,3 +276,63 @@ def test_a_boolean_pair_is_not_a_numeric_range() -> None:
 def test_a_bare_number_is_not_a_range() -> None:
     with pytest.raises(ValueError, match="not a \\[min, max\\] range"):
         grid_from_domain(_Spec({"x": 7}), "x", count=2)  # type: ignore[arg-type]
+
+
+# ------------------------------------------------------------ enumerations ------------
+#
+# Some domains are a SET of candidate values rather than a range: A07 declares
+# `range_end_minutes: [5, 10, 15, 30]` and A12 `clock_bin_minutes: [5, 10, 15]`. Refusing them
+# as malformed was safe and wrong — an explicit enumeration is a perfectly good
+# pre-registration, and it is a tighter one than a range.
+#
+# Two elements stay a RANGE. `[5, 15]` is genuinely ambiguous, and the convention across these
+# specs is [min, max], so the rule is: exactly two means a range, more than two means an
+# enumeration. Stated because it is a convention, not a deduction.
+
+
+def test_an_enumeration_yields_exactly_the_declared_values() -> None:
+    a07 = next(s for s in ALL_SPECS if s.id == "A07")
+    assert grid_from_domain(a07, "range_end_minutes", count=4) == (5, 10, 15, 30)
+
+
+def test_an_enumeration_ignores_the_requested_count() -> None:
+    """The enumeration IS the domain, so there is nothing to sample from it.
+
+    Returning a subset would sweep less than was pre-registered while reporting as though the
+    declared space had been covered — which is the defect that started this module.
+    """
+    a12 = next(s for s in ALL_SPECS if s.id == "A12")
+    assert grid_from_domain(a12, "clock_bin_minutes", count=2) == (5, 10, 15)
+    assert grid_from_domain(a12, "clock_bin_minutes", count=99) == (5, 10, 15)
+
+
+def test_two_elements_are_still_a_range_not_a_pair() -> None:
+    grid = grid_from_domain(SPEC, "residual_lookback_m", count=4)
+    assert grid == (3, 10, 35, 120), "[3, 120] is a range, and 10 and 35 are not declared values"
+
+
+def test_conformance_against_an_enumeration_is_membership() -> None:
+    a07 = next(s for s in ALL_SPECS if s.id == "A07")
+    assert_within_domain(a07, {"range_end_minutes": 15})
+
+
+def test_a_value_between_two_enumerated_options_is_refused() -> None:
+    """20 lies inside [5, 30] and is not one of the declared choices.
+
+    A range check would accept it, which is precisely the difference between the two kinds of
+    domain — and the reason an enumeration cannot just be read as its own min and max.
+    """
+    a07 = next(s for s in ALL_SPECS if s.id == "A07")
+    with pytest.raises(ValueError, match="not one of"):
+        assert_within_domain(a07, {"range_end_minutes": 20})
+
+
+def test_the_enumeration_refusal_names_the_choices() -> None:
+    a07 = next(s for s in ALL_SPECS if s.id == "A07")
+    with pytest.raises(ValueError, match=r"\[5, 10, 15, 30\]"):
+        assert_within_domain(a07, {"range_end_minutes": 20})
+
+
+def test_a_mixed_enumeration_is_still_refused_as_malformed() -> None:
+    with pytest.raises(ValueError, match="not a"):
+        grid_from_domain(_Spec({"x": [1, "two", 3]}), "x", count=3)  # type: ignore[arg-type]
