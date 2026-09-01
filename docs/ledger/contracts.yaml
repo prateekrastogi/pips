@@ -274,6 +274,37 @@
   # N = M rather than the smaller N = M_erank, which would raise it (§3.6). That needs the raw
   # Sharpe in the dossier. Stated, not solved. Nothing populates these dossiers from S5 yet.
 
+- id: C-WRIT-01
+  title: "Dossier writer: derive what is measured, invent nothing, name the gap"
+  spec: "IMPLEMENTATION.md#394-drafting-a-dossier"
+  code: "python/pips/certification/writer.py"
+  tests:
+    - "tests/unit/test_dossier_writer.py"
+  status: building
+  owner_milestone: M20
+  # The producer half of `[C-DOSS-01]`, and it fails in the opposite direction. A checker that
+  # is too lax certifies unmeasured strategies; a writer that is too HELPFUL does the same thing
+  # one step earlier and leaves no trace -- a default of 0.0 for a missing PBO yields a dossier
+  # that is complete, hashes cleanly, binds to its bundle and is entirely invented. So there is
+  # no default anywhere in the module, and `unsupplied` is where "I do not know" gets said.
+  #
+  # THE CALLER CANNOT HAND-WRITE A DERIVED FIELD. A supplied gate injects a passing Measurement;
+  # a supplied `net_return` chooses the ranking `[C-CERT-01]` sorts on. Refused separately, with
+  # different messages, because a reader needs to know which one they hit.
+  #
+  # A METRIC THAT DID NOT COMPUTE IS NOT A METRIC: NaN, infinity and booleans are unsupplied.
+  # `float(True)` is 1.0 -- a perfect deflated Sharpe from a flag -- and it converts silently.
+  #
+  # The draft's account of the gap is asserted to AGREE with `check_completeness`. A writer that
+  # believes it filled what the checker calls hollow files a report nobody can act on.
+  #
+  # `building`, and the reason is a gap in the SPEC rather than the code: P4 states a number for
+  # DSR (0.95), PBO (0.25) and SPA (0.10) -- only dsr_min is also in gates.yaml -- while plateau
+  # stability, concentration and the four cost/delay stress gates are named without a bar
+  # anywhere. Six of the nine hard gates therefore cannot be drafted, and no drafted dossier can
+  # pass `[C-CERT-01]` until they are decided and recorded. A test pins that list, so closing
+  # the gap has to touch a test that says it existed.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

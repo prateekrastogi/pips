@@ -450,6 +450,25 @@ Ranking is by `economics.net_return` descending, ties on `strategy_id`, so two r
 certify the same bundles in the same order. Input order is never the tie-break: it is not a
 property of the cycle.
 
+### 3.9.4 Drafting a dossier `[C-WRIT-01]`
+
+`[C-DOSS-01]` checks a dossier; this writes one, and the two halves fail in opposite directions.
+A checker that is too lax certifies unmeasured strategies. A writer that is too *helpful* does
+the same thing one step earlier and leaves no trace: a default of `0.0` for a missing PBO
+produces a dossier that is complete, hashes cleanly, binds to its bundle, and is invented.
+
+The contract is therefore subtractive — **fill only what can be derived, name everything else**.
+There is no default anywhere in it. **The caller cannot hand-write a derived field**: a supplied
+gate injects a passing `Measurement`, and a supplied `net_return` chooses the ranking
+`[C-CERT-01]` sorts on. **A metric that did not compute is not a metric** — NaN, infinity and
+booleans are unsupplied. The draft's account of the gap must agree with `check_completeness`.
+
+**The specification gap this exposes.** P4 states a number for DSR (0.95), PBO (0.25) and SPA
+(0.10) — only `dsr_min` also appears in `gates.yaml`. Plateau stability, concentration and the
+four cost/delay stress gates are named *without a bar anywhere*, so they cannot be drafted, and
+no drafted dossier can pass `[C-CERT-01]` until those six thresholds are decided and recorded.
+Inventing them here is exactly what this module refuses to do.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -753,7 +772,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
-  one-shot run `[C-LBOX-01]`;
+  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`;
   **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 
