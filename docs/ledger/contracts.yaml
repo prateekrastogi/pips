@@ -302,6 +302,7 @@
   code: "python/pips/selection/turnover.py"
   tests:
     - "tests/unit/test_turnover.py"
+    - "tests/unit/test_joint_turnover.py"
   status: building
   owner_milestone: M19
   # Quantitative Foundations §6.1 (Faustmann rotation condition) and §6.2 (optimal
@@ -310,6 +311,10 @@
   # a golden-section solver for measured curves that recovers the closed form, and the per
   # broker x tier planner which refuses an optimum beyond the fitted horizon.
   #
-  # NOT in: §6.3's joint fixed point (coordinate descent alternating tau|h and h|tau). And
-  # nothing in the search calls the planner yet. `building` for both reasons, stated rather
-  # than implied.
+  # §6.3's joint fixed point is now in too: coordinate descent alternating tau|h and h|tau,
+  # which REFUSES rather than returning the last iterate when the map does not contract, and
+  # names a cycle as a cycle rather than as running out of iterations.
+  #
+  # NOT in: nothing in the search calls the planner or the joint solve yet, and the fold-to-fold
+  # dispersion of (tau*, h*) that §6.3 calls a robustness statistic has no consumer. `building`
+  # for those reasons, stated rather than implied.

@@ -43,6 +43,9 @@ from dataclasses import dataclass, field
 
 __all__ = [
     "CostLine",
+    "EdgeCurve",
+    "FixedPointError",
+    "JointOptimum",
     "TurnoverPlan",
     "optimal_hold",
     "optimal_hold_power_law",
@@ -50,6 +53,7 @@ __all__ = [
     "optimal_turnover",
     "plan_per_broker_tier",
     "rotation_residual",
+    "solve_joint",
 ]
 
 _INV_PHI = (math.sqrt(5.0) - 1.0) / 2.0
@@ -275,3 +279,127 @@ def plan_per_broker_tier(
             )
         )
     return tuple(plans)
+
+
+# ============================================================ §6.3 the joint solve ======
+#
+# §6.1 optimises when to exit; §6.2 optimises what to enter. They INTERACT: alpha(h) depends on
+# the admitted population, so raising the bar changes the edge curve; and the variance a trade
+# carries depends on how long it is held, so the hold changes the threshold. Solving them
+# separately answers a different question -- each optimal against inputs the other one moves.
+#
+# The doc alternates (tau | h) and (h | tau) to a fixed point. What makes that dangerous rather
+# than merely approximate is the failure mode: coordinate descent on a map that is not a
+# contraction does not diverge loudly, it OSCILLATES, and the last iterate is a perfectly
+# ordinary number indistinguishable from a converged one. So non-convergence raises and there
+# is deliberately no parameter that returns the final iterate anyway.
+#
+# ON THE DOC'S MONOTONICITY CLAIM -- "convergence is monotone in the objective" -- which is not
+# asserted here, on purpose. With lambda = 0 the joint objective is daily net accrual
+# N(tau)*(alpha_tau(h) - c)/h and both steps maximise it, but then tau* = c regardless of h,
+# there is no h -> tau coupling at all, and the problem is not joint. The joint case needs
+# lambda > 0, where the monotone quantity is the LAGRANGIAN, whose risk term depends on a
+# portfolio-volatility model §6.3 does not state. Asserting monotonicity of the unconstrained
+# objective instead would fire spuriously on every real solve. What IS checked, and is
+# stronger, is that the returned pair satisfies BOTH first-order conditions simultaneously --
+# the definition of the fixed point rather than a proxy for it.
+
+
+class FixedPointError(RuntimeError):
+    """The coordinate descent did not settle. There is no partial answer to hand back."""
+
+
+@dataclass(frozen=True)
+class EdgeCurve:
+    """``alpha(h) = a * h^gamma`` for the population admitted at some threshold."""
+
+    a: float
+    gamma: float
+
+
+@dataclass(frozen=True)
+class JointOptimum:
+    threshold: float
+    hold: float
+    iterations: int
+    start_threshold: float
+    history: tuple[tuple[float, float], ...]
+    """Every (tau, h) visited, so the path can be audited and not just its endpoint."""
+
+
+def solve_joint(
+    *,
+    edge_curve: Callable[[float], EdgeCurve],
+    trade_sigma: Callable[[float], float],
+    cost: CostLine,
+    lam: float,
+    fitted_horizon: float,
+    start_threshold: float,
+    rel_tol: float = 1e-10,
+    max_iter: int = 200,
+) -> JointOptimum:
+    """Alternate ``(h | tau)`` and ``(tau | h)`` to the joint optimum of §6.1 and §6.2.
+
+    ``rel_tol`` is RELATIVE and applied per coordinate. tau is an edge around 5e-4 and h is a
+    holding period around 8; a single absolute epsilon cannot be right for both, and choosing
+    one that suits h makes the tau test meaninglessly loose.
+    """
+    _require_cost(cost.total)
+    if rel_tol <= 0 or not math.isfinite(rel_tol):
+        raise ValueError(f"rel_tol must be positive and finite, got {rel_tol!r}")
+    if max_iter < 1:
+        raise ValueError(f"max_iter must be at least 1, got {max_iter!r}")
+    if start_threshold < cost.total:
+        raise ValueError(
+            f"start_threshold {start_threshold!r} is below the cost line {cost.total!r}. tau* is "
+            "never below c -- the marginal trade would not clear costs -- so starting there "
+            "prices a population no optimum would admit."
+        )
+
+    tau = start_threshold
+    history: list[tuple[float, float]] = []
+    for step in range(max_iter):
+        curve = edge_curve(tau)
+        hold = optimal_hold_power_law(a=curve.a, gamma=curve.gamma, cost=cost.total)
+        if hold > fitted_horizon:
+            raise FixedPointError(
+                f"iterate {step}: h = {hold:.4f} lies beyond the fitted horizon "
+                f"{fitted_horizon:.4f}. Every iterate is a hold the solver read alpha(h) at, so "
+                "an excursion outside the measured range feeds an extrapolated edge into the "
+                "next step -- and the fixed point inherits that whether or not it lands back "
+                "inside."
+            )
+        nxt = optimal_threshold(cost, lam=lam, sigma_trade=trade_sigma(hold))
+        history.append((tau, hold))
+
+        if abs(nxt - tau) <= rel_tol * abs(nxt):
+            # `nxt` rather than `tau`, so the §6.2 condition holds EXACTLY at the returned pair
+            # (nxt is the threshold for a trade held `hold`) and the Faustmann condition holds
+            # to within rel_tol. Returning `tau` would swap which of the two is exact. The
+            # choice is arbitrary and therefore stated: at convergence they differ by less than
+            # rel_tol, and no test can or should distinguish them.
+            return JointOptimum(
+                threshold=nxt,
+                hold=hold,
+                iterations=len(history),
+                start_threshold=start_threshold,
+                history=tuple(history),
+            )
+
+        # Convergence is tested first, so anything matching an EARLIER iterate without matching
+        # the previous one is a genuine cycle rather than a settling sequence.
+        for back, (seen, _) in enumerate(reversed(history[:-1]), start=2):
+            if abs(nxt - seen) <= rel_tol * abs(nxt):
+                raise FixedPointError(
+                    f"the coordinate descent entered a cycle of period {back} after {step + 1} "
+                    "steps: tau returns to a value it already visited without settling. The "
+                    "joint map is not a contraction here. Raising max_iter cannot help, which "
+                    "is why this does not report as running out of iterations."
+                )
+        tau = nxt
+
+    raise FixedPointError(
+        f"the coordinate descent did not settle within max_iter={max_iter}. Refusing to return "
+        "the last iterate: on a non-contracting map it is an ordinary-looking number that is "
+        "not a fixed point, and nothing downstream could tell the difference."
+    )
