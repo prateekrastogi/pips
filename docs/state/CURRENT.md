@@ -72,7 +72,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 176 files · mypy --strict 176 files · 975 pytest · clippy clean · cargo test ok
+  ruff 178 files · mypy --strict 178 files · 986 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -155,10 +155,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Continue M18** — PSR/DSR, CSCV/PBO, the stationary bootstrap and Hansen's SPA have
-   landed. Next: Romano–Wolf stepdown / model confidence set for final survivors, which
-   builds directly on the SPA machinery. Then hierarchical partial pooling for family means,
-   and the sealed-lockbox enforcement in the data layer. Still no data required.
+1. **Continue M18** — PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA and
+   Romano–Wolf stepdown have landed. Left: hierarchical partial pooling for family means, and
+   the sealed-lockbox enforcement in the data layer (which refuses holdout dates below release
+   stage — the one M18 item that touches the data layer rather than pure statistics).
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

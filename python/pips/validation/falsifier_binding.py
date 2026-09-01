@@ -70,6 +70,7 @@ CHECK_REGISTRY: dict[str, str] = {
     "pbo-cscv": "pips.validation.pbo",
     "stationary-bootstrap": "pips.validation.bootstrap",
     "spa-test": "pips.validation.spa",
+    "romano-wolf": "pips.validation.romano_wolf",
     "newey-west-hac": "pips.validation.stats",
     "monotone-in-horizon": "pips.validation.stats",
     # Execution-model properties that are enforced structurally rather than measured. A
