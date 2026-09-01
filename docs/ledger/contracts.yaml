@@ -308,7 +308,7 @@
   tests:
     - "tests/unit/test_turnover.py"
     - "tests/unit/test_joint_turnover.py"
-  status: building
+  status: enforced
   owner_milestone: M19
   # Quantitative Foundations §6.1 (Faustmann rotation condition) and §6.2 (optimal
   # selectivity). In: the closed form for alpha(h) = a*h^gamma, its identities
@@ -320,14 +320,16 @@
   # REFUSES rather than returning the last iterate when the map does not contract, and names a
   # cycle as a cycle rather than as running out of iterations.
   #
-  # STILL `building`, and now for a sharper reason than "no caller". S5 invokes
-  # `plan_per_broker_tier`, which solves §6.1 and §6.2 INDEPENDENTLY -- and §6.3 says in terms
-  # that S5 solves them JOINTLY by coordinate descent, because tau* and h* interact through
-  # alpha(h). So the stage currently uses the weaker of the two solvers that exist, and
-  # `solve_joint` has no caller. That is a wiring gap in S5, not a missing capability.
+  # ENFORCED as of the joint planner: S5 now calls `plan_joint_per_broker_tier`, which runs
+  # §6.3's coordinate descent at every broker x tier at that venue's own cost line. The
+  # independent `plan_per_broker_tier` is kept as the §6.1/§6.2 primitive and is no longer what
+  # the stage uses. A venue whose descent does not settle is NAMED, never omitted and never
+  # answered by the weaker solver -- there is deliberately no fallback for one to reach for.
   #
-  # Also unconsumed: the fold-to-fold dispersion of (tau*, h*) that §6.3 calls a robustness
-  # statistic.
+  # Holds by construction, as the other M19 rows do: no pipeline runs S5 against the registry.
+  #
+  # Still unconsumed: the fold-to-fold dispersion of (tau*, h*) that §6.3 calls a robustness
+  # statistic (an optimum that teleports between folds fails S3).
 
 - id: C-NET-01
   title: "Netting is measured on a declared window and re-prices the ensemble's cost line"

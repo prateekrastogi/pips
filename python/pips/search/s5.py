@@ -48,7 +48,13 @@ from pips.selection.order_budget import (
     check_order_budget,
 )
 from pips.selection.pareto import Candidate, Objective
-from pips.selection.turnover import CostLine, TurnoverPlan, plan_per_broker_tier
+from pips.selection.turnover import (
+    CostLine,
+    EdgeCurve,
+    JointPlan,
+    UnsolvedVenue,
+    plan_joint_per_broker_tier,
+)
 
 __all__ = ["S5Result", "StageStep", "TurnoverInputs", "run_s5"]
 
@@ -63,11 +69,12 @@ class TurnoverInputs:
     """
 
     cost_lines: Mapping[tuple[str, str], CostLine]
-    a: float
-    gamma: float
+    edge_curve: Callable[[float], EdgeCurve]
+    """tau -> the alpha(h) curve of the population admitted at that bar."""
+    trade_sigma: Callable[[float], float]
+    """h -> the volatility a trade held that long carries."""
     fitted_horizon: float
     lam: float
-    sigma_trade: float
     density: Mapping[float, float]
     ticket: float
     capital: float
@@ -90,13 +97,18 @@ class S5Result:
     netting: NettingFixedPoint
     gross_cost: CostLine
     effective_cost: CostLine
-    plans: tuple[TurnoverPlan, ...]
+    plans: tuple[JointPlan, ...]
+    unsolved_venues: tuple[UnsolvedVenue, ...]
     budget: BudgetVerdict
 
     @property
     def admissible(self) -> bool:
-        """Derived, never assigned: a field that can be set independently can say 'fine'."""
-        return self.budget.admissible and bool(self.ensemble)
+        """Derived, never assigned: a field that can be set independently can say 'fine'.
+
+        An ensemble with no SOLVED venue is inadmissible even when it breaches nothing — there
+        is no rule to run it under, and "no breaches" would otherwise read as approval.
+        """
+        return self.budget.admissible and bool(self.ensemble) and bool(self.plans)
 
 
 def _correlation_gate(
@@ -200,13 +212,15 @@ def run_s5(
     # who executes it, so the measured ratio scales each broker x tier's gross line rather than
     # flattening them to a common number -- a cheap broker stays cheap after netting.
     keep = Decimal(1) - Decimal(str(netting.netting_ratio))
-    plans = plan_per_broker_tier(
+    # JOINTLY, per §6.3 -- not `plan_per_broker_tier`, which solves §6.1 and §6.2 in sequence
+    # and leaves each optimal against an input the other one moves. A venue whose coordinate
+    # descent does not settle is reported, not dropped and not answered by the weaker solver.
+    planned = plan_joint_per_broker_tier(
         {key: CostLine(line.total * float(keep)) for key, line in turnover.cost_lines.items()},
-        a=turnover.a,
-        gamma=turnover.gamma,
+        edge_curve=turnover.edge_curve,
+        trade_sigma=turnover.trade_sigma,
         fitted_horizon=turnover.fitted_horizon,
         lam=turnover.lam,
-        sigma_trade=turnover.sigma_trade,
         density=turnover.density,
         ticket=turnover.ticket,
         capital=turnover.capital,
@@ -218,6 +232,7 @@ def run_s5(
         netting=netting,
         gross_cost=gross_cost,
         effective_cost=netting.effective_cost,
-        plans=plans,
+        plans=planned.plans,
+        unsolved_venues=planned.unsolved,
         budget=verdict,
     )

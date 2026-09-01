@@ -403,3 +403,96 @@ def solve_joint(
         "the last iterate: on a non-contracting map it is an ordinary-looking number that is "
         "not a fixed point, and nothing downstream could tell the difference."
     )
+
+
+# ============================================================ §6.3 per venue ===========
+
+
+@dataclass(frozen=True)
+class JointPlan:
+    """One venue's rule, with tau* and h* solved together rather than in sequence."""
+
+    broker: str
+    tier: str
+    cost: CostLine
+    hold: float
+    threshold: float
+    turnover: float
+    iterations: int
+
+
+@dataclass(frozen=True)
+class UnsolvedVenue:
+    broker: str
+    tier: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class JointPlanSet:
+    plans: tuple[JointPlan, ...]
+    unsolved: tuple[UnsolvedVenue, ...]
+    """Venues whose coordinate descent did not settle. Named, never omitted."""
+
+
+def plan_joint_per_broker_tier(
+    cost_lines: Mapping[tuple[str, str], CostLine],
+    *,
+    edge_curve: Callable[[float], EdgeCurve],
+    trade_sigma: Callable[[float], float],
+    fitted_horizon: float,
+    lam: float,
+    density: Mapping[float, float],
+    ticket: float,
+    capital: float,
+) -> JointPlanSet:
+    """Solve §6.3's joint optimum at every broker x tier, at that venue's own cost line.
+
+    **One venue failing does not invalidate another.** The joint map contracts at one cost line
+    and not at another -- the same coupling settles for a cheap broker and cycles for a dear
+    one -- so this reports per venue rather than raising, unlike :func:`solve_joint` itself.
+
+    **But an unsolved venue is NAMED, never omitted, and never quietly answered by the
+    independent solver.** There is deliberately no fallback: a fallback plan is indistinguishable
+    in the output from a solved one, for a venue whose economics do not settle at all.
+
+    Each venue starts from its OWN cost line. tau* is never below c, so that is the conservative
+    start, and a shared start would price one venue's first pass against another's population.
+    """
+    if not cost_lines:
+        raise ValueError(
+            "no cost line supplied: tau* and h* are per broker x tier and both are functions "
+            "of c, so there is nothing to solve without one"
+        )
+
+    plans: list[JointPlan] = []
+    unsolved: list[UnsolvedVenue] = []
+    # Sorted: a plan set is compared across runs and across venues, so its order must not depend
+    # on how the caller built the mapping (rule 1).
+    for (broker, tier), cost in sorted(cost_lines.items()):
+        try:
+            optimum = solve_joint(
+                edge_curve=edge_curve,
+                trade_sigma=trade_sigma,
+                cost=cost,
+                lam=lam,
+                fitted_horizon=fitted_horizon,
+                start_threshold=cost.total,
+            )
+        except FixedPointError as error:
+            unsolved.append(UnsolvedVenue(broker=broker, tier=tier, reason=str(error)))
+            continue
+        plans.append(
+            JointPlan(
+                broker=broker,
+                tier=tier,
+                cost=cost,
+                hold=optimum.hold,
+                threshold=optimum.threshold,
+                turnover=optimal_turnover(
+                    density, optimum.threshold, ticket=ticket, capital=capital
+                ),
+                iterations=optimum.iterations,
+            )
+        )
+    return JointPlanSet(plans=tuple(plans), unsolved=tuple(unsolved))

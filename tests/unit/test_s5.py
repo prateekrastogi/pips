@@ -26,7 +26,7 @@ from pips.search.s5 import S5Result, TurnoverInputs, run_s5
 from pips.selection.netting import BlotterOrder
 from pips.selection.order_budget import NSE_RETAIL_BUDGET
 from pips.selection.pareto import Candidate, Direction, Objective
-from pips.selection.turnover import CostLine
+from pips.selection.turnover import CostLine, EdgeCurve
 
 SECOND = 1_000_000_000
 OPEN = 1_772_000_000 * SECOND
@@ -48,11 +48,10 @@ TURNOVER = TurnoverInputs(
         ("FLATTRADE", "2L"): CostLine(0.00025),
         ("ZERODHA", "2L"): CostLine(0.00060),
     },
-    a=0.000274,
-    gamma=0.5,
-    fitted_horizon=400.0,
+    edge_curve=lambda tau: EdgeCurve(a=0.000274 * (1 + 0.3 * tau / 0.0005), gamma=0.5),
+    trade_sigma=lambda h: 0.0005 * h,
+    fitted_horizon=100_000.0,
     lam=0.5,
-    sigma_trade=0.001,
     density={0.0002: 40.0, 0.0006: 12.0, 0.0020: 3.0},
     ticket=50_000.0,
     capital=2_000_000.0,
@@ -278,7 +277,9 @@ def test_the_stage_is_deterministic() -> None:
 
 def test_admissible_is_derived_and_cannot_be_set_independently() -> None:
     result = run()
-    assert result.admissible == (result.budget.admissible and bool(result.ensemble))
+    assert result.admissible == (
+        result.budget.admissible and bool(result.ensemble) and bool(result.plans)
+    )
 
 
 def test_the_check_is_registered_and_resolves() -> None:
@@ -307,3 +308,51 @@ def test_rejected_candidates_contribute_no_orders_to_netting_or_the_budget() -> 
     assert {c.id for c in result.ensemble} == {"a", "c"}
     # quiet_blotter emits ten orders per member, so three candidates would give thirty.
     assert result.budget.total_orders == 20
+
+
+def test_a_venue_whose_joint_solve_does_not_settle_is_reported_by_the_stage() -> None:
+    """§6.3 solves tau* and h* jointly, and the joint map does not contract everywhere.
+
+    The dear venue cycles under this coupling while the cheap one settles. The stage must carry
+    that through: a caller reading only `plans` would otherwise see one venue where two were
+    priced, and the missing one is exactly the one whose economics do not settle.
+    """
+    turnover = TurnoverInputs(
+        cost_lines={("FLATTRADE", "2L"): CostLine(0.00025), ("ZERODHA", "2L"): CostLine(0.00090)},
+        edge_curve=lambda tau: EdgeCurve(a=0.000274 * (1 + 0.3 * tau / 0.0005), gamma=0.5),
+        trade_sigma=lambda h: 0.0005 * h,
+        fitted_horizon=100_000.0,
+        lam=0.5,
+        density={0.0002: 40.0, 0.0006: 12.0, 0.0020: 3.0},
+        ticket=50_000.0,
+        capital=2_000_000.0,
+    )
+    result = run(turnover=turnover)
+
+    assert [(p.broker, p.tier) for p in result.plans] == [("FLATTRADE", "2L")]
+    assert [(u.broker, u.tier) for u in result.unsolved_venues] == [("ZERODHA", "2L")]
+    assert "cycle" in result.unsolved_venues[0].reason
+
+
+def test_an_ensemble_with_no_solvable_venue_is_not_admissible() -> None:
+    """No breaches is not approval when there is no rule to run under.
+
+    Every venue failing leaves an ensemble that passes the order budget trivially — it has no
+    thresholds, so it sends nothing — and that must not read as a certifiable result.
+    """
+    turnover = TurnoverInputs(
+        cost_lines={("ZERODHA", "2L"): CostLine(0.00090)},
+        edge_curve=lambda tau: EdgeCurve(a=0.000274 * (1 + 0.3 * tau / 0.0005), gamma=0.5),
+        trade_sigma=lambda h: 0.0005 * h,
+        fitted_horizon=100_000.0,
+        lam=0.5,
+        density={0.0002: 40.0},
+        ticket=50_000.0,
+        capital=2_000_000.0,
+    )
+    result = run(turnover=turnover)
+
+    assert result.plans == ()
+    assert result.unsolved_venues != ()
+    assert result.budget.admissible, "nothing breached"
+    assert not result.admissible, "and still not certifiable"
