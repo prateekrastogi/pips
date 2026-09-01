@@ -30,10 +30,14 @@ parameters and separate funnel steps.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
+import polars as pl
+
+from pips.search.registry import Registry
 from pips.selection.cluster import correlation_distance
 from pips.selection.frontier import select_frontier
 from pips.selection.netting import (
@@ -56,7 +60,14 @@ from pips.selection.turnover import (
     plan_joint_per_broker_tier,
 )
 
-__all__ = ["S5Result", "StageStep", "TurnoverInputs", "run_s5"]
+__all__ = [
+    "RegistryIntake",
+    "S5Result",
+    "StageStep",
+    "TurnoverInputs",
+    "run_s5",
+    "run_s5_from_registry",
+]
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,23 @@ class StageStep:
 
 
 @dataclass(frozen=True)
+class RegistryIntake:
+    """What the registry offered and what survived reading it.
+
+    Each exclusion is counted rather than filtered: a run dropped here never reaches the
+    frontier, so a silent drop shrinks the population the whole selection reports on, and a
+    trial that was run and viewed still counts (rule 4).
+    """
+
+    rows_read: int
+    admitted: int
+    excluded_other_stage: int
+    excluded_not_completed: int
+    excluded_viewed: int
+    excluded_no_returns: int
+
+
+@dataclass(frozen=True)
 class S5Result:
     ensemble: tuple[Candidate, ...]
     funnel: tuple[StageStep, ...]
@@ -100,6 +128,8 @@ class S5Result:
     plans: tuple[JointPlan, ...]
     unsolved_venues: tuple[UnsolvedVenue, ...]
     budget: BudgetVerdict
+    intake: RegistryIntake | None = None
+    """Present when the candidates came from the registry; None when they were handed in."""
 
     @property
     def admissible(self) -> bool:
@@ -235,4 +265,108 @@ def run_s5(
         plans=planned.plans,
         unsolved_venues=planned.unsolved,
         budget=verdict,
+    )
+
+
+def run_s5_from_registry(
+    *,
+    registry: Registry,
+    stage: str,
+    objectives: Sequence[Objective],
+    cluster_threshold: float,
+    max_pairwise_correlation: float,
+    blotter_for: Callable[[tuple[str, ...], CostLine], Sequence[BlotterOrder]],
+    gross_cost: CostLine,
+    bucket_ns: int,
+    budget: OrderBudget,
+    turnover: TurnoverInputs,
+) -> S5Result:
+    """Read completed runs at ``stage`` and run S5 over them.
+
+    ``stage`` is REQUIRED with no default. S5 selects from what survived the earlier stages, and
+    pooling every run in the registry mixes S1 exploratory trials with S4 survivors — producing
+    a frontier over a population that never existed as a cohort, which looks exactly like a
+    frontier over the right one.
+
+    Candidates are keyed by ``run_id`` rather than ``config_hash``. Two runs of one config are
+    then two candidates, which is correct here: the correlation clustering collapses them, so
+    the duplicate is removed by the mechanism that exists for it rather than by a dedup rule
+    invented at the intake.
+    """
+    rows = registry.all_runs()
+    other_stage = not_completed = viewed = no_returns = 0
+    candidates: list[Candidate] = []
+    series: dict[str, list[float]] = {}
+
+    for row in rows:
+        if row["status"] == "viewed":
+            viewed += 1
+            continue
+        if row["status"] != "completed":
+            not_completed += 1
+            continue
+        if row["stage"] != stage:
+            other_stage += 1
+            continue
+        if not row["daily_returns_ref"]:
+            # It cannot be clustered, and that is not the same as being uncorrelated with
+            # everything — which is what carrying it through would silently claim.
+            no_returns += 1
+            continue
+
+        run_id = str(row["run_id"])
+        candidates.append(Candidate(run_id, json.loads(row["metrics"])))
+        series[run_id] = [
+            float(v) for v in pl.read_parquet(row["daily_returns_ref"])["daily_return"]
+        ]
+
+    intake = RegistryIntake(
+        rows_read=len(rows),
+        admitted=len(candidates),
+        excluded_other_stage=other_stage,
+        excluded_not_completed=not_completed,
+        excluded_viewed=viewed,
+        excluded_no_returns=no_returns,
+    )
+    if not candidates:
+        raise ValueError(
+            f"no completed runs at stage {stage!r} with preserved daily returns "
+            f"({len(rows)} rows read). Refusing rather than returning an empty ensemble, which "
+            "would read as 'nothing survived selection' instead of 'nothing was selected from'."
+        )
+
+    lengths = {len(v) for v in series.values()}
+    if len(lengths) > 1:
+        detail = ", ".join(f"{k}={len(v)}" for k, v in sorted(series.items()))
+        raise ValueError(
+            f"preserved return series have different lengths ({detail}). Refusing rather than "
+            "truncating to the common length as `daily_returns_matrix` does: that aligns at "
+            "index 0, which is only correct if every run started on the same day. A run that "
+            "began a month later would be compared day-1-to-day-1 against another's day-30."
+        )
+
+    result = run_s5(
+        candidates=candidates,
+        series=series,
+        objectives=objectives,
+        cluster_threshold=cluster_threshold,
+        max_pairwise_correlation=max_pairwise_correlation,
+        blotter_for=blotter_for,
+        gross_cost=gross_cost,
+        bucket_ns=bucket_ns,
+        budget=budget,
+        turnover=turnover,
+    )
+    return replace(
+        result,
+        funnel=(
+            StageStep(
+                name="registry-intake",
+                considered=len(rows),
+                admitted=len(candidates),
+                dropped=tuple(str(r["run_id"]) for r in rows if str(r["run_id"]) not in series),
+            ),
+            *result.funnel,
+        ),
+        intake=intake,
     )

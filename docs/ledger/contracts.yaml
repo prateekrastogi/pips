@@ -376,7 +376,11 @@
     - "tests/unit/test_s5.py"
   status: building
   owner_milestone: M19
-  # The stage exists and is mutation-verified; nothing runs it. It reads candidates passed in
-  # rather than pulling completed runs from the registry, and no CLI target or pipeline invokes
-  # it -- so `building`, by the same standard that kept the pieces `building` until this stage
-  # gave them a caller. Turning it on means a registry-backed entry point.
+  # `run_s5_from_registry` is the registry-backed entry point: it reads completed runs at a
+  # NAMED stage with preserved daily returns, counts every exclusion (other stage, not
+  # completed, viewed, no returns) as the funnel's first step, and refuses series of unequal
+  # length rather than truncating them the way `daily_returns_matrix` does.
+  #
+  # STILL `building`, and the remaining gap is narrow: no CLI target or scheduled pipeline calls
+  # it, so it has still never run against a registry that a search actually populated. The
+  # constraint is reachable now rather than merely constructible -- but nothing has reached it.
