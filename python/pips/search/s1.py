@@ -100,6 +100,28 @@ def apply_family_fdr(candidates: list[dict[str, object]], q: float) -> list[dict
     return out
 
 
+def _check_lockbox(stamps: list[int], lockbox: SealedLockbox | None, stage: str | None) -> None:
+    """Authorise a read against the holdout. ONE implementation, shared by every loader.
+
+    The check lives at the read because that is the only place it can bite. Two loaders with two
+    copies of the rule is two places for it to drift, and only one of them would be the one
+    under test — so a second reader calls this rather than reimplementing it.
+
+    ``lockbox=None`` means no holdout has been DECLARED, which is a different thing from a
+    holdout that permits everything, and the default must not quietly become the latter.
+    """
+    if lockbox is None:
+        return
+    if stage is None:
+        raise ValueError(
+            "a lockbox was supplied without a stage. A read of unknown provenance cannot "
+            "be authorised against a holdout, and defaulting the stage would authorise it."
+        )
+    first = datetime.fromtimestamp(min(stamps) / 1e9, IST).date()
+    last = datetime.fromtimestamp(max(stamps) / 1e9, IST).date()
+    lockbox.check(stage=stage, start=first, end=last + timedelta(days=1))
+
+
 def load_panel(
     fixtures: Path, lockbox: SealedLockbox | None = None, stage: str | None = None
 ) -> pl.DataFrame:
@@ -137,17 +159,7 @@ def load_panel(
     if not rows:
         raise FileNotFoundError(f"no 1m fixtures under {fixtures} — run `make fixtures`")
 
-    if lockbox is not None:
-        if stage is None:
-            raise ValueError(
-                "a lockbox was supplied without a stage. A read of unknown provenance cannot "
-                "be authorised against a holdout, and defaulting the stage would authorise it."
-            )
-        stamps = [int(r["close_ts_ns"]) for r in rows]  # type: ignore[call-overload]
-        first = datetime.fromtimestamp(min(stamps) / 1e9, IST).date()
-        last = datetime.fromtimestamp(max(stamps) / 1e9, IST).date()
-        lockbox.check(stage=stage, start=first, end=last + timedelta(days=1))
-
+    _check_lockbox([int(str(r["close_ts_ns"])) for r in rows], lockbox, stage)
     return pl.DataFrame(rows).sort(["close_ts_ns", "symbol"])
 
 

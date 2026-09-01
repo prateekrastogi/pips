@@ -47,7 +47,13 @@ if TYPE_CHECKING:
 
     from pips.search.halving import HalvingResult
 
-__all__ = ["RecordedTrials", "TrialContext", "fixture_snapshot_root", "record_halving_trials"]
+__all__ = [
+    "RecordedTrials",
+    "TrialContext",
+    "file_snapshot_root",
+    "fixture_snapshot_root",
+    "record_halving_trials",
+]
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,15 @@ def fixture_snapshot_root(directory: Path) -> str:
         if path.is_file()
     )
     return MerkleTree.root(leaves)
+
+
+def file_snapshot_root(path: Path) -> str:
+    """A 64-hex Merkle root over ONE file, in the same leaf form as a directory's.
+
+    Silver is a single parquet, not a tree, and a run that reads it must pin what it read the
+    same way a fixture run does — [C-DATA-02] does not care which shape the data arrived in.
+    """
+    return MerkleTree.root([f"{path.name}:{hashlib.sha256(path.read_bytes()).hexdigest()}"])
 
 
 def record_halving_trials(

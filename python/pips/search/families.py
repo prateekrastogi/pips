@@ -41,7 +41,13 @@ from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry, RunRecord
 from pips.search.s1 import _evaluate, _pnl_series, load_panel
 from pips.search.s5 import TurnoverInputs, run_s5_from_registry
-from pips.search.trials import TrialContext, fixture_snapshot_root, record_halving_trials
+from pips.search.silver_panel import load_silver_panel
+from pips.search.trials import (
+    TrialContext,
+    file_snapshot_root,
+    fixture_snapshot_root,
+    record_halving_trials,
+)
 from pips.selection.netting import BlotterOrder
 from pips.selection.order_budget import NSE_RETAIL_BUDGET
 from pips.selection.pareto import Direction, Objective
@@ -215,9 +221,21 @@ def run_family_searches(
     grid_points: int = 4,
     initial_budget: int = 400,
     returns_bars: int | None = None,
+    silver: Path | None = None,
 ) -> dict[str, object]:
     """Search every family, promote each winner, and run S5 across the promoted rows."""
-    panel = load_panel(fixtures)
+    # Real promoted bars when `silver` is given, generated fixtures otherwise. Both pin what
+    # they read: [C-DATA-02] does not care which shape the data arrived in, and a run on real
+    # bars that recorded no snapshot root would be the one run nobody could reproduce.
+    if silver is not None:
+        panel = load_silver_panel(silver)
+        snapshot_name = f"silver@{silver.name}"
+        root = file_snapshot_root(silver)
+    else:
+        panel = load_panel(fixtures)
+        snapshot_name = f"fixtures@{fixtures.name}"
+        root = fixture_snapshot_root(fixtures)
+
     stamps = sorted(set(panel["close_ts_ns"].to_list()))
     interval = stamps[1] - stamps[0]
     closes = {
@@ -230,7 +248,6 @@ def run_family_searches(
         )
         for s in sorted(set(panel["symbol"].to_list()))
     }
-    root = fixture_snapshot_root(fixtures)
     # The window preserved returns cover. It must be the SAME for every config -- the recorder
     # refuses unequal lengths and S5 cannot correlate them -- but it need not be the whole panel.
     window = len(stamps) if returns_bars is None else min(returns_bars, len(stamps))
@@ -261,7 +278,7 @@ def run_family_searches(
             stage="S1",
             stage_rank=1,
             family=alpha_id,
-            data_snapshot=f"fixtures@{fixtures.name}",
+            data_snapshot=snapshot_name,
             snapshot_root=root,
             cost_model="0" * 64,
             fill_tier="F1",
@@ -321,7 +338,7 @@ def run_family_searches(
                 session_mask="ALL",
                 capital_tier="2L",
                 broker="FLATTRADE",
-                data_snapshot=f"fixtures@{fixtures.name}",
+                data_snapshot=snapshot_name,
                 snapshot_root=root,
                 cost_model="0" * 64,
                 fill_tier="F1",
