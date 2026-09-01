@@ -428,6 +428,28 @@ training window and reports it as the holdout is what makes the gate theatre, an
 supplying both could unlock cycle A's ledger while reading cycle B's holdout. **An empty result
 is not a pass** — a run that measured nothing is not a run that measured nothing bad.
 
+### 3.9.3 Certification: top-5 is a maximum `[C-CERT-01]`
+
+The P4 gate reads *0–5 bundles; every certified one passes hard gates*. The dangerous
+implementation is `sorted(candidates)[:5]` — it returns five whenever five exist, so the count
+reports the size of the input while looking like a finding. The gates run first; the ceiling
+only ever removes.
+
+**The gates are re-derived, never read.** Every pass is recomputed from the value and the
+threshold it was held to, which is what `Measurement` having no verdict field was for. A gate
+field holding a bare number is *ungated*: a float carries no threshold, so nothing can be
+derived from it, and accepting it would let "recorded" read as "passed".
+
+**Not placing is not failing.** A candidate that cleared every gate and ranked sixth is reported
+apart from one that failed PBO; merging them would call the sixth unsound, which is a much
+stronger claim than "there were five better ones". **An empty certification carries its
+reasons** — zero certified is the expected output of a bad cycle, and it has to be
+distinguishable from a selector that never ran.
+
+Ranking is by `economics.net_return` descending, ties on `strategy_id`, so two runs of one cycle
+certify the same bundles in the same order. Input order is never the tie-break: it is not a
+property of the cycle.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -732,7 +754,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
   one-shot run `[C-LBOX-01]`;
-  **top-5 is a maximum — fewer is a valid output**. *Verify:* bundle round-trip; dossier
+  **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 
 **P4 gate (human):** 0–5 bundles; every certified one passes hard gates (integrity,

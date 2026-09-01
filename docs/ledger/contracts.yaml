@@ -245,6 +245,35 @@
   # `building`: the writers that fill these sections from S5 output do not exist yet, so today
   # the schema is enforced but nothing populates it end to end.
 
+- id: C-CERT-01
+  title: "Certification: hard gates re-derived, top-5 a maximum, zero a valid output"
+  spec: "IMPLEMENTATION.md#393-certification-top-5-is-a-maximum"
+  code: "python/pips/certification/certify.py"
+  tests:
+    - "tests/unit/test_certify.py"
+  status: building
+  owner_milestone: M20
+  # THE CEILING ONLY REMOVES. `sorted(candidates)[:5]` returns five whenever five exist, so the
+  # count reports the size of the input while looking like a finding. Gates first, then the cut.
+  # MAX_CERTIFIED is a module constant and deliberately not a parameter -- a maximum the caller
+  # can raise is a default -- and a test asserts the signature has nowhere to raise it.
+  #
+  # THE GATES ARE RE-DERIVED, NEVER READ. Every pass is recomputed from the value and its
+  # threshold, which is what `Measurement` having no verdict field was for (`[C-DOSS-01]`). A
+  # gate field holding a BARE NUMBER is ungated: a float carries no threshold, nothing can be
+  # derived from it, and accepting it lets "recorded" read as "passed".
+  #
+  # NOT PLACING IS NOT FAILING. Sixth place is reported in `not_placed`, apart from a PBO
+  # failure in `rejected`. Merging them would call the sixth unsound.
+  #
+  # A boolean in `net_return` is refused: True is an int in Python, so it would rank as a 100%
+  # return and sort first, and the dossier deliberately counts False as a recorded value -- so
+  # completeness cannot catch it and this is the only place that can.
+  #
+  # `building`: the DSR gate reads `economics.dsr` and cannot yet CHECK that it was computed at
+  # N = M rather than the smaller N = M_erank, which would raise it (§3.6). That needs the raw
+  # Sharpe in the dossier. Stated, not solved. Nothing populates these dossiers from S5 yet.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 231 files · mypy --strict 231 files · 1585 pytest · clippy clean · cargo test ok
+  ruff 233 files · mypy --strict 233 files · 1621 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,20 +186,19 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Finish M20.** `[C-BNDL-01]`, `[C-DOSS-01]` and `[C-LBOX-01]` are in. What remains is the
-   **Rust loader's boot check** — golden fixtures replayed, unknown nodes / schema-version
-   mismatch / missing cost/risk versions / bad checksum / unequal quantized output all refused
-   before READY (§3.9) — and the **writers**: nothing yet POPULATES a dossier from S5 output or
-   calls the lockbox runner. The schema and the runner are enforced; the S6 caller that picks
-   the one candidate and hands it over does not exist.
+1. **The writers — the last thing M20 needs.** `[C-BNDL-01]`, `[C-DOSS-01]`, `[C-LBOX-01]` and
+   `[C-CERT-01]` are all in and all unpopulated: nothing yet turns an S5 result into a dossier,
+   calls the lockbox runner, or builds a bundle from a winning config. That caller is what makes
+   M20's *Verify* (bundle round-trip; dossier completeness check) runnable on real output rather
+   than fixtures. NOTE: the Rust loader's boot check is §3.9 text but belongs to the Rust plant
+   at **P5**, not M20 — I had it wrongly listed here for two ticks.
 2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
    every number a dossier would record, and widening it means external Breeze calls on a metered
    budget with the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists;
    the budget is 100k calls/day and 32 parallel fetches.
-3. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
-   instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
-   a reused code has two overlapping claimants and the master refuses to guess — loud, which is
-   the acceptable failure, but resolution is lost.
+3. **Bind the DSR to its N.** `[C-CERT-01]` gates on `economics.dsr` and cannot check it was
+   computed at N = M rather than the smaller N = M_erank, which would raise it (§3.6). Needs the
+   raw Sharpe in the dossier so the gate can re-derive both ends of the bracket.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
