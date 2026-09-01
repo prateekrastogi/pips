@@ -384,3 +384,25 @@
   # STILL `building`, and the remaining gap is narrow: no CLI target or scheduled pipeline calls
   # it, so it has still never run against a registry that a search actually populated. The
   # constraint is reachable now rather than merely constructible -- but nothing has reached it.
+
+- id: C-TRIAL-01
+  title: "Every viewed trial is recorded, eliminated and failed ones included"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/search/trials.py"
+  tests:
+    - "tests/unit/test_trials.py"
+  status: enforced
+  owner_milestone: M11
+  # The registry had a schema, append-only triggers and a holdout ledger since M11 and NO
+  # producer, so rule 4 had nothing to count and `multiplicity()` always read zero -- every
+  # §3.6 deflation divides by that. One row per (config, budget) look, which is what
+  # HalvingResult.trials_viewed means; eliminated candidates recorded (recording only survivors
+  # is survivorship bias at the trial level); a trial whose evaluation raises recorded as
+  # `failed` with its reason, because a look that errored is not a look that never happened.
+  #
+  # Only the final rung is `completed` -- an early rung is a look at reduced fidelity, which is
+  # exactly the `viewed` status that pooled_family_means and S5 already exclude from evidence
+  # while still counting it.
+  #
+  # Preserving daily returns per trial makes Multiplicity.bracket() formable for the first time;
+  # without them it raises, naming this gap in its own message.
