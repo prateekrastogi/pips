@@ -18,8 +18,10 @@ reduction that composes them have landed `[C-SEL-01]`.** Still ledgered `buildin
 tier have landed too `[C-TURN-01]`: §6.1's Faustmann rotation condition, §6.2's selectivity
 threshold, and a planner that refuses an optimum beyond the horizon `alpha(h)` was fitted over.
 §6.3's joint fixed point has landed too: coordinate descent that REFUSES rather than returning
-the last iterate when the map does not contract, and names a cycle as a cycle. Next in M19: the
-combined-blotter netting fixed point and order-budget constraints.
+the last iterate when the map does not contract, and names a cycle as a cycle. The
+combined-blotter netting fixed point has landed too `[C-NET-01]`: the netting window is required
+with no default, and a ratio of 1.0 (nothing reaches the market) is refused rather than priced
+as a zero cost line. Next in M19: order-budget constraints.
 
 **M18 is COMPLETE**: PSR/DSR, CSCV/PBO, the stationary bootstrap, Hansen's SPA, Romano–Wolf
 stepdown, the sealed lockbox (enforced in the data layer, not just recorded in the ledger) and
@@ -91,7 +93,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 196 files · mypy --strict 196 files · 1161 pytest · clippy clean · cargo test ok
+  ruff 199 files · mypy --strict 199 files · 1189 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -175,10 +177,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 
 ## Next 3 actions
 1. **Connect the selection chain to a search stage.** `select_frontier`, `plan_per_broker_tier`
-   and `solve_joint` are all mutation-verified and none is invoked by a stage, so `[C-SEL-01]`
-   and `[C-TURN-01]` both stay `building`. M19's remaining pieces are the combined-blotter
-   netting fixed point and order-budget constraints; the fold-to-fold dispersion of (τ*, h*)
-   that §6.3 calls a robustness statistic also has no consumer yet.
+   `solve_joint` and `solve_netting_fixed_point` are all mutation-verified and none is invoked
+   by a stage, so `[C-SEL-01]`, `[C-TURN-01]` and `[C-NET-01]` all stay `building`. M19's one
+   remaining piece is order-budget constraints; the fold-to-fold dispersion of (τ*, h*) that
+   §6.3 calls a robustness statistic also has no consumer yet.
 2. **A listing-date source.** The vendor file has a blank `DateOfListing` on all 5,873 rows, so
    instruments carry `UNKNOWN_LISTING_DATE` (1990-01-01) and valid time is DEGENERATE for them:
    a reused code has two overlapping claimants and the master refuses to guess — loud, which is

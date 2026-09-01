@@ -687,7 +687,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   MDD/CVaR, cost share, turnover/order count, stability, broker & capital-tier robustness;
   correlation clustering (1−corr) so near-variants form one cluster; τ*, h* per broker × tier
   (threshold economics + rotation condition from the Quant Foundations doc) `[C-TURN-01]`; combined-blotter
-  netting fixed point; order-budget constraints. *Verify:* frontier reproduction on
+  netting fixed point `[C-NET-01]`; order-budget constraints. *Verify:* frontier reproduction on
   fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; certification
   dossier (report card fields from the reference blueprint §12.2); lockbox one-shot run;

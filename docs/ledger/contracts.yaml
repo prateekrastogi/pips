@@ -318,3 +318,13 @@
   # NOT in: nothing in the search calls the planner or the joint solve yet, and the fold-to-fold
   # dispersion of (tau*, h*) that §6.3 calls a robustness statistic has no consumer. `building`
   # for those reasons, stated rather than implied.
+
+- id: C-NET-01
+  title: "Netting is measured on a declared window and re-prices the ensemble's cost line"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/selection/netting.py"
+  tests:
+    - "tests/unit/test_netting.py"
+    - "tests/unit/test_netting_fixed_point.py"
+  status: building
+  owner_milestone: M19
