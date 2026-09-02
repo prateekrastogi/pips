@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 246 files · mypy --strict 246 files · 1803 pytest · clippy clean · cargo test ok
+  ruff 247 files · mypy --strict 247 files · 1809 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,24 +186,23 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **`stability.concentration` — the owner's call**, and the LAST gate with no declared bar.
-   Every other hard gate now computes: DSR 0.229, SPA p 0.844, plateau 0.903 (for the families
-   whose winner is not at a grid edge). Its figures appear only under §11.4 *Tripwires —
-   auto-flags in every report*; the certification table gives no number. Setting it = a
-   `gates.yaml` row + enforcing code + an ADR in one commit.
-2. **Backfill, and the related question: should S4 filter?** Every gate now says the same thing
-   about two synthetic random walks, correctly. Deciding whether the gates should DROP
-   candidates rather than score them is a judgement that wants real bars behind it. External
-   Breeze calls on a metered budget with the owner's credentials; 100k calls/day, 32 parallel.
-3. **Six of eight fixture winners sit at a grid EDGE**, so their plateau is undefined by design.
-   Worth understanding rather than working around: an optimum at the boundary of a
-   pre-registered domain means either the domain is wrong or the surface is noise. On two
-   symbols over three days it is almost certainly noise — another argument for (2).
+1. **`stability.concentration` — the owner's call**, and the last gate with no declared bar.
+   Four of the seven hard gates now compute a real number on fixtures: DSR 0.229, SPA p 0.844,
+   plateau 0.903, delay_1_bar -0.0058. Setting concentration = a `gates.yaml` row + enforcing
+   code + an ADR in one commit.
+2. **Backfill, and: should S4 filter?** Every computed gate now says the same thing about two
+   synthetic random walks, correctly and with numbers. Deciding whether the gates should DROP
+   candidates rather than score them wants real data behind it. External Breeze calls on a
+   metered budget with the owner's credentials; 100k calls/day, 32 parallel.
+3. **`stress.cost_1_5x` needs a cost line in the search's PnL.** `_pnl_series` is gross, so the
+   1.5x perturbation is a no-op that would PASS — the case certifying itself. It needs M14's
+   event-engine cost model, which is a real build job and the largest single item left in the
+   30 unsupplied fields. Recorded on the gate row.
 
-`certify-smoke`: **0 certified, 31 unsupplied** for the best-documented candidate. PBO needs
-walk-forward IS/OOS matrices; the stress battery belongs to M14's event engine; capacity to the
-order-budget planner; operations to session policy that does not exist;
-`decision.rationale`/`outcome` a human writes.
+`certify-smoke`: **0 certified, 30 unsupplied.** PBO needs walk-forward IS/OOS matrices; the
+rest of the stress battery and capacity need the event engine and the order-budget planner;
+operations needs session policy that does not exist; `decision.rationale`/`outcome` a human
+writes.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

@@ -225,11 +225,28 @@ def _search_one(
     # costs nothing, and one it eliminated early is genuinely being looked at again.
     plateau = plateau_for_winner(winner=winner, candidates=candidates, score=plateau_score)
 
+    # `[G-P4-DELAY1]`: *survives +1-bar delay*. The decision is unchanged and only the ENTRY
+    # moves, so the strategy gets no later view of the market -- delaying the decision would.
+    delayed = _pnl_series(
+        panel,
+        closes,
+        stamps[:returns_bars],
+        driver.build(by_config[winner], bars=bars),
+        spec,
+        driver.compute,
+        delay_bars=1,
+    )
+
     metrics = {
         "net_return": float(sum(series)),
         "max_drawdown": _drawdown(series),
         "rank_ic": float(score(winner, result.rounds[-1].budget)),
     }
+    if any(delayed):
+        # Absent when the delayed run never trades. `at_least 0.0` would PASS a net return of
+        # zero, and a strategy that stops trading under a one-bar delay has not survived the
+        # delay -- it has stopped. Unsupplied is the honest record of that.
+        metrics["delay_1_bar"] = float(sum(delayed))
     if plateau is not None:
         # Absent rather than defaulted when the winner sits at a grid edge: one-sided evidence
         # is not a plateau, and a 1.0 there would read as a perfectly flat one.

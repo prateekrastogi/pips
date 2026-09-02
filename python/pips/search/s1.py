@@ -355,19 +355,38 @@ def _pnl_series(
     params: object,
     spec: AlphaSpec,
     compute_fn: ComputeFn = compute,
+    delay_bars: int = 0,
 ) -> list[float]:
     """Per-bar realised PnL of taking every forecast's sign, zero where there was no forecast.
 
     Zero-filled rather than compacted, so every config's series has the same length at the same
     budget whatever its warm-up costs it. Compacting would make the series lengths depend on the
     parameter, and correlating those would need a truncation that aligns at index 0.
+
+    ``delay_bars`` shifts ENTRY, never the decision: the forecast is still computed from the
+    as-of view at ``ts``, and the position is taken ``delay_bars`` bars later. That is
+    `[G-P4-DELAY1]`'s perturbation — *survives +1-bar delay* — and it is the honest one, because
+    delaying the decision instead would hand the strategy a later view of the market.
+
+    Decisions with no exit bar left contribute **zero** rather than reusing an earlier price,
+    which would fabricate a return out of the shift. The series length is unchanged so a
+    stressed run stays comparable with its baseline.
     """
+    if delay_bars < 0:
+        raise ValueError(
+            f"delay_bars must not be negative, got {delay_bars}. A negative delay enters BEFORE "
+            "the decision — the lookahead this project exists to prevent, and it would improve "
+            "every result it touched."
+        )
     series = [0.0] * (len(stamps) - 1)
     for i, ts in enumerate(stamps[:-1]):
+        entry_index, exit_index = i + delay_bars, i + delay_bars + 1
+        if exit_index >= len(stamps):
+            continue
         view = AsOfPanelView(panel, decision_ts=ts)
         for forecast in compute_fn(view, params, spec):
             prices = closes[forecast.instrument_id]
-            here, nxt = prices.get(ts), prices.get(stamps[i + 1])
+            here, nxt = prices.get(stamps[entry_index]), prices.get(stamps[exit_index])
             if here in (None, 0) or nxt is None:
                 continue
             direction = 1.0 if float(forecast.expected_return_bps) >= 0 else -1.0

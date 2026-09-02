@@ -170,6 +170,13 @@
   status: building
   owner_milestone: M20
   # "Positive after 1.5x cost". The 2x figure on the same row is DISCLOSED, not gated.
+  #
+  # NOT COMPUTABLE YET, and the reason is worth stating: `_pnl_series` is GROSS -- it takes each
+  # forecast's sign and holds one bar, with no cost line anywhere. Multiplying zero by 1.5
+  # leaves zero, so the stressed result would equal the unstressed one and the case would PASS.
+  # A perturbation that cannot be evaluated certifying itself is exactly what
+  # `CaseOutcome.NOT_RUN` was added to prevent. It needs the event engine's cost model (M14),
+  # and until then `stress.cost_1_5x` stays unsupplied rather than trivially green.
 
 - id: G-P4-DELAY1
   title: "Net return still positive at +1 bar delay"
@@ -183,3 +190,11 @@
   status: building
   owner_milestone: M20
   # "survives +1-bar delay". The +2 figure is DISCLOSED, not gated.
+  #
+  # The delay shifts ENTRY, never the decision: the forecast is computed from the as-of view at
+  # the decision bar and the position taken one bar later. Delaying the DECISION would hand the
+  # strategy a later view of the market -- a perturbation that can only help, and lookahead.
+  #
+  # A delayed run that never trades records NOTHING. `at_least 0.0` would pass a net return of
+  # zero, and a strategy that stops trading under a one-bar delay has not survived the delay,
+  # it has stopped.
