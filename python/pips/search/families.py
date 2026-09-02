@@ -39,6 +39,7 @@ from pips.search.funnel import (
     gate_s4,
     pbo_for_configs,
     plateau_for_winner,
+    report_card_economics,
     spa_adjusted_p,
 )
 from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_domain
@@ -253,7 +254,7 @@ def _search_one(
     # ONE evaluation, priced three ways. A cost line shifts each traded bar by a constant, so
     # gross, net and the 1.5x stress differ only by arithmetic on the same turnover counts --
     # re-running the panel per line made this Verify four times slower for two subtractions.
-    gross = series_for(winner, 0.0)
+    gross, gross_turns = gross_and_turns(winner)
     stressed = series_for(winner, ROUND_TRIP_COST * COST_STRESS)
     # ONE pass for both delays. The decision is unchanged at every delay -- only which prices
     # the position opens and closes at moves -- so evaluating +1 and +2 separately would repeat
@@ -292,6 +293,9 @@ def _search_one(
     }
     if pbo is not None:
         metrics["pbo"] = pbo.pbo
+    # §12.2's economics from the run the search already has. Turnover comes from the same pass
+    # that priced it, so nothing is re-evaluated.
+    metrics.update(report_card_economics(series, gross_turns, stamps[:returns_bars]))
     if gross_total != 0:
         # Undefined against a zero gross, and NOT 1.0: a strategy that made nothing gross has no
         # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.

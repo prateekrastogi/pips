@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from pips.search.registry import Registry
 
 __all__ = [
+    "CVAR_LEVEL",
     "DSR_MIN",
     "MIN_OBSERVATIONS",
     "PBO_BLOCKS",
@@ -55,6 +56,7 @@ __all__ = [
     "gate_s4",
     "pbo_for_configs",
     "plateau_for_winner",
+    "report_card_economics",
     "spa_adjusted_p",
 ]
 
@@ -328,3 +330,59 @@ def pbo_for_configs(series_by_config: Mapping[str, Sequence[float]]) -> PBOResul
     # test) can see the boundary purge actually ran. A wrapper returning only the number lets
     # the horizon be silently dropped, which is a leak nobody can observe.
     return probability_of_backtest_overfitting(returns, n_blocks=PBO_BLOCKS, horizon=PBO_HORIZON)
+
+
+CVAR_LEVEL = 0.95
+"""The quantile CVaR is reported beyond. A CVaR without a level is not a number, and 95% is the
+overwhelming convention — declared here rather than left implicit because a reader comparing two
+dossiers has to know they were measured at the same place. This is a REPORTING choice, not a
+gate threshold: nothing is compared against it, so it is not the kind of bar ADR-0014 refuses to
+invent."""
+
+
+def report_card_economics(
+    series: Sequence[float], turns: Sequence[int], stamps: Sequence[int]
+) -> dict[str, float]:
+    """§12.2's `rotation`, `orders_per_day` and `cvar` from a run the search already has.
+
+    **`rotation` is round trips per bar.** Every position here is opened and closed within its
+    holding bar, so the turnover count IS the rotation count; with several instruments trading
+    each bar it exceeds one, which is correct rather than a bug.
+
+    **`orders_per_day` counts ORDERS, two per round trip** — an entry and an exit. The ≤5
+    orders/s governor counts orders, so reporting round trips under a name that says orders
+    would understate the number that matters by half.
+
+    **`cvar` is the mean loss beyond the** :data:`CVAR_LEVEL` **quantile, as a POSITIVE
+    magnitude** — the same sign convention as `max_drawdown`, and stated for the same reason: a
+    negative magnitude read as "larger is better" ranks the worst tail first. The MEAN beyond
+    the quantile, not the single worst observation: on a fat tail those differ by exactly the
+    thing CVaR was chosen to see.
+
+    `rotation` and `orders_per_day` are **absent** when nothing traded. Zero is true and
+    useless: a strategy that never traded has no economics to report, and `0.0` orders per day
+    would read as one that is cheap to run.
+    """
+    if len(series) != len(turns):
+        raise ValueError(
+            f"series has length {len(series)} and turns {len(turns)}. They index the same bars, "
+            "so a mismatch means one of them describes a different run."
+        )
+    out: dict[str, float] = {}
+
+    total_turns = sum(turns)
+    if total_turns:
+        out["rotation"] = total_turns / len(turns)
+        # Bucketed by UTC day, which is the same as the IST day for this market: an NSE
+        # session runs 09:15-15:30 IST, i.e. 03:45-10:00 UTC, so it lies inside one calendar
+        # day in both. An IST offset was here and no test could distinguish it, because none
+        # ever can while the venue is NSE. A venue whose session crosses UTC midnight would
+        # need one, and would need a test that says so.
+        days = {ts // 86_400_000_000_000 for ts in stamps}
+        out["orders_per_day"] = 2.0 * total_turns / len(days)
+
+    if series:
+        ordered = sorted(series)
+        tail = max(1, round(len(ordered) * (1 - CVAR_LEVEL)))
+        out["cvar"] = -sum(ordered[:tail]) / tail
+    return out

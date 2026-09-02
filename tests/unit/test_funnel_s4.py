@@ -31,6 +31,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+_BAR = 60_000_000_000
+_DAY = 86_400_000_000_000
+# 2026-01-01 09:15 IST as ns since epoch, near enough: the only thing that matters is that
+# STAMPS_2DAY straddles an IST midnight and STAMPS_4 does not.
+_OPEN = 1_767_237_300_000_000_000
+STAMPS_4 = [_OPEN + i * _BAR for i in range(4)]
+STAMPS_20 = [_OPEN + i * _BAR for i in range(20)]
+STAMPS_60 = [_OPEN + i * _BAR for i in range(60)]
+STAMPS_2DAY = [_OPEN, _OPEN + _BAR, _OPEN + _DAY, _OPEN + _DAY + _BAR]
+
+
 def record(**over: Any) -> RunRecord:
     base: dict[str, Any] = {
         "config_hash": "a" * 64,
@@ -506,3 +517,74 @@ def test_pbo_uses_an_even_number_of_blocks() -> None:
     from pips.search.funnel import PBO_BLOCKS
 
     assert PBO_BLOCKS % 2 == 0
+
+
+# ------------------------------------------------ §12.2 report-card economics -----
+
+
+def test_rotation_is_round_trips_per_bar() -> None:
+    from pips.search.funnel import report_card_economics
+
+    out = report_card_economics([0.01, -0.02, 0.03, 0.0], [2, 2, 2, 0], STAMPS_4)
+    assert out["rotation"] == pytest.approx(1.5)
+
+
+def test_orders_are_two_per_round_trip() -> None:
+    """Entry and exit. The distinction matters: the >=5 orders/s governor counts ORDERS, and
+    reporting round trips under a name that says orders would understate it by half."""
+    from pips.search.funnel import report_card_economics
+
+    out = report_card_economics([0.01, 0.0, 0.0, 0.0], [3, 0, 0, 0], STAMPS_4)
+    assert out["orders_per_day"] == pytest.approx(6.0)
+
+
+def test_orders_per_day_divides_by_trading_days_not_bars() -> None:
+    """Two days of bars must halve the per-day figure, not leave it per-bar."""
+    from pips.search.funnel import report_card_economics
+
+    one_day = report_card_economics([0.0] * 4, [1, 1, 1, 1], STAMPS_4)
+    two_days = report_card_economics([0.0] * 4, [1, 1, 1, 1], STAMPS_2DAY)
+    assert two_days["orders_per_day"] == pytest.approx(one_day["orders_per_day"] / 2)
+
+
+def test_cvar_is_a_positive_magnitude() -> None:
+    """Same sign convention as `max_drawdown`, and stated for the same reason: a negative
+    magnitude read as 'larger is better' would rank the worst tail first."""
+    from pips.search.funnel import report_card_economics
+
+    out = report_card_economics([-0.10, 0.01, 0.02, 0.03], [1, 1, 1, 1], STAMPS_4)
+    assert out["cvar"] > 0
+
+
+def test_cvar_averages_the_tail_not_just_the_worst() -> None:
+    """CVaR is the MEAN beyond the quantile; taking the single worst is VaR's cousin, and on a
+    fat tail the two differ by exactly the thing CVaR was chosen to see."""
+    from pips.search.funnel import CVAR_LEVEL, report_card_economics
+
+    # SIXTY observations, so the 5% tail is three and averaging is distinguishable from taking
+    # the single worst. At twenty the tail rounds to one and the two are the same number — my
+    # first fixture proved nothing, and the mutation that replaced the tail with `1` survived.
+    losses = [-0.10, -0.08, -0.06] + [0.02] * 57
+    out = report_card_economics(losses, [1] * 60, STAMPS_60)
+    tail = max(1, round(len(losses) * (1 - CVAR_LEVEL)))
+
+    assert tail == 3, "the fixture must produce a tail wider than one"
+    assert out["cvar"] == pytest.approx(0.08)
+    assert out["cvar"] != pytest.approx(0.10), "that is the worst observation, not the mean"
+
+
+def test_a_series_with_no_trades_has_no_rotation() -> None:
+    """Zero rotation and zero orders are true, but a series that never traded has no economics
+    to report — and 0.0 orders/day would read as a strategy that is cheap to run."""
+    from pips.search.funnel import report_card_economics
+
+    out = report_card_economics([0.0] * 4, [0, 0, 0, 0], STAMPS_4)
+    assert "rotation" not in out
+    assert "orders_per_day" not in out
+
+
+def test_mismatched_lengths_are_refused() -> None:
+    from pips.search.funnel import report_card_economics
+
+    with pytest.raises(ValueError, match="length"):
+        report_card_economics([0.01, 0.02], [1, 1, 1], STAMPS_4)

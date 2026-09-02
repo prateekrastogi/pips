@@ -104,6 +104,10 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     # either is refused -- by this module, and again by `[C-CERT-01]`.
     MetricSource("cost_2x", "stress.cost_2x"),
     MetricSource("delay_2_bar", "stress.delay_2_bar"),
+    # §12.2 report-card economics. Values, not gates: nothing declares a bar for them.
+    MetricSource("rotation", "economics.rotation"),
+    MetricSource("orders_per_day", "economics.orders_per_day"),
+    MetricSource("cvar", "economics.cvar"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(
