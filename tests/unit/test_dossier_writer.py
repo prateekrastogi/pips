@@ -249,3 +249,50 @@ def test_the_disclosed_fields_have_no_ledger_row() -> None:
     declared = {row.threshold.get("path") for row in ledger.gates}
 
     assert not (set(DISCLOSED) & declared)
+
+
+# ------------------------------------------- a Measurement is a claim about a threshold -----
+
+
+def test_a_measurement_for_an_undeclared_gate_is_refused() -> None:
+    """The hole this rule closes, and it was in the worst possible place.
+
+    `stability.concentration` is the one hard gate ADR-0014 deliberately left without a bar.
+    Because the writer did not derive it, it fell through to ordinary caller evidence — so a
+    caller could hand-write `Measurement(0.99, threshold=999.0, "at_most")` and clear the very
+    gate the ADR says nobody has agreed on. Every other gate was protected; the undecided one
+    was not.
+    """
+    with pytest.raises(UndeclaredEvidenceError, match="no declared threshold"):
+        draft(**{"stability.concentration": Measurement(0.99, 999.0, "at_most")})
+
+
+def test_a_measurement_for_a_disclosed_field_is_refused() -> None:
+    """The blueprint discloses the 2x results rather than gating them (ADR-0014), so a bar
+    here is invented too. `[C-CERT-01]` catches it; catching it at the source is better."""
+    with pytest.raises(UndeclaredEvidenceError, match="no declared threshold"):
+        draft(**{"stress.cost_2x": Measurement(0.2, 0.0, "at_least")})
+
+
+@pytest.mark.parametrize(
+    "path", ["operations.kill_thresholds", "capacity.positions", "identity.strategy_id"]
+)
+def test_a_measurement_anywhere_undeclared_is_refused(path: str) -> None:
+    """One rule rather than a list: a `Measurement` may appear only where a bar is declared.
+
+    Stated generally so a field added later is covered without anyone remembering — which is
+    exactly how `stability.concentration` slipped through in the first place.
+    """
+    with pytest.raises(UndeclaredEvidenceError, match="no declared threshold"):
+        draft(**{path: Measurement(1.0, 0.0, "at_least")})
+
+
+def test_a_plain_value_for_an_undeclared_gate_is_still_recorded() -> None:
+    """The measurement exists independently of the bar, and refusing it would lose it.
+
+    Recorded as a bare number, it is honestly *ungated*: `[C-CERT-01]` refuses to certify on it
+    and says so. That is the true state — measured, not gateable — and it is not the same as
+    unmeasured.
+    """
+    result = draft(**{"stability.concentration": 0.28})
+    assert result.dossier.sections["stability"]["concentration"] == 0.28

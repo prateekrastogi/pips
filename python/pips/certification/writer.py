@@ -15,6 +15,16 @@ held against thresholds declared *here*; evidence offered for a gate path is ref
 Otherwise the writer is a way to inject a passing `Measurement`, which is the one thing the
 `[C-DOSS-01]` / `[C-CERT-01]` chain exists to prevent.
 
+**And a `Measurement` may appear ONLY where a bar is declared.** The rule above protected the
+gates the writer derives — which left `stability.concentration`, the one hard gate ADR-0014
+deliberately leaves undecided, reachable as ordinary evidence: a caller could hand-write
+`Measurement(0.99, threshold=999.0)` and clear the gate nobody has agreed on. Every decided gate
+was protected and the undecided one was not. The rule is now stated generally rather than as a
+list, so a field added later is covered without anyone remembering — which is precisely how that
+hole opened. A plain number in such a field is still recorded: the measurement exists
+independently of the bar, and *measured but not gateable* is the honest state, distinct from
+unmeasured.
+
 **A metric that did not compute is not a metric.** NaN and infinity are unsupplied.
 
 **The draft's account of the gap agrees with the checker's**, and a test holds them together: a
@@ -123,7 +133,7 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
     ``evidence`` is keyed by dotted ``section.field`` path and may not name a gate path — those
     are derived from ``candidate.metrics`` alone.
     """
-    for path in evidence:
+    for path, value in evidence.items():
         if path in _GATE_PATHS:
             raise UndeclaredEvidenceError(
                 f"{path} is a gate and is derived from the measured metric, not supplied. "
@@ -139,6 +149,12 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
                 f"{path} is not a dossier field. A typo'd path would sit in the dossier while "
                 "the field it was meant for went on reporting missing."
             )
+        if isinstance(value, Measurement):
+            raise UndeclaredEvidenceError(
+                f"{path} has no declared threshold, so a Measurement here is a bar somebody "
+                "invented. A Measurement may appear only where GATE_SOURCES declares the bar; "
+                "everywhere else, record the number itself (ADR-0014)."
+            )
 
     sections: dict[str, dict[str, Any]] = {}
     supplied: list[str] = []
@@ -152,10 +168,10 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
         measured = candidate.metrics.get(spec.metric)
         if not _usable(measured):
             continue
-        value: Any = float(measured)  # type: ignore[arg-type]
+        derived: Any = float(measured)  # type: ignore[arg-type]
         if spec.threshold is not None and spec.direction is not None:
-            value = Measurement(value, spec.threshold, spec.direction)
-        place(spec.path, value, f"metric:{spec.metric}")
+            derived = Measurement(derived, spec.threshold, spec.direction)
+        place(spec.path, derived, f"metric:{spec.metric}")
 
     for path, value in evidence.items():
         place(path, value, "evidence")

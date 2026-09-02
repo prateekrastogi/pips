@@ -460,7 +460,10 @@ produces a dossier that is complete, hashes cleanly, binds to its bundle, and is
 The contract is therefore subtractive — **fill only what can be derived, name everything else**.
 There is no default anywhere in it. **The caller cannot hand-write a derived field**: a supplied
 gate injects a passing `Measurement`, and a supplied `net_return` chooses the ranking
-`[C-CERT-01]` sorts on. **A metric that did not compute is not a metric** — NaN, infinity and
+`[C-CERT-01]` sorts on. **A `Measurement` may appear only where a bar is declared** — otherwise
+`stability.concentration`, the one gate ADR-0014 leaves undecided, is reachable as ordinary
+evidence and can be cleared with an invented threshold. A plain number there is still recorded:
+*measured but not gateable* is the honest state, and it is not the same as unmeasured. **A metric that did not compute is not a metric** — NaN, infinity and
 booleans are unsupplied. The draft's account of the gap must agree with `check_completeness`.
 
 **The specification gap this exposes.** P4 states a number for DSR (0.95), PBO (0.25) and SPA

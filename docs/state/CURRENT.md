@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 237 files · mypy --strict 237 files · 1688 pytest · clippy clean · cargo test ok
+  ruff 237 files · mypy --strict 237 files · 1694 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,20 +186,21 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **One open threshold: `stability.concentration`** — the owner's call, and now the ONLY thing
-   between the factory and an end-to-end certification. Every piece exists: draft a dossier
-   `[C-WRIT-01]`, sign a bundle `[C-WRIT-02]`, run the holdout once `[C-LBOX-01]`, certify
-   `[C-CERT-01]`. ADR-0014 resolved five of six bars from the reference material; concentration's
-   figures appear only under §11.4 *Tripwires — auto-flags in every report*, and the
-   certification table gives no number. A tripwire fires on a running strategy; a gate refuses
-   one that has never traded.
-2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
+1. **The S6 caller — not blocked, contrary to what this file said last tick.** It can be built
+   and tested now; with `stability.concentration` still ungated the honest end-to-end output is
+   *0 certified, because concentration is ungated*, and proving the pipeline produces that is
+   exactly what M20's *Verify* needs. The ordering is the design: gate and rank on development
+   evidence, pick the finalists, THEN open the holdout once for all of them together. The
+   holdout confirms; it never selects — promoting a non-finalist after seeing it would be
+   selection on the holdout, and a second unlock voids the cycle (§3.6).
+2. **One open threshold: `stability.concentration`** — the owner's call. Its figures appear only
+   under §11.4 *Tripwires — auto-flags in every report*; the certification table gives no number.
+   A tripwire fires on a running strategy; a gate refuses one that has never traded. Until it is
+   set, no bundle can be certified — which is now enforced rather than merely documented.
+3. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
    every number a dossier would record, and widening it means external Breeze calls on a metered
-   budget with the owner's credentials. Recorded, not taken. `pips.data.breeze.campaign` exists;
-   the budget is 100k calls/day and 32 parallel fetches.
-3. **The S6 caller.** With (1) answered, the remaining work is the caller that picks a winner
-   from S5, assembles its provenance, and drives the four pieces above end to end — which is
-   what makes M20's *Verify* (bundle round-trip; dossier completeness check) run on real output.
+   budget with the owner's credentials. `pips.data.breeze.campaign` exists; the budget is 100k
+   calls/day and 32 parallel fetches.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

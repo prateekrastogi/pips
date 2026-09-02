@@ -292,6 +292,14 @@
   # a supplied `net_return` chooses the ranking `[C-CERT-01]` sorts on. Refused separately, with
   # different messages, because a reader needs to know which one they hit.
   #
+  # AND A MEASUREMENT MAY APPEAR ONLY WHERE A BAR IS DECLARED. The rule above protected the
+  # gates the writer DERIVES, which left `stability.concentration` -- the one hard gate ADR-0014
+  # deliberately leaves undecided -- reachable as ordinary evidence: a caller could hand-write
+  # Measurement(0.99, threshold=999.0) and clear the gate nobody has agreed on. Every decided
+  # gate was protected and the undecided one was not. Stated generally rather than as a list, so
+  # a field added later is covered without anyone remembering -- which is how the hole opened.
+  # A plain number is still recorded: measured-but-not-gateable is honest, and is not unmeasured.
+  #
   # A METRIC THAT DID NOT COMPUTE IS NOT A METRIC: NaN, infinity and booleans are unsupplied.
   # `float(True)` is 1.0 -- a perfect deflated Sharpe from a flag -- and it converts silently.
   #
