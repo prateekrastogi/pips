@@ -187,6 +187,8 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 
 ## Next 3 actions — both remaining items are the owner's
 
+*Regression watch 2026-09-02: deploy rail clean (0 errors/6h, current at `cf6a298`), Jenkins green #137-#168, suite 1865. Nothing drifted.*
+
 **M20's certification chain is as complete as it can be without a decision.** Six of seven hard
 gates compute on fixtures and all six agree: DSR 0.229, SPA p 0.844, PBO 0.814, plateau 0.903,
 delay_1_bar -1.45, cost_1_5x -2.16, bootstrap CI (-3.51, -2.04). `certify-smoke` reports
