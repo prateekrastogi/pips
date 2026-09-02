@@ -28,7 +28,6 @@ leaves nowhere to check the cleaning against.
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -36,6 +35,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from pips.core.atomic import atomic_write_text
 from pips.data.breeze.budget import DailyBudgetExceededError
 from pips.data.breeze.ingest import ResponseKind, classify_response
 
@@ -88,19 +88,12 @@ class Manifest:
 
     def mark(self, symbol: str, day: date, outcome: ResponseKind) -> None:
         self.outcomes[self.key(symbol, day)] = outcome.value
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # ATOMIC, because this file is rewritten once per key -- 234,900 times on the 3y x U300
-        # campaign -- and `write_text` truncates before it writes. A process killed inside that
-        # window leaves a truncated manifest; `load` correctly refuses to trust it and starts
-        # empty, so the restart that was supposed to cost zero calls re-fetches everything
-        # already paid for. `os.replace` is atomic within a filesystem: the manifest is either
-        # the old one or the new one, never half of either.
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(
-            json.dumps({"outcomes": self.outcomes}, indent=1, sort_keys=True) + "\n",
-            encoding="utf-8",
+        # ATOMIC: this file is rewritten once per key -- 234,900 times on the 3y x U300
+        # campaign -- and a truncated manifest sends `load` back to empty, so the restart that
+        # was supposed to cost zero calls re-fetches everything already paid for.
+        atomic_write_text(
+            self.path, json.dumps({"outcomes": self.outcomes}, indent=1, sort_keys=True) + "\n"
         )
-        os.replace(tmp, self.path)
 
 
 @dataclass(frozen=True)

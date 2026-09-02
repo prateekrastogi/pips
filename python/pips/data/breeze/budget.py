@@ -27,6 +27,8 @@ from typing import Any
 
 import yaml
 
+from pips.core.atomic import atomic_write_text
+
 __all__ = ["CallBudget", "DailyBudgetExceededError"]
 
 # 10% under the confirmed cap. Not a superstition -- SAL-0003 records real enforcement biting
@@ -118,13 +120,24 @@ class CallBudget:
             # Unreadable state means we do not know what we have spent. Assuming zero would
             # risk spending the quota twice, so assume the worst and force a fresh day.
             return self.effective_budget
-        return int(state["calls_made"]) if state.get("date") == self.today else 0
+        if state.get("date") != self.today:
+            return 0
+        try:
+            return int(state["calls_made"])
+        except (KeyError, TypeError, ValueError):
+            # Valid JSON that does not say what we spent. The guard above covers an unreadable
+            # file; this covers a readable one missing the only field that matters -- an older
+            # format, a hand edit, a half-written file that happened to stay parseable. Same
+            # answer for the same reason: not knowing what we spent must not read as zero.
+            return self.effective_budget
 
     def _save(self) -> None:
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(
+        # ATOMIC: rewritten once per call -- 90,000 times a day at the effective budget --
+        # and a truncated file reads as "the whole day is spent", which is safe and costs the
+        # rest of the day's quota.
+        atomic_write_text(
+            self.state_path,
             json.dumps({"date": self.today, "calls_made": self._calls_made}, sort_keys=True) + "\n",
-            encoding="utf-8",
         )
 
     # -- the gate ----------------------------------------------------------------------
