@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -398,6 +398,61 @@ def _pnl_series(
     return [g - t * cost_per_round_trip for g, t in zip(gross, turns, strict=True)]
 
 
+def _pnl_by_delay(
+    panel: pl.DataFrame,
+    closes: dict[str, dict[int, int]],
+    stamps: list[int],
+    params: object,
+    spec: AlphaSpec,
+    compute_fn: ComputeFn = compute,
+    delays: Sequence[int] = (0,),
+) -> dict[int, tuple[list[float], list[int]]]:
+    """Gross PnL and turnover for several entry delays, from ONE pass over the bars.
+
+    The decision is made from the as-of view at bar *i* whatever the delay; only which prices
+    the position is opened and closed at moves. So the expensive half — building the view and
+    calling the alpha — is identical across delays, and evaluating them separately repeats it
+    once per delay. `[G-P4-DELAY1]` needs +1 and the blueprint discloses +2; that is two extra
+    passes over the panel for what is the same work plus a different price lookup.
+    """
+    if not delays:
+        raise ValueError("delays is empty: there is nothing to evaluate.")
+    if len(set(delays)) != len(delays):
+        raise ValueError(
+            f"delays {list(delays)} repeats a value. Deduping silently would return fewer "
+            "entries than asked for, and a caller reading them by position would take the "
+            "wrong delay's series."
+        )
+    for delay in delays:
+        if delay < 0:
+            raise ValueError(
+                f"delay_bars must not be negative, got {delay}. A negative delay enters BEFORE "
+                "the decision — the lookahead this project exists to prevent, and it would "
+                "improve every result it touched."
+            )
+
+    out = {d: ([0.0] * (len(stamps) - 1), [0] * (len(stamps) - 1)) for d in delays}
+    for i, ts in enumerate(stamps[:-1]):
+        view = AsOfPanelView(panel, decision_ts=ts)
+        forecasts = list(compute_fn(view, params, spec))
+        if not forecasts:
+            continue
+        for delay in delays:
+            gross, turns = out[delay]
+            entry_index, exit_index = i + delay, i + delay + 1
+            if exit_index >= len(stamps):
+                continue
+            for forecast in forecasts:
+                prices = closes[forecast.instrument_id]
+                here, nxt = prices.get(stamps[entry_index]), prices.get(stamps[exit_index])
+                if here in (None, 0) or nxt is None:
+                    continue
+                direction = 1.0 if float(forecast.expected_return_bps) >= 0 else -1.0
+                gross[i] += direction * (nxt - here) / here
+                turns[i] += 1
+    return out
+
+
 def _pnl_and_turns(
     panel: pl.DataFrame,
     closes: dict[str, dict[int, int]],
@@ -415,22 +470,9 @@ def _pnl_and_turns(
     re-running the panel three times for two subtractions made the milestone's own Verify four
     times slower than the thing it verifies.
     """
-    gross = [0.0] * (len(stamps) - 1)
-    turns = [0] * (len(stamps) - 1)
-    for i, ts in enumerate(stamps[:-1]):
-        entry_index, exit_index = i + delay_bars, i + delay_bars + 1
-        if exit_index >= len(stamps):
-            continue
-        view = AsOfPanelView(panel, decision_ts=ts)
-        for forecast in compute_fn(view, params, spec):
-            prices = closes[forecast.instrument_id]
-            here, nxt = prices.get(stamps[entry_index]), prices.get(stamps[exit_index])
-            if here in (None, 0) or nxt is None:
-                continue
-            direction = 1.0 if float(forecast.expected_return_bps) >= 0 else -1.0
-            gross[i] += direction * (nxt - here) / here
-            turns[i] += 1
-    return gross, turns
+    return _pnl_by_delay(
+        panel, closes, stamps, params, spec, compute_fn=compute_fn, delays=(delay_bars,)
+    )[delay_bars]
 
 
 def run_s1_search(

@@ -268,10 +268,19 @@ def test_a_measurement_for_an_undeclared_gate_is_refused() -> None:
 
 
 def test_a_measurement_for_a_disclosed_field_is_refused() -> None:
-    """The blueprint discloses the 2x results rather than gating them (ADR-0014), so a bar
-    here is invented too. `[C-CERT-01]` catches it; catching it at the source is better."""
-    with pytest.raises(UndeclaredEvidenceError, match="no declared threshold"):
+    """The blueprint discloses the 2x results rather than gating them (ADR-0014), so a bar here
+    is invented too.
+
+    The refusal moved as the disclosures became DERIVED metrics: a caller can no longer supply
+    them at all, Measurement or not, which is stronger than refusing only the bar. The "no
+    declared threshold" branch still covers fields that are neither derived nor gated —
+    `stability.concentration` above.
+    """
+    with pytest.raises(UndeclaredEvidenceError, match="derived from the measured metric"):
         draft(**{"stress.cost_2x": Measurement(0.2, 0.0, "at_least")})
+
+    with pytest.raises(UndeclaredEvidenceError, match="derived from the measured metric"):
+        draft(**{"stress.cost_2x": 0.2})
 
 
 @pytest.mark.parametrize(

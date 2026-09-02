@@ -165,3 +165,72 @@ def test_more_cost_is_never_better() -> None:
     """The 1.5x stress leans on this: raising the cost line must not raise the result."""
     prices = [100, 90, 130, 95, 140]
     assert sum(costed(prices, 0.003)) <= sum(costed(prices, 0.002))
+
+
+# ------------------------------------------- one pass, every delay `[G-P4-DELAY1]` + 2x -----
+
+
+def by_delay(prices: list[int], delays: tuple[int, ...]) -> dict[int, list[float]]:
+    from pips.search.s1 import _pnl_by_delay
+
+    panel, closes = panel_of(prices)
+    out = _pnl_by_delay(
+        panel,
+        closes,
+        STAMPS,
+        object(),
+        _Spec(),  # type: ignore[arg-type]
+        compute_fn=always_long,  # type: ignore[arg-type]
+        delays=delays,
+    )
+    return {d: gross for d, (gross, _turns) in out.items()}
+
+
+def test_one_pass_matches_a_pass_per_delay() -> None:
+    """The justification for sharing the pass, stated as an equality.
+
+    The decision is made from the as-of view at bar i whatever the delay; only which prices the
+    position is opened and closed at moves. So the expensive half — building the view and
+    calling the alpha — is identical across delays, and computing them separately repeats it.
+    """
+    prices = [100, 90, 130, 95, 140]
+    shared = by_delay(prices, (0, 1, 2))
+
+    assert shared[0] == pytest.approx(series(prices))
+    assert shared[1] == pytest.approx(series(prices, delay_bars=1))
+    assert shared[2] == pytest.approx(series(prices, delay_bars=2))
+
+
+def test_the_alpha_is_called_once_per_bar_not_once_per_delay() -> None:
+    """The point of the shared pass. Three delays must not mean three evaluations."""
+    from pips.search.s1 import _pnl_by_delay
+
+    calls: list[int] = []
+
+    def counting(view: object, params: object, spec: object) -> list[object]:
+        calls.append(1)
+        return always_long(view, params, spec)
+
+    panel, closes = panel_of([100, 110, 120, 130, 140])
+    _pnl_by_delay(
+        panel,
+        closes,
+        STAMPS,
+        object(),
+        _Spec(),  # type: ignore[arg-type]
+        compute_fn=counting,  # type: ignore[arg-type]
+        delays=(0, 1, 2),
+    )
+    assert len(calls) == len(STAMPS) - 1, "the alpha ran more than once per decision bar"
+
+
+def test_a_repeated_delay_is_refused() -> None:
+    """Silently deduping would return fewer entries than asked for, and a caller indexing the
+    result by position would read the wrong delay's series."""
+    with pytest.raises(ValueError, match="delays"):
+        by_delay([100, 110, 120, 130, 140], (1, 1))
+
+
+def test_no_delays_at_all_is_refused() -> None:
+    with pytest.raises(ValueError, match="delays"):
+        by_delay([100, 110, 120, 130, 140], ())

@@ -45,7 +45,7 @@ from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_doma
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry, RunRecord
-from pips.search.s1 import _evaluate, _pnl_and_turns, _pnl_series, load_panel
+from pips.search.s1 import _evaluate, _pnl_and_turns, _pnl_by_delay, load_panel
 from pips.search.s5 import TurnoverInputs, run_s5_from_registry
 from pips.search.silver_panel import load_silver_panel
 from pips.search.trials import (
@@ -255,16 +255,24 @@ def _search_one(
     # re-running the panel per line made this Verify four times slower for two subtractions.
     gross = series_for(winner, 0.0)
     stressed = series_for(winner, ROUND_TRIP_COST * COST_STRESS)
-    delayed = _pnl_series(
+    # ONE pass for both delays. The decision is unchanged at every delay -- only which prices
+    # the position opens and closes at moves -- so evaluating +1 and +2 separately would repeat
+    # the expensive half (the as-of view and the alpha call) for a different price lookup.
+    by_delay = _pnl_by_delay(
         panel,
         closes,
         stamps[:returns_bars],
         driver.build(by_config[winner], bars=bars),
         spec,
         driver.compute,
-        delay_bars=1,
-        cost_per_round_trip=ROUND_TRIP_COST,
+        delays=(1, 2),
     )
+
+    def _delayed(delay: int) -> list[float]:
+        g, t = by_delay[delay]
+        return [a - b * ROUND_TRIP_COST for a, b in zip(g, t, strict=True)]
+
+    delayed = _delayed(1)
 
     # THE WHOLE GRID, not the survivors. PBO asks how often selecting on in-sample performance
     # picks a config that then fails; restricting it to what survived selection would ask that
@@ -289,6 +297,13 @@ def _search_one(
         # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.
         metrics["gross_to_net"] = net / gross_total
         metrics["cost_share"] = (gross_total - net) / gross_total
+    # DISCLOSED, not gated (ADR-0014): the blueprint asks for the 2x cost and +2-bar results to
+    # be reported, never held to a bar. `[C-CERT-01]` refuses a Measurement in either.
+    metrics["cost_2x"] = float(sum(series_for(winner, ROUND_TRIP_COST * 2)))
+    delayed_two = _delayed(2)
+    if any(delayed_two):
+        metrics["delay_2_bar"] = float(sum(delayed_two))
+
     if any(delayed):
         # Absent when the delayed run never trades. `at_least 0.0` would PASS a net return of
         # zero, and a strategy that stops trading under a one-bar delay has not survived the

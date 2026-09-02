@@ -100,6 +100,10 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     MetricSource("max_drawdown", "economics.max_drawdown"),
     MetricSource("gross_to_net", "economics.gross_to_net"),
     MetricSource("cost_share", "economics.cost_share"),
+    # DISCLOSURES (ADR-0014): reported, never held to a bar, so no threshold. A Measurement in
+    # either is refused -- by this module, and again by `[C-CERT-01]`.
+    MetricSource("cost_2x", "stress.cost_2x"),
+    MetricSource("delay_2_bar", "stress.delay_2_bar"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(
