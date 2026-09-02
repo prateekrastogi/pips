@@ -8,6 +8,19 @@
 # merge decisions rather than a stream of background noise.
 set -euo pipefail
 
+# EXIT CODES. A single non-zero exit made "the build failed" and "the controller was
+# unreachable" indistinguishable, and the pre-push hook printed `pips-ci is RED` for a `curl`
+# connection reset while Jenkins was restarting. A gate that FAILED and a gate that COULD NOT
+# RUN need different responses: fix the code, versus retry or check the controller. Both still
+# block the push -- only the diagnosis differs.
+UNREACHABLE=3
+
+unreachable() {
+  echo "pips-ci: could not reach the controller at ${URL} -- THE GATE DID NOT RUN." >&2
+  echo "         $1" >&2
+  exit "${UNREACHABLE}"
+}
+
 # TMPDIR, not a hardcoded /tmp: some sandboxes deny /tmp writes, and curl then fails to
 # open its cookie jar and exits before the request is ever made — which reads as an auth or
 # network fault rather than a filesystem one.
@@ -25,38 +38,46 @@ crumb() {
 }
 
 echo "pips-ci: requesting build of ref '${REF}' at ${URL}"
-CRUMB="$(crumb)"
+CRUMB="$(crumb)" || unreachable "the crumb request failed; is the controller up?"
 
 QUEUE_URL="$(curl -fsS -X POST "${AUTH[@]}" --cookie "${WORK}/pips-jenkins-cookies" \
   -H "${CRUMB}" -D - -o /dev/null \
   "${URL}/job/pips-ci/buildWithParameters?PIPS_REF=$(printf '%s' "$REF" | jq -sRr @uri)" \
-  | awk 'tolower($1)=="location:"{print $2}' | tr -d '\r')"
+  | awk 'tolower($1)=="location:"{print $2}' | tr -d '\r')" \
+  || unreachable "the build request failed"
 
 if [ -z "${QUEUE_URL}" ]; then
-  echo "pips-ci: no queue location returned — is the job created and the controller up?" >&2
-  exit 1
+  unreachable "no queue location returned — is the job created?"
 fi
 echo "pips-ci: queued at ${QUEUE_URL}"
 
 # The queue item becomes a build; poll until it does, then follow the build to a verdict.
 BUILD_URL=""
 for _ in $(seq 1 120); do
-  BUILD_URL="$(curl -fsS "${AUTH[@]}" "${QUEUE_URL}api/json" | jq -r '.executable.url // empty')"
+  # `|| true`: a transport blip mid-poll is not a verdict. The loop retries; only running out
+  # of attempts is conclusive, and that is reported as "did not run" rather than as red.
+  BUILD_URL="$(curl -fsS "${AUTH[@]}" "${QUEUE_URL}api/json" 2>/dev/null \
+    | jq -r '.executable.url // empty' || true)"
   [ -n "${BUILD_URL}" ] && break
   sleep 2
 done
-[ -n "${BUILD_URL}" ] || { echo "pips-ci: build never left the queue" >&2; exit 1; }
+[ -n "${BUILD_URL}" ] || unreachable "the build never left the queue"
 echo "pips-ci: building at ${BUILD_URL}"
 
 RESULT="null"
 for _ in $(seq 1 900); do
-  RESULT="$(curl -fsS "${AUTH[@]}" "${BUILD_URL}api/json" | jq -r '.result // "null"')"
-  [ "${RESULT}" != "null" ] && break
+  # Same reasoning: the controller restarting mid-build is a blip to ride out, not a red build.
+  RESULT="$(curl -fsS "${AUTH[@]}" "${BUILD_URL}api/json" 2>/dev/null \
+    | jq -r '.result // "null"' || true)"
+  [ -n "${RESULT}" ] && [ "${RESULT}" != "null" ] && break
   sleep 2
 done
+if [ -z "${RESULT}" ] || [ "${RESULT}" = "null" ]; then
+  unreachable "the build produced no verdict within the wait"
+fi
 
 echo "───────── console tail ─────────"
-curl -fsS "${AUTH[@]}" "${BUILD_URL}consoleText" | tail -40
+curl -fsS "${AUTH[@]}" "${BUILD_URL}consoleText" 2>/dev/null | tail -40 || true
 echo "────────────────────────────────"
 echo "pips-ci: ${REF} -> ${RESULT}   (${BUILD_URL})"
 [ "${RESULT}" = "SUCCESS" ]

@@ -25,21 +25,50 @@ if [ -z "$(git rev-list "@{u}..HEAD" 2>/dev/null || git rev-list HEAD -1)" ]; th
 fi
 
 echo "pre-push: running the Jenkins gate for '$BRANCH' before pushing to $REMOTE"
-if ! command -v make >/dev/null 2>&1; then
-  echo "pre-push: make not found — cannot run the gate. Refusing (fail closed)." >&2
+TRIGGER="$(git rev-parse --show-toplevel)/ops/jenkins/trigger.sh"
+if [ ! -x "$TRIGGER" ] && [ ! -f "$TRIGGER" ]; then
+  echo "pre-push: $TRIGGER not found — cannot run the gate. Refusing (fail closed)." >&2
   exit 1
 fi
 
-if make jenkins-build REF="$BRANCH"; then
+# The trigger exits 3 when it could not reach the controller, as distinct from a red build.
+# Both block the push -- failing closed is right -- but they need different responses: a red
+# build means fix the code, an unreachable controller means retry or check the controller.
+# Reporting one as the other sent this project to debug tests that passed.
+GATE_DID_NOT_RUN=3
+
+# CALLED DIRECTLY, NOT THROUGH `make jenkins-build`. Make exits 2 for ANY failed recipe, so
+# routing the trigger through it flattens 3 (could not reach) and 1 (red) into the same number
+# — which is the exact distinction this hook exists to make. `make jenkins-build` remains the
+# entry point for humans, who read the message rather than the exit code.
+bash "$TRIGGER" "$BRANCH"
+STATUS=$?
+
+if [ "$STATUS" -eq 0 ]; then
   echo "pre-push: pips-ci GREEN for '$BRANCH' — pushing"
   exit 0
+fi
+
+if [ "$STATUS" -eq "$GATE_DID_NOT_RUN" ]; then
+  cat >&2 <<'MSG'
+pre-push: could not reach the controller — THE GATE DID NOT RUN. Push blocked.
+
+This is NOT a red build. Nothing was tested, so nothing is known. Check that the controller
+is up (`make jenkins-up`, `make jenkins-logs`) and try again — a restart mid-poll is the
+usual cause and retrying is usually enough.
+
+Blocked rather than waved through, because an untested push and a tested one must not look
+alike. If you must push anyway, use `git push --no-verify` and record why in
+docs/state/log/<today>.md.
+MSG
+  exit 1
 fi
 
 cat >&2 <<'MSG'
 pre-push: pips-ci is RED — push blocked.
 
-Fix the build, do not weaken the check (constitution rule 10). If you must push anyway
-(e.g. to hand the branch to someone, or the controller itself is down), use:
+The build ran and failed. Fix it; do not weaken the check (constitution rule 10). If you must
+push anyway (e.g. to hand the branch to someone), use:
 
     git push --no-verify
 
