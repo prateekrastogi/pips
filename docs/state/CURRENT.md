@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 239 files · mypy --strict 239 files · 1708 pytest · clippy clean · cargo test ok
+  ruff 241 files · mypy --strict 241 files · 1719 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,20 +186,21 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **`stability.concentration` — the owner's call, and now the only thing standing between the
-   factory and a certified bundle.** The whole chain runs end to end and is pinned by a test that
-   asserts the honest current result: nothing certified, the holdout never opened, the report
-   naming concentration. Its figures appear only under §11.4 *Tripwires — auto-flags in every
-   report*; the certification table gives no number. A tripwire fires on a running strategy; a
-   gate refuses one that has never traded. Setting it means a `gates.yaml` row + the enforcing
-   code + an ADR, in one commit — the ledger-agreement test will hold them together.
+1. **`stability.concentration` — the owner's call, and the ONLY thing between the factory and a
+   certified bundle.** Every part of M20 now exists: nominate `[C-NOM-01]` → draft `[C-WRIT-01]`
+   → screen → one holdout look `[C-LBOX-01]` → sign `[C-WRIT-02]` → certify `[C-CERT-01]`, driven
+   by `[C-RUN-01]`. A test pins the honest outcome: nothing certified, the box never opened, the
+   report naming concentration. Its figures appear only under §11.4 *Tripwires — auto-flags in
+   every report*; the certification table gives no number. A tripwire fires on a running
+   strategy; a gate refuses one that has never traded. Setting it = a `gates.yaml` row + the
+   enforcing code + an ADR in one commit; the ledger-agreement test holds them together.
 2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
    every number a dossier would record, and widening it means external Breeze calls on a metered
    budget with the owner's credentials. `pips.data.breeze.campaign` exists; the budget is 100k
    calls/day and 32 parallel fetches.
-3. **The S5→Nominee adapter.** `[C-RUN-01]` takes nominees; nothing yet turns an `S5Result` into
-   them (draft the dossier, gather provenance from the run's environment, carry the IR). Small,
-   and the last mechanical piece of M20.
+3. **M20's Verify, once (1) lands**: bundle round-trip and dossier completeness on real S5
+   output rather than fixtures — then the P4 gate, which is a human sign-off
+   (`docs/state/gates/P4-approved.md`), not something this loop can grant itself.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

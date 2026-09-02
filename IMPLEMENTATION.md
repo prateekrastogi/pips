@@ -514,6 +514,24 @@ one and certifies under another.
 The pre-holdout screen reuses `certify.gate_reasons` rather than restating it: two definitions
 of "the gates pass" drift, and the one deciding who gets the single look is the worse to lose.
 
+### 3.9.7 Nominating from an S5 result `[C-NOM-01]`
+
+The mechanical join between the search and the certification chain. It is not left to a human
+because S5 already *knows* things §12.2 requires, and re-typing them is how a dossier comes to
+describe a slightly different run than the one that happened — the **correlation cluster** above
+all, which §12.2 asks for by name and which nothing outside S5 can reconstruct. The caller is
+refused if it offers one.
+
+**Only the ensemble is nominated** — S5's funnel dropped the rest for stated reasons, and
+readmitting one here would undo the narrowing without recording it. **An inadmissible S5 result
+nominates nobody**: no ensemble, no solved venue or a breached order budget means there is no
+rule to run these under, and "no breaches" must not read as approval. **Paperwork gaps are
+loud** — a nominee whose provenance cannot be found is reported, never skipped, because a silent
+skip shrinks the field and reads as "S5 found fewer".
+
+Drafting goes through `[C-WRIT-01]`, so every refusal there still applies. This is a join, not a
+way around it.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -817,7 +835,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
-  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`; the cycle driver `[C-RUN-01]`;
+  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`; the cycle driver `[C-RUN-01]`; the S5 nomination adapter `[C-NOM-01]`;
   **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 

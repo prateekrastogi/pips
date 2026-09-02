@@ -374,6 +374,34 @@
   # certified with the box never opened -- which is what `test_a_dossier_from_the_writer_cannot
   # _reach_the_holdout_yet` pins.
 
+- id: C-NOM-01
+  title: "S5 -> nominees: carry what the search knows, refuse what it does not"
+  spec: "IMPLEMENTATION.md#397-nominating-from-an-s5-result"
+  code: "python/pips/certification/nominate.py"
+  tests:
+    - "tests/unit/test_nominate.py"
+  status: building
+  owner_milestone: M20
+  # Not left to a human because S5 already KNOWS things §12.2 requires, and re-typing them is
+  # how a dossier comes to describe a slightly different run than the one that happened. The
+  # correlation cluster above all: §12.2 asks for it by name, nothing outside S5 can reconstruct
+  # which near-variants collapsed together, and a caller offering one is REFUSED because it
+  # describes a comparison that did not happen. A candidate in no cluster says so rather than
+  # borrowing the nearest -- borrowing misreports what it was compared against.
+  #
+  # ONLY THE ENSEMBLE IS NOMINATED: S5's funnel dropped the rest for stated reasons, and
+  # readmitting one undoes the narrowing without recording it. AN INADMISSIBLE S5 RESULT
+  # NOMINATES NOBODY -- no ensemble, no solved venue or a breached order budget means there is
+  # no rule to run these under, and "no breaches" must not read as approval.
+  #
+  # PAPERWORK GAPS ARE LOUD. `NoProvenanceError` is raised by the CALLER's provenance_for and
+  # recorded with its reason; a silent skip shrinks the field and reads as "S5 found fewer",
+  # which is a claim about the search rather than about the records.
+  #
+  # `building`: the caller that supplies evidence_for/provenance_for from a real run's
+  # environment is the remaining piece, and end-to-end certification is still held by
+  # `stability.concentration` having no bar (ADR-0014).
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"
