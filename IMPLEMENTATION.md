@@ -490,6 +490,30 @@ The required set is enumerated from `StrategyBundle`'s own fields, so a field ad
 demanded of the provenance without anyone remembering: a hand-written list does not grow with
 the model, and the field it would miss is the one nobody thought about.
 
+### 3.9.6 Driving a certification cycle `[C-RUN-01]`
+
+Every piece existed; what did not was the ORDER, and the order is the design.
+
+**The holdout confirms; it never selects.** Finalists are chosen on development evidence alone,
+and only then is the lockbox opened — once, for all of them together. A candidate that was not a
+finalist is never certified, however well the holdout would have treated it: promoting one
+afterwards is selection on the holdout, and a second look to check would void the cycle (§3.6).
+
+**One look, many candidates.** The sin is looking twice, not measuring several things in one
+look. The evaluation is told exactly whom it may measure. A finalist missing from what comes
+back is a broken evaluation rather than a failing candidate — by then the unlock is spent — and
+an id returning that was *not* a finalist is worse: something was measured against the sealed
+window that had no business being there. Both raise.
+
+**An empty field never opens the box**: nothing to confirm, and an unlock recorded against no
+result is a look nobody can account for. **Signing follows the holdout**, so the signature
+covers the holdout result rather than a promise of it. **The nominee's id must match the
+provenance's** — two names for one thing, and if they disagree the run reports finalists under
+one and certifies under another.
+
+The pre-holdout screen reuses `certify.gate_reasons` rather than restating it: two definitions
+of "the gates pass" drift, and the one deciding who gets the single look is the worse to lose.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -793,7 +817,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
-  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`;
+  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`; the cycle driver `[C-RUN-01]`;
   **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 

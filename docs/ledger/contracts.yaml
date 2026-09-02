@@ -340,6 +340,40 @@
   # `building`: nothing calls it yet -- the S6 caller that picks a winner and assembles its
   # provenance is the remaining piece, and it is blocked on the concentration bar (ADR-0014).
 
+- id: C-RUN-01
+  title: "Certification cycle: screen, one holdout look, then sign and certify"
+  spec: "IMPLEMENTATION.md#396-driving-a-certification-cycle"
+  code: "python/pips/certification/run.py"
+  tests:
+    - "tests/unit/test_certification_run.py"
+  status: building
+  owner_milestone: M20
+  # Every piece existed; what did not was the ORDER, and the order is the design.
+  #
+  # THE HOLDOUT CONFIRMS, IT NEVER SELECTS. Finalists are chosen on development evidence alone
+  # and only then is the box opened -- once, for all of them together. A non-finalist is never
+  # certified however well the holdout would have treated it: promoting one afterwards is
+  # selection on the holdout, and a second look to check would void the cycle (§3.6). Enforced
+  # more strongly than that, in fact -- a RESULT for a non-finalist is refused outright, so the
+  # evaluation cannot even measure one.
+  #
+  # A finalist missing from the result is a BROKEN EVALUATION, not a failing candidate: the
+  # unlock is already spent and cannot be retried on this cycle. AN EMPTY FIELD NEVER OPENS THE
+  # BOX -- an unlock recorded against no result is a look nobody can account for.
+  #
+  # SIGNING FOLLOWS THE HOLDOUT, so the signature covers the holdout result rather than a
+  # promise of it. THE NOMINEE'S ID MUST MATCH THE PROVENANCE'S: two names for one thing, and
+  # if they disagree the run reports finalists under one and certifies under another, which no
+  # audit can reconcile. Refused rather than overwritten.
+  #
+  # The screen reuses `certify.gate_reasons` rather than restating it -- two definitions of "the
+  # gates pass" drift, and the one deciding who gets the single look is the worse one to lose.
+  #
+  # `building`: the S5-to-Nominee adapter is the remaining piece, and until
+  # `stability.concentration` has a bar (ADR-0014) the honest end-to-end result is zero
+  # certified with the box never opened -- which is what `test_a_dossier_from_the_writer_cannot
+  # _reach_the_holdout_yet` pins.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

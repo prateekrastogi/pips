@@ -55,6 +55,7 @@ __all__ = [
     "DuplicateStrategyError",
     "Rejection",
     "certify",
+    "gate_reasons",
 ]
 
 MAX_CERTIFIED = 5
@@ -138,17 +139,16 @@ def _integrity_reasons(candidate: CertificationCandidate, key: bytes) -> list[st
     return reasons
 
 
-def _gate_reasons(dossier: Dossier) -> list[str]:
-    """Every gate that did not clear, in one pass.
+def gate_reasons(dossier: Dossier) -> list[str]:
+    """Every gate that did not clear, in one pass. Says nothing about completeness.
 
-    A caller who learns them one at a time runs certification once per gate.
+    Public and separate from the completeness check because the pre-holdout selection in
+    `[C-RUN-01]` needs exactly this: a dossier missing only `stability.lockbox_result` has not
+    failed anything, and must still be judged on the gates it does carry. Two definitions of
+    "the gates pass" would drift, and the one deciding who gets the single holdout look is the
+    worse one to have drift.
     """
     reasons: list[str] = []
-    try:
-        require_complete(dossier)
-    except IncompleteDossierError as exc:
-        reasons.append(str(exc))
-
     for path in DISCLOSED:
         section, _, field = path.partition(".")
         if isinstance(dossier.sections.get(section, {}).get(field), Measurement):
@@ -168,6 +168,16 @@ def _gate_reasons(dossier: Dossier) -> list[str]:
         elif not value.passed():
             reasons.append(f"{path} = {value.value} fails {value.direction} {value.threshold}")
     return reasons
+
+
+def _gate_reasons(dossier: Dossier) -> list[str]:
+    """Completeness and gates together — what certification itself requires."""
+    reasons: list[str] = []
+    try:
+        require_complete(dossier)
+    except IncompleteDossierError as exc:
+        reasons.append(str(exc))
+    return reasons + gate_reasons(dossier)
 
 
 def _rank_score(dossier: Dossier) -> float | None:
