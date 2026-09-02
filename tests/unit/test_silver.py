@@ -29,6 +29,7 @@ import pytest
 from pips.data.pit.instruments import Instrument, InstrumentMaster
 from pips.data.pit.store import PitStore
 from pips.data.silver import promote_bronze
+from pips.search.silver_panel import load_silver_panel
 
 KNOWN_ON = date(2026, 8, 29)
 TRADE_DAY = date(2026, 8, 26)
@@ -290,3 +291,138 @@ def test_the_report_accounts_for_every_bronze_file(
     report = promote_bronze(root, tmp_path / "silver", master, known_on=KNOWN_ON)
     assert report.files_read == 2
     assert report.files_promoted + len(report.quarantined) == report.files_read
+
+
+# ------------------------------------------------------------ knowledge time ---------
+
+
+def test_promotion_reproduces_the_belief_of_its_known_on(tmp_path: Path) -> None:
+    """A rebuild must reproduce the answer the run actually saw, wrong or not.
+
+    `known_on` is the whole reason `promote_bronze` takes a knowledge date: `as_of`'s docstring
+    says `None` means "everything we know now", so passing it down would silently rebuild every
+    historical panel against today's corrected master. The run that saw the old mapping is then
+    irreproducible — and nothing about the rebuilt panel would look wrong.
+    """
+    m = InstrumentMaster(PitStore(tmp_path / "pit"))
+    misread = Instrument(
+        isin="INE111A01011",
+        exchange_token="4001",
+        symbol="OLDNAME",
+        name="Renamed Industries",
+        series="EQ",
+        lot_size=1,
+        tick_size_paise=5,
+        vendor_code="NEWCO",
+    )
+    m.upsert(misread, known_from=date(2026, 8, 1), valid_from=date(2026, 8, 1))
+    # Corrected later: same security, and we now know the exchange calls it something else.
+    m.upsert(
+        misread.model_copy(update={"symbol": "NEWNAME"}),
+        known_from=date(2026, 8, 28),
+        valid_from=date(2026, 8, 1),
+    )
+    write_bronze(tmp_path / "bronze", ok([candle(0)]), symbol="NEWCO")
+
+    as_believed = promote_bronze(
+        tmp_path / "bronze", tmp_path / "s1", m, known_on=date(2026, 8, 27)
+    )
+    assert {r["symbol"] for r in as_believed.rows} == {"OLDNAME"}, (
+        "a rebuild pinned to 27 August must use what was known on 27 August"
+    )
+
+    # And the contrast, within the API `promote_bronze` actually offers: it requires a
+    # knowledge date rather than accepting `None`, so a persisted panel can never inherit
+    # "whatever we know now" by omission.
+    corrected = promote_bronze(tmp_path / "bronze", tmp_path / "s2", m, known_on=KNOWN_ON)
+    assert {r["symbol"] for r in corrected.rows} == {"NEWNAME"}
+
+
+@pytest.mark.parametrize("stamp", [None, 0, True, "1788174382222188421"], ids=str)
+def test_a_capture_without_a_knowledge_stamp_is_quarantined(
+    tmp_path: Path, master: InstrumentMaster, stamp: object
+) -> None:
+    """Not stamped with the epoch.
+
+    `received_at_ns` is silver's bitemporal provenance. Defaulting a missing one to 0 writes a
+    bar claiming it was known since 1970, which is not unknown — it is early, and it sorts
+    before and reads inside every as-of knowledge window there is. A bar we cannot date is
+    exactly the case the other three quarantine branches exist for.
+    """
+    path = tmp_path / "bronze" / "RELIND" / TRADE_DAY.isoformat() / "1.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "request": {"symbol": "RELIND", "trade_date": TRADE_DAY.isoformat()},
+                "payload": ok([candle(0)]),
+                **({} if stamp is None else {"received_at_ns": stamp}),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.rows == [], "a bar with no knowledge time must not reach the panel"
+    assert report.files_promoted == 0
+    assert [q.source for q in report.quarantined] == [str(path)]
+    assert "received_at_ns" in report.quarantined[0].reason
+
+
+# ------------------------------------------------------------ determinism ------------
+
+
+def test_rows_at_the_same_instant_are_ordered_by_symbol(tmp_path: Path) -> None:
+    """Not by the bronze path they happened to arrive under.
+
+    Bronze is laid out by VENDOR code, so a sort keyed on time alone leaves same-instant rows
+    in vendor-code order — deterministic today, and silently re-ordered by any change to the
+    bronze layout. The panel's order has to come from the panel's own columns.
+    """
+    m = InstrumentMaster(PitStore(tmp_path / "pit"))
+    for vendor, symbol, isin, token in (
+        ("AAACO", "ZEBRA", "INE222A01012", "5001"),
+        ("ZZZCO", "ALPHA", "INE333A01013", "5002"),
+    ):
+        m.upsert(
+            Instrument(
+                isin=isin,
+                exchange_token=token,
+                symbol=symbol,
+                name=symbol.title(),
+                series="EQ",
+                lot_size=1,
+                tick_size_paise=5,
+                vendor_code=vendor,
+            ),
+            known_from=date(2026, 8, 1),
+            valid_from=date(2026, 8, 1),
+        )
+        write_bronze(tmp_path / "bronze", ok([candle(0)]), symbol=vendor)
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", m, known_on=KNOWN_ON)
+
+    assert len({r["close_ts_ns"] for r in report.rows}) == 1, "fixture must tie on time"
+    assert [r["symbol"] for r in report.rows] == ["ALPHA", "ZEBRA"], (
+        "vendor order is AAACO, ZZZCO — the opposite of the symbol order the panel must use"
+    )
+
+
+def test_nothing_promoted_writes_no_parquet(tmp_path: Path, master: InstrumentMaster) -> None:
+    """File absent means nothing was promoted; file present means there are bars.
+
+    `load_silver_panel` splits on exactly that: no file gets "promote bronze first", and a file
+    gets its columns checked. An empty frame has no columns at all, so writing one turns "your
+    whole run quarantined" into "your silver is missing every column" — a true statement about
+    the wrong problem.
+    """
+    write_bronze(tmp_path / "bronze", {"Success": None, "Status": 500, "Error": "rate limit"})
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.bars_written == 0
+    assert len(report.quarantined) == 1
+    assert not (tmp_path / "silver" / "bars_1m.parquet").exists()
+    with pytest.raises(FileNotFoundError, match="Promote bronze first"):
+        load_silver_panel(tmp_path / "silver" / "bars_1m.parquet")

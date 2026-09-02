@@ -129,7 +129,24 @@ def promote_bronze(
             )
             continue
 
-        received = int(capture.get("received_at_ns", 0))
+        # Knowledge time is not optional. Defaulting a missing stamp to 0 wrote a bar claiming
+        # it was known since 1970 -- which is not unknown, it is EARLY: it sorts before and
+        # reads inside every as-of knowledge window there is (§3.4). A bar we cannot date is
+        # the same kind of problem as a bar we cannot name, and gets the same answer.
+        #
+        # `bool` is an `int` and `True > 0`, so a stamp of `true` would otherwise pass and date
+        # the bars one nanosecond after the epoch.
+        received = capture.get("received_at_ns")
+        if not isinstance(received, int) or isinstance(received, bool) or received <= 0:
+            quarantined.append(
+                Quarantined(
+                    str(path),
+                    f"capture carries no usable received_at_ns ({received!r}) for "
+                    f"{vendor_code}. Refusing to stamp the bars with the epoch: silver's "
+                    "knowledge time is its provenance, and a 0 reads as known-since-1970.",
+                )
+            )
+            continue
         rows.extend(_row(bar, instrument.symbol, instrument.isin, received) for bar in bars)
         files_promoted += 1
 

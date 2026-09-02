@@ -1062,6 +1062,16 @@
   # 200 and a body, and a throttled fetch written as bars becomes a day indistinguishable from
   # a holiday. Promotion is idempotent and independent of filesystem listing order, including
   # the quarantine list, so identical bronze hashes identically on the laptop and on arb-vm.
+  # Idempotent AT A KNOWN_ON, which is why the knowledge date is threaded to the resolver
+  # rather than defaulted: `as_of(known_on=None)` means "everything we know now", so a rebuild
+  # that dropped it would silently re-resolve every historical panel against today's corrected
+  # master, and the run that saw the old mapping becomes irreproducible.
+  #
+  # KNOWLEDGE TIME IS NOT OPTIONAL either. A capture with no usable `received_at_ns` is
+  # quarantined rather than stamped with the epoch: silver's knowledge time is its provenance,
+  # and a 0 does not read as unknown, it reads as EARLY -- sorting before and falling inside
+  # every as-of knowledge window there is. A bar we cannot date gets the same answer as a bar
+  # we cannot name.
   #
   # `building`: nothing reads silver yet. The search still runs on generated fixtures, and one
   # symbol over three days is not a panel a cross-sectional alpha can rank.
