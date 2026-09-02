@@ -212,3 +212,51 @@ def test_multiplicity_without_preserved_returns_reports_m_only(reg: Registry) ->
     m = multiplicity(reg)
     assert m.literal_count == 1
     assert m.effective_count is None
+
+
+# ------------------------------ gaps found by mutation sweep (2026-09-02) -----
+
+
+@pytest.mark.parametrize(
+    "not_a_root",
+    [
+        "B" * 64,  # uppercase
+        "b" * 63,  # truncated
+        "b" * 65,  # over-long
+        "z" * 64,  # not hex
+        "nifty100-1m",  # a NAME where a root belongs
+        "",
+    ],
+)
+def test_a_snapshot_root_that_is_not_a_root_is_refused(not_a_root: str) -> None:
+    """`_is_a_root` had NO test: every fixture passed a valid `"b" * 64`.
+
+    Three separate mutations survived because of it — dropping the length check, widening the
+    alphabet to uppercase, and removing the validator outright. The validator's own docstring
+    says why it exists: *a truncated hash, an uppercase one or a short id records something that
+    LOOKS like provenance and cannot be checked against a store.* An unchecked field records
+    exactly that, and nothing downstream can tell the difference.
+    """
+    with pytest.raises(ValueError, match="snapshot_root"):
+        record(snapshot_root=not_a_root)
+
+
+def test_an_unlock_survives_the_process_that_wrote_it(tmp_path: Path) -> None:
+    """The `commit()` after the unlock INSERT was untested.
+
+    It survives a mutation because the writing connection sees its own uncommitted rows — so a
+    single-connection test cannot tell. But the whole point of recording the attempt before
+    raising is that a crash cannot unsee it, and an uncommitted row dies with the process. The
+    second `Registry` here is what makes the durability observable.
+    """
+    path = tmp_path / "registry.db"
+    first = Registry(path)
+    with pytest.raises(RuntimeError):
+        first.unlock_holdout("cycle-1", "a" * 64)
+        first.unlock_holdout("cycle-1", "a" * 64)
+
+    reopened = Registry(path)
+    assert reopened.holdout_unlock_count("cycle-1") == 2, (
+        "both attempts must be on disk; an uncommitted unlock dies with the process and the "
+        "next run would see a fresh cycle"
+    )

@@ -202,6 +202,11 @@ class Registry:
 
     def all_runs(self) -> list[sqlite3.Row]:
         """Every trial, in insertion order. No filtering: that is the point (rule 4)."""
+        # ORDER BY is the GUARANTEE, not a convenience: `search.funnel` relies on it and
+        # had its own re-sort removed on the strength of it. A mutation dropping it
+        # survives -- SQLite returns rowid order anyway, and the table is append-only so
+        # rowid order IS insertion order, which makes the difference unobservable through
+        # this API. Kept because the reliance is real even though no test can see it.
         return list(self.connection.execute("SELECT * FROM runs ORDER BY run_id"))
 
     def daily_returns_matrix(self) -> np.ndarray | None:
