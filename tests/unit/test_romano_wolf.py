@@ -356,3 +356,144 @@ def test_a_longer_block_does_not_flatter_serially_dependent_returns() -> None:
     ).adjusted_p["a"]
 
     assert blocked > iid, (blocked, iid)
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+# Irregular by construction; see `test_adding_a_competitor_cannot_make_a_model_look_better`.
+MARGINAL_EDGE = (
+    -0.775,
+    -0.418,
+    -0.661,
+    -0.411,
+    -0.586,
+    -0.229,
+    0.389,
+    0.747,
+    -0.96,
+    -0.802,
+    -0.279,
+    0.214,
+    0.248,
+    -1.894,
+    1.854,
+    -0.74,
+    1.967,
+    -1.202,
+    -0.814,
+    -0.101,
+    -0.073,
+    -0.622,
+    0.885,
+    -1.652,
+    1.205,
+    -0.668,
+    1.402,
+    -0.259,
+    -1.249,
+    0.599,
+    2.38,
+    0.098,
+)
+NO_EDGE_WIDER_SWINGS = (
+    0.223,
+    -0.799,
+    -1.753,
+    -1.503,
+    -2.641,
+    -2.818,
+    0.142,
+    3.24,
+    1.046,
+    0.948,
+    0.497,
+    -1.728,
+    0.371,
+    -0.843,
+    1.875,
+    2.46,
+    2.507,
+    0.732,
+    2.088,
+    -1.324,
+    -0.197,
+    -0.422,
+    -1.806,
+    -2.049,
+    -1.77,
+    -0.915,
+    -3.846,
+    4.088,
+    0.407,
+    0.095,
+    1.241,
+    -0.31,
+)
+
+
+def test_adding_a_competitor_cannot_make_a_model_look_better() -> None:
+    """Multiplicity control, in its purest form.
+
+    Step j asks how often the maximum over *this hypothesis and everything weaker* reaches it.
+    Testing each hypothesis against only itself is not a stepdown at all — it is a per-model
+    p-value with no family-wise correction, and every adjusted p comes out smaller, which is
+    the direction that manufactures discoveries.
+
+    Stated as a comparison between two runs rather than against a recomputed expectation, so
+    the test cannot be satisfied by the implementation it is checking.
+    """
+    # A MARGINAL edge, deliberately. A statistic far beyond every bootstrap draw is adjusted to
+    # 0.0 whether or not the family is corrected, so an obvious winner cannot tell a stepdown
+    # from its absence — the first fixture tried here did exactly that and reported 0.0 == 0.0.
+    # These are irregular on purpose too: a periodic series is reproduced by the block bootstrap
+    # and lands back at the same clean answer.
+    marginal = [Decimal(str(v)) for v in MARGINAL_EDGE]
+    noise = [Decimal(str(v)) for v in NO_EDGE_WIDER_SWINGS]
+    alone = romano_wolf({"A": marginal}, alpha=0.05, n_bootstrap=256, block_length=4, seed=11)
+    family = romano_wolf(
+        {"A": marginal, "B": noise}, alpha=0.05, n_bootstrap=256, block_length=4, seed=11
+    )
+
+    assert family.adjusted_p["A"] > alone.adjusted_p["A"], (
+        f"a second hypothesis must cost A significance: alone {alone.adjusted_p['A']}, "
+        f"in a family {family.adjusted_p['A']}"
+    )
+
+
+def test_a_model_with_no_edge_is_neither_rejected_nor_significant() -> None:
+    """A constant differential: zero mean, zero variance, and every boundary exactly on the bar.
+
+    Three properties meet here, which is why one fixture pins all of them. The statistic is 0
+    and so is every recentred draw, so the bootstrap frequency counts draws *at least as
+    extreme* — `>=`, giving p = 1.0. Read as strictly-greater it gives p = 0.0, turning a model
+    with literally no edge into the most significant result in the run. The rejection test is
+    the mirror: `statistic > threshold` leaves it unrejected, where `>=` rejects a zero.
+
+    And the variance floor is what makes any of it computable — without `max(var, 1e-12)` a
+    constant series divides by zero. The same trap `gate_s4` had, where a flat series scored a
+    Sharpe of 4.6e15.
+    """
+    flat = romano_wolf(
+        {"A": [Decimal("0")] * 32}, alpha=0.05, n_bootstrap=64, block_length=4, seed=3
+    )
+
+    assert flat.adjusted_p["A"] == 1.0, "no edge is the least significant result there is"
+    assert flat.rejected == (), "and a statistic that only equals its threshold is not beyond it"
+
+
+def test_models_of_different_lengths_are_refused() -> None:
+    """The bootstrap draws one index set and applies it to every series.
+
+    A shorter model would be indexed out of range, or — worse, if it were longer — silently
+    measured over a window the others never saw, making the family-wise maximum a comparison
+    between different periods.
+    """
+    with pytest.raises(ValueError, match="same length"):
+        romano_wolf(
+            {"A": [Decimal("1")] * 16, "B": [Decimal("1")] * 12},
+            alpha=0.05,
+            n_bootstrap=8,
+            block_length=4,
+            seed=1,
+        )
