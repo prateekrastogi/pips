@@ -33,7 +33,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from pips.core.config import PipsConfig
 from pips.core.ids import canonical_bytes
@@ -238,11 +238,26 @@ class PitStore:
         # correctly, since a caller handing us "2026-01-01" has skipped parsing it. JSON has
         # no date type, so strict JSON-mode validation does accept the ISO form. Parsing the
         # line ourselves would throw that distinction away.
-        records = [
-            PitRecord.model_validate_json(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        records: list[PitRecord] = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                records.append(PitRecord.model_validate_json(line))
+            except ValidationError as error:
+                # NOT skipped, which is what `capture.py` does with a bad line. A lost tick is
+                # a lost tick; a PIT row silently dropped changes what an as-of read returns,
+                # and a wrong answer about what we knew is worse than no answer at all.
+                #
+                # But the raw error names a pydantic model and a field, which tells an operator
+                # holding an unreadable table nothing about why. So it says where, and what.
+                raise ValueError(
+                    f"{path}: line {number} is not a valid PIT record. The usual cause is a "
+                    "truncated final line from a process killed mid-append -- the next append "
+                    "then fuses onto it and takes a good record with it. Repair it by hand: "
+                    "the log is evidence, and evidence is never rewritten automatically.\n"
+                    f"  {line[:120]}"
+                ) from error
         self._cache[table] = records
         self._cached_size[table] = size
         return records

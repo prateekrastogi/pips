@@ -487,3 +487,145 @@ def test_a_closure_can_be_announced_before_it_takes_effect(store: PitStore) -> N
     known_everything = D(9999, 12, 31)
     assert store.as_of("instruments", known_on=known_everything, valid_on=D(2026, 7, 1))
     assert store.as_of("instruments", known_on=known_everything, valid_on=D(2026, 10, 1)) == []
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_the_log_survives_the_process_that_wrote_it(tmp_path: Path) -> None:
+    """The append-only log's first duty, and nothing checked it.
+
+    Every read in this suite goes through the store that did the writing, whose cache holds
+    the records in memory — so a `path.open("w")` in place of `"a"` truncates the file to its
+    last line and every in-process read still looks perfect. The evidence only has to be on
+    disk when somebody else comes to read it.
+    """
+    writer = PitStore(tmp_path / "pit")
+    for i, sym in enumerate(("AAA", "BBB", "CCC")):
+        instrument(writer, f"K{i}", sym, D(2026, 1, 1 + i), D(2026, 1, 1 + i))
+
+    fresh = PitStore(tmp_path / "pit")
+    assert [r.key for r in fresh.all_records("instruments")] == ["K0", "K1", "K2"]
+    assert [r.payload["symbol"] for r in fresh.all_records("instruments")] == ["AAA", "BBB", "CCC"]
+    assert len(fresh.as_of("instruments", D(2026, 1, 3))) == 3
+
+
+def test_the_rows_on_disk_are_canonical(store: PitStore) -> None:
+    """Byte-identity (§6 M6 Verify) is a property of the bytes, so the bytes are pinned.
+
+    Dropping `sort_keys` leaves the row's field order at the mercy of whatever the model
+    happened to emit — which reproduces today and need not reproduce after a field is added,
+    and the whole point of pinning a snapshot root is that it is re-derivable later.
+    """
+    instrument(store, "K1", "AAA", D(2026, 1, 1), D(2026, 1, 1))
+    line = (store.root / "instruments.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    assert line == json.dumps(json.loads(line), sort_keys=True, separators=(",", ":")), (
+        "rows must be written in canonical form, keys sorted and no incidental whitespace"
+    )
+
+
+def test_two_corrections_on_one_day_keep_the_later_one(store: PitStore) -> None:
+    """Knowledge time only moves FORWARD, which permits it to stand still.
+
+    Two corrections on the same date are legal and ordinary — a bad ingest noticed and fixed
+    twice before the day is out. The tie is broken by write order, so the second correction is
+    the one in force; taking the first would silently serve the value that was already known
+    to be wrong.
+    """
+    instrument(store, "K1", "WRONG", D(2026, 1, 1), D(2026, 1, 1))
+    store.correct("instruments", "K1", D(2026, 1, 5), {"symbol": "ALSO_WRONG", "isin": "INK1"})
+    store.correct("instruments", "K1", D(2026, 1, 5), {"symbol": "RIGHT", "isin": "INK1"})
+
+    live = store.as_of("instruments", D(2026, 1, 5))
+    assert [r.payload["symbol"] for r in live] == ["RIGHT"]
+
+
+def test_a_correction_keeps_the_date_the_fact_became_true(store: PitStore) -> None:
+    """Only our knowledge changed, not the world.
+
+    Moving `valid_from` to the correction date says the fact began when we noticed it, which
+    erases it from every valid-time read of the window it was actually true in — the same
+    shape as the tombstone that inherited its subject's `valid_from`, in the other direction.
+    """
+    instrument(store, "K1", "WRONG", D(2026, 1, 1), D(2025, 6, 30))
+    store.correct("instruments", "K1", D(2026, 3, 1), {"symbol": "RIGHT", "isin": "INK1"})
+
+    corrected = store.as_of("instruments", D(2026, 3, 1), valid_on=D(2025, 7, 1))
+    assert [r.payload["symbol"] for r in corrected] == ["RIGHT"]
+    assert corrected[0].valid_from == D(2025, 6, 30), "the fact was true from June, not March"
+
+
+def test_the_key_order_of_an_as_of_read_does_not_depend_on_insertion_order(
+    tmp_path: Path,
+) -> None:
+    """`snapshot_root` hashes the leaves in the order `as_of` returns them.
+
+    Set iteration order is not insertion order and is not stable across processes, so an
+    unsorted read gives one root today and another tomorrow for identical content — and a
+    pinned root that cannot be re-derived is a pin holding nothing.
+    """
+    forwards, backwards = PitStore(tmp_path / "a"), PitStore(tmp_path / "b")
+    names = ["ZED", "ALPHA", "MIKE", "BRAVO", "YANKEE", "CHARLIE"]
+    for i, sym in enumerate(names):
+        instrument(forwards, f"K{i}", sym, D(2026, 1, 1), D(2026, 1, 1))
+    for i, sym in reversed(list(enumerate(names))):
+        instrument(backwards, f"K{i}", sym, D(2026, 1, 1), D(2026, 1, 1))
+
+    day = D(2026, 1, 2)
+    assert [r.key for r in forwards.as_of("instruments", day)] == [f"K{i}" for i in range(6)]
+    assert forwards.snapshot_root("instruments", day) == backwards.snapshot_root("instruments", day)
+
+
+def test_a_second_writer_is_seen_by_a_store_that_already_read(tmp_path: Path) -> None:
+    """The cache is keyed on the file's size, and that is not an optimisation detail.
+
+    A backfill and a QC pass over one directory is the normal arrangement, not an exotic one.
+    A cache that trusts itself after another process has appended reports stale data with
+    total confidence — which is worse than the slowness the cache was added to remove.
+    """
+    reader, writer = PitStore(tmp_path / "pit"), PitStore(tmp_path / "pit")
+    instrument(writer, "K1", "AAA", D(2026, 1, 1), D(2026, 1, 1))
+    assert len(reader.all_records("instruments")) == 1
+
+    instrument(writer, "K2", "BBB", D(2026, 1, 2), D(2026, 1, 2))
+    assert [r.key for r in reader.all_records("instruments")] == ["K1", "K2"], (
+        "the reader must notice the second writer's append"
+    )
+
+
+def test_a_log_truncated_by_a_kill_says_so(store: PitStore) -> None:
+    """And refuses to read, which for an evidence log is the right refusal.
+
+    `append` writes with `"a"` and no newline discipline, so a process killed mid-write leaves
+    a partial final line — and the next append fuses onto it, taking a good record with it.
+    Skipping the bad line is what `capture.py` does and is wrong here: a PIT record silently
+    dropped changes as-of answers, and a wrong answer is worse than no answer. But the raw
+    ValidationError names a pydantic model and a field, not a truncated file, so the operator
+    holding a bricked table learns nothing from it.
+    """
+    instrument(store, "K1", "AAA", D(2026, 1, 1), D(2026, 1, 1))
+    path = store.root / "instruments.jsonl"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('{"table":"instruments","key":"K2","valid_fr')
+
+    fresh = PitStore(store.root)
+    with pytest.raises(ValueError, match=r"instruments\.jsonl") as caught:
+        fresh.all_records("instruments")
+    message = str(caught.value)
+    assert "line 2" in message, message
+    assert "truncated" in message.lower(), message
+
+
+def test_a_blank_line_is_not_a_broken_record(store: PitStore) -> None:
+    """Skipped, unlike a malformed one, and the difference is that it carries no claim.
+
+    A file ending in a stray newline is ordinary; treating it as corruption would make the
+    table unreadable over nothing at all — which, now that an unreadable table raises, would
+    be a self-inflicted outage.
+    """
+    instrument(store, "K1", "AAA", D(2026, 1, 1), D(2026, 1, 1))
+    path = store.root / "instruments.jsonl"
+    path.write_text(path.read_text(encoding="utf-8") + "\n   \n", encoding="utf-8")
+
+    fresh = PitStore(store.root)
+    assert [r.key for r in fresh.all_records("instruments")] == ["K1"]
