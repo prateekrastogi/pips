@@ -426,3 +426,76 @@ def test_nothing_promoted_writes_no_parquet(tmp_path: Path, master: InstrumentMa
     assert not (tmp_path / "silver" / "bars_1m.parquet").exists()
     with pytest.raises(FileNotFoundError, match="Promote bronze first"):
         load_silver_panel(tmp_path / "silver" / "bars_1m.parquet")
+
+
+# ------------------------------------------------------------ unreadable records -----
+
+
+def test_a_record_shaped_differently_is_quarantined_not_crashed_into(
+    tmp_path: Path, master: InstrumentMaster
+) -> None:
+    """Bronze will not hold one record shape forever, and promotion should not assume it does.
+
+    A range-spanning capture — one call covering many sessions, which is what a cheap universe
+    seed needs — has no single `trade_date`. Today that is a bare `KeyError` out of the loop,
+    which takes the WHOLE run down and discards every quarantine reason already collected for
+    every other file. A record this function cannot read is exactly what quarantine is for: it
+    is the fourth reason, not an exception.
+    """
+    good = write_bronze(tmp_path / "bronze", ok([candle(0)]))
+    ranged = tmp_path / "bronze" / "RELIND" / "1day" / "2023-09-01_2026-08-31" / "1.json"
+    ranged.parent.mkdir(parents=True, exist_ok=True)
+    ranged.write_text(
+        json.dumps(
+            {
+                "request": {"symbol": "RELIND", "from": "2023-09-01", "to": "2026-08-31"},
+                "received_at_ns": 1,
+                "payload": ok([candle(0)]),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.files_read == 2
+    assert report.files_promoted == 1, "the record it CAN read is still promoted"
+    assert [q.source for q in report.quarantined] == [str(ranged)]
+    assert "trade_date" in report.quarantined[0].reason
+    assert {r["symbol"] for r in report.rows} == {"RELIANCE"}
+    assert good.exists(), "bronze is never modified"
+
+
+def test_a_corrupt_capture_file_is_quarantined(tmp_path: Path, master: InstrumentMaster) -> None:
+    """A half-written or hand-edited file is one bad record, not a failed run.
+
+    Unlike the PIT log — where a dropped row silently changes an as-of answer and refusing to
+    read is right — a bronze file that cannot be parsed is quarantined and named, because the
+    other files are independent of it and the reason is recoverable from the retained record.
+    """
+    write_bronze(tmp_path / "bronze", ok([candle(0)]))
+    broken = tmp_path / "bronze" / "TCSLTD" / TRADE_DAY.isoformat() / "2.json"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.write_text('{"request": {"symbol": "TCSLTD", "trade_da', encoding="utf-8")
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.files_promoted == 1
+    assert [q.source for q in report.quarantined] == [str(broken)]
+
+
+def test_a_capture_with_no_request_says_so(tmp_path: Path, master: InstrumentMaster) -> None:
+    """Rather than blaming the field it would have read next.
+
+    Defaulting `request` to `{}` still quarantines — the very next lookup fails — but the
+    reason then names `trade_date` on a record that has no request block at all, sending the
+    reader to look for a date in a structure that was never there.
+    """
+    path = tmp_path / "bronze" / "RELIND" / TRADE_DAY.isoformat() / "1.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"received_at_ns": 1, "payload": ok([candle(0)])}), encoding="utf-8")
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert [q.source for q in report.quarantined] == [str(path)]
+    assert "'request'" in report.quarantined[0].reason, report.quarantined[0].reason

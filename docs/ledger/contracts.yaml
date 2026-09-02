@@ -1069,6 +1069,12 @@
   # that dropped it would silently re-resolve every historical panel against today's corrected
   # master, and the run that saw the old mapping becomes irreproducible.
   #
+  # A RECORD IT CANNOT READ IS THE FOURTH REASON, not an exception. Bronze will not hold one
+  # shape forever -- a range-spanning capture, which is what a cheap universe seed needs, has no
+  # single trade_date -- and a bare KeyError took the whole run down, discarding every reason
+  # already collected for every other file. `request` is required rather than defaulted, so a
+  # record with no request block says so instead of blaming the date it would have read next.
+  #
   # KNOWLEDGE TIME IS NOT OPTIONAL either. A capture with no usable `received_at_ns` is
   # quarantined rather than stamped with the epoch: silver's knowledge time is its provenance,
   # and a 0 does not read as unknown, it reads as EARLY -- sorting before and falling inside

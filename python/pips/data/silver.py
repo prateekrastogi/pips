@@ -97,12 +97,31 @@ def promote_bronze(
     # Sorted, so a rebuild produces the same file in the same order (rule 1).
     for path in sorted(bronze_root.rglob("*.json")):
         files_read += 1
-        capture = json.loads(path.read_text(encoding="utf-8"))
-        request = capture.get("request", {})
-        vendor_code = str(request.get("symbol", ""))
-        trade_date = date.fromisoformat(str(request["trade_date"]))
+        # A record this function cannot READ is the fourth quarantine reason, not an exception.
+        # Bronze will not hold one shape forever -- a range-spanning capture, which is what a
+        # cheap universe seed needs, has no single `trade_date` -- and a bare KeyError here
+        # takes the whole run down and discards every reason already collected for every other
+        # file. `request` is required rather than defaulted, too: a missing one used to produce
+        # an empty vendor code, which then failed to resolve and quarantined under a reason
+        # about identity rather than about shape.
+        try:
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            request = capture["request"]
+            vendor_code = str(request.get("symbol", ""))
+            trade_date = date.fromisoformat(str(request["trade_date"]))
+            payload = capture["payload"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            quarantined.append(
+                Quarantined(
+                    str(path),
+                    f"not a readable symbol-day capture ({error!r}). Promotion reads "
+                    "request.symbol, request.trade_date and payload; a record without them "
+                    "may be a different capture shape, or half-written.",
+                )
+            )
+            continue
 
-        kind = classify_response(capture["payload"])
+        kind = classify_response(payload)
         if kind is not ResponseKind.OK:
             quarantined.append(
                 Quarantined(str(path), f"reply classified {kind.value}, not data: {vendor_code}")
@@ -122,7 +141,7 @@ def promote_bronze(
             )
             continue
 
-        bars = normalize_candles(capture["payload"], trade_date, _INTERVAL_MINUTES)
+        bars = normalize_candles(payload, trade_date, _INTERVAL_MINUTES)
         if not bars:
             quarantined.append(
                 Quarantined(str(path), f"no bars survived normalization for {vendor_code}")
