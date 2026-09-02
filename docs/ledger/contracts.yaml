@@ -1243,6 +1243,7 @@
   code: "python/pips/data/breeze/capture.py"
   tests:
     - "tests/unit/test_ws_capture.py"
+    - "tests/unit/test_ws_supervisor.py"
   # From scratch and pre-authorised: SAL-0025 is NONE_FOUND after a full sweep of every ref in
   # ../past. No capture code exists anywhere in the harvest source.
   #
@@ -1256,10 +1257,23 @@
   # closed at startup, because "a" mode would otherwise append onto it and fuse the fragment
   # with the first record after the restart, making ONE lost record silently become two.
   #
-  # `building`: NOTHING RUNS IT. `CaptureWriter` appears in its own module and its own test and
-  # nowhere else -- no CLI command, no Make target, no compose service. "Forward capture from
-  # day one" is the milestone's phrase and day one has not started, so every session that
-  # passes is spread and depth that cannot be recovered later. Enforced when something runs it.
+  # THE SUPERVISOR AROUND IT (`ws_capture.py`) drives the writer from successive connections and
+  # holds two properties that pull against each other. A disconnect must leave a mark, or the
+  # archive's gaps are invisible. A DELIBERATE stop must not: a gap recorded at every clean
+  # shutdown -- end of session, deploy, an operator stopping the service -- fills the archive
+  # with outages that never happened, and a reader who learns to skip gap records has lost the
+  # one signal that matters. So a clean stop is its own exception rather than "the loop ended".
+  #
+  # The gap is stamped from the FIRST drop, time and reason together: stamping from the last
+  # retry would report the final seconds of a two-hour outage, understating the hole in the
+  # direction that flatters the archive, and a reason from the last retry describes why the
+  # outage persisted rather than what caused it.
+  #
+  # `building`: NOTHING RUNS IT YET. The supervisor is tested against a fake feed; what is
+  # missing is the vendor adapter -- Breeze's SDK is callback-driven and cannot be exercised
+  # without a live socket -- and a service to run it under. "Forward capture from day one" is
+  # the milestone's phrase and day one has not started, so every session that passes is spread
+  # and depth that cannot be recovered later. Enforced when something runs it.
   status: building
   owner_milestone: M4
 
