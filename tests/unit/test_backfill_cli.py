@@ -10,7 +10,7 @@ date range is two strings.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -217,3 +217,108 @@ def test_a_plan_exactly_equal_to_the_budget_does_not_exceed_it() -> None:
     plan = CampaignPlan(symbols=["A"], days=[date(2026, 8, 24), date(2026, 8, 25)])
     assert not plan.exceeds_budget(2)
     assert plan.exceeds_budget(1)
+
+
+# ----------------------------------------------------- costing other intervals -------
+
+
+def test_a_plan_costs_the_fetch_shape_this_code_actually_issues() -> None:
+    """One call per symbol-DAY, whatever the interval — because that is what the fetcher does.
+
+    `budgeted_fetcher` requests `ist_window(day)`, a single day, and the manifest is keyed per
+    symbol-day, which is what makes resume granular. So a coarse interval buys nothing under
+    this shape: a daily-bar campaign pays the same per-day toll as a 1-minute one and receives
+    one candle for it. Costing it any other way is how a seed gets planned at 1,800 calls and
+    spends 1.4 million.
+    """
+    days = [date(2026, 8, 24), date(2026, 8, 25)]
+    for interval, per_day in (("1day", 1), ("30minute", 1), ("1minute", 1), ("1second", 23)):
+        plan = CampaignPlan(symbols=["A", "B"], days=days, interval=interval)
+        assert plan.estimated_calls == 2 * 2 * per_day, interval
+
+
+def test_a_plan_also_states_what_a_range_fetch_would_cost() -> None:
+    """The number that makes a seed look cheap, kept beside the one that is real.
+
+    The vendor allows <=1,000 candles per call over an arbitrary range, so three years of daily
+    bars is ONE call per symbol. This code cannot issue that call — the gap is a fetch shape,
+    not a quota — and the planner says so rather than leaving the difference to be rediscovered
+    in prose.
+    """
+    days = [date(2026, 8, 24) + timedelta(days=i) for i in range(400)]
+    daily = CampaignPlan(symbols=["A"], days=days, interval="1day")
+    assert daily.estimated_calls == 400, "per-day fetching pays 400 tolls for 400 candles"
+    assert daily.estimated_calls_if_ranged == 1, "400 candles fit one 1,000-candle call"
+
+    minute = CampaignPlan(symbols=["A"], days=days, interval="1minute")
+    assert minute.estimated_calls == 400
+    assert minute.estimated_calls_if_ranged == 150, "400 x 375 candles / 1000 per call"
+
+
+def test_an_unknown_interval_is_refused_rather_than_costed_as_a_minute() -> None:
+    """A typo'd interval must not silently inherit the 1-minute model and under-cost by 23x."""
+    with pytest.raises(ValueError, match="unsupported interval"):
+        plan_campaign(
+            ["RELIND"],
+            date(2026, 8, 24),
+            date(2026, 8, 28),
+            Path("config/calendars/nse_equity.yaml"),
+            interval="1min",
+        )
+
+
+def test_the_described_plan_names_the_interval_it_costed() -> None:
+    """A cost with no interval beside it is a number nobody can check."""
+    plan = plan_campaign(
+        ["RELIND"],
+        date(2026, 8, 24),
+        date(2026, 8, 28),
+        Path("config/calendars/nse_equity.yaml"),
+        interval="1second",
+    )
+    described = plan.describe()
+    assert "1second" in described
+    assert str(plan.estimated_calls) in described
+
+
+def test_the_cli_takes_an_interval_and_hands_it_to_the_fetcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Costing an interval the fetcher is never told about would cost the wrong thing.
+
+    `budgeted_fetcher`'s `interval` defaulted to 1minute and nothing passed it, so a plan
+    costed at 1second would have fetched minutes — a plan and a run disagreeing about what was
+    requested, with the plan the more expensive of the two and therefore the one that looks
+    conservative.
+    """
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(client_module, "build_session", lambda *_a, **_k: object())
+    monkeypatch.setattr(
+        client_module,
+        "default_paths",
+        lambda _root=None: (
+            tmp_path / "bronze",
+            tmp_path / "state" / "manifest.json",
+            tmp_path / "state" / "budget.json",
+        ),
+    )
+
+    def fetcher(_client: object, _budget: object, **kw: object) -> object:
+        seen.update(kw)
+        return lambda _s, _d: None
+
+    monkeypatch.setattr(client_module, "budgeted_fetcher", fetcher)
+    monkeypatch.setattr(backfill_module, "run_backfill", lambda *_a, **_k: _result())
+
+    assert campaign_module.main([*ARGS, "--interval", "1second"]) == 0
+    assert seen.get("interval") == "1second", f"the fetcher was told {seen!r}"
+    assert "at 1second" in capsys.readouterr().out
+
+
+def test_an_unsupported_interval_stops_before_any_session(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert campaign_module.main([*ARGS, "--interval", "1min"]) == 2
+    assert "unsupported interval" in capsys.readouterr().out
+    assert cli == []

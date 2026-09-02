@@ -195,39 +195,51 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    in both halves.** Corrected 2026-09-03; the arithmetic below is computed from the repo's own
    calendar and config, not asserted.
 
-   **The "16 days for daily bars" figure applied the 1-MINUTE cost model to daily bars.**
-   1 call/symbol/day is the 1m rate, because a 375-candle session fits one call. Daily bars are
-   **782 candles for the whole 3 years**, inside the same ≤1,000-candles/call cap — so a daily
-   seed is **one call per symbol**:
+   **The blocker is a FETCH SHAPE, not a quota.** Two corrections, the second of which
+   corrects the first — both now computed by `plan_campaign` rather than asserted in prose, so
+   they can be re-derived instead of re-argued.
 
-   | seed, whole eligible list (~1,800 names), 3y | calls | quota-days at 90k |
+   *The vendor's allowance:* `get_historical_data_v2` serves ≤1,000 candles per call over an
+   arbitrary range (blueprint §4.4), so three years of DAILY bars is 782 candles — **one call
+   per symbol**. The old "~16 quota-days for daily bars" figure applied the 1-minute cost
+   model, which is 1 call per symbol-day only because a 375-candle session fills one call.
+
+   *What this code can actually issue:* `budgeted_fetcher` requests `ist_window(day)` — a
+   single day — and the manifest and bronze layout are keyed per symbol-day, which is what
+   makes a resume granular. **So the per-day toll is paid whatever the interval**, and a daily
+   seed costs exactly what a 1-minute one does. Per 1,800 names over 3y:
+
+   | interval | this fetcher | if one call could span days |
    |---|---|---|
-   | **daily bars** | **1,800** | **0.02** |
-   | 30-minute bars | 19,800 | 0.22 |
-   | 1-minute bars *(what the old figure costed)* | 1,407,600 | 15.6 |
+   | 1day | 15.6 quota-days | **0.02** |
+   | 30minute | 15.6 | 0.22 |
+   | 1minute | 15.6 | 5.9 |
+   | 1second | 359.7 | 351.9 |
 
-   A daily seed is ~24 minutes of politeness-limited wall-clock, not sixteen days of quota. It
-   is not a spend decision.
+   So the cheap seed is real and is **gated on a bounded code change** — a range-spanning fetch
+   and a manifest keyed by range rather than by day — not on sixteen days of quota. That is
+   engineering work, not an owner decision.
 
-   **But the score's four inputs are not equally cheap, and the old framing never mentioned the
-   one that is expensive.** Daily bars give median ₹volume, Amihud and gap-rate. They cannot give
-   **spread** — OHLC has no spread at any interval — and `[C-UNIV-01]` requires it: `_usable`
-   drops any symbol missing a component, because "a missing spread read as zero makes an
-   illiquid name look tight". The blueprint (§4.4) sources spread from **1-second ranges or
-   quote captures**, and scores over the **trailing 60 sessions**:
+   **And the score's four inputs are not equally cheap, which the old framing never mentioned.**
+   Daily bars give median ₹volume, Amihud and gap-rate. They cannot give **spread** — OHLC has
+   no spread at any interval — and `[C-UNIV-01]` requires it: `_usable` drops any symbol missing
+   a component, because "a missing spread read as zero makes an illiquid name look tight". The
+   blueprint (§4.4) sources spread from **1-second ranges or quote captures**, over the trailing
+   **60 sessions** rather than three years. At 23 calls per symbol-session that is **2.48M calls
+   (27.6 quota-days) for all 1,800 names** — the genuinely expensive item, and worse than the
+   number the old blocker warned about, for a component it did not name. A shortlist of 600
+   costs 9.2 quota-days; of 400, 6.1.
 
-   | spread via 1-second, 60 sessions | calls | quota-days |
-   |---|---|---|
-   | all ~1,800 names | 2,484,000 | 27.6 |
-   | shortlist of 600 | 828,000 | 9.2 |
-   | shortlist of 400 | 552,000 | 6.1 |
-   | shortlist of 300 | 414,000 | 4.6 |
+   The ordering that falls out: range-fetch daily for everything (1,800 calls once the fetch
+   shape exists) → rank on the three daily-derivable components → 1-second for a shortlist →
+   the full four-component score → U300 → the 1m campaign already authorised (234,600 calls,
+   2.6 quota-days).
 
-   So the cheap seed buys a **shortlist**, and the shortlist is what makes spread affordable:
-   daily bars for everything (1,800 calls) → rank on the three daily-derivable components →
-   1-second for the top few hundred → the full four-component score → U300 → the 1m campaign
-   already authorised (234,600 calls, **2.6 quota-days**). Roughly **7–9 quota-days end to end**,
-   against the old framing's 16 just to begin.
+   **What is left for the owner is the shortlist width, and it is a bias question rather than a
+   budget one.** Acquiring spread only for the volume-top-N makes the spread z cross-sectional
+   over N, not over the eligible list, so a modest-volume name with an excellent spread can
+   never surface. Spread carries the second-largest weight (−0.75), so N wants to be comfortably
+   wider than 300.
 
    **What is actually being decided, then, is the shortlist width** — and it is a bias question,
    not a budget one. Acquiring spread only for the volume-top-N means the spread z is
