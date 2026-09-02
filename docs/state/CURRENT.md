@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 245 files · mypy --strict 245 files · 1773 pytest · clippy clean · cargo test ok
+  ruff 245 files · mypy --strict 245 files · 1781 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,23 +186,25 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Wire per-candidate SPA into the search** the way the DSR is. `romano_wolf.adjusted_p` is
-   now alpha-independent and safe to record; last tick's version was not, which is why this did
-   not land yet. The benchmark for an intraday cash strategy is zero, so the performance
-   differential is the daily return series itself. Unblocked.
-2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
-   *Tripwires — auto-flags in every report*; the certification table gives no number. Setting it
-   = a `gates.yaml` row + enforcing code + an ADR in one commit.
-3. **Backfill, and the related question: should S4 filter?** `[G-S4-DSR]` reports but does not
-   gate; on fixtures every candidate scores ≈0.14 against the 0.95 bar, so filtering would empty
-   the ensemble — correct for two synthetic random walks, and an argument for widening the data
-   before deciding. The backfill means external Breeze calls on a metered budget with the
-   owner's credentials; the budget is 100k calls/day and 32 parallel fetches.
+1. **`stability.concentration` — the owner's call**, and now one of only two gates left ungated.
+   Its figures appear only under §11.4 *Tripwires — auto-flags in every report*; the
+   certification table gives no number. Setting it = a `gates.yaml` row + enforcing code + an
+   ADR in one commit. (The other is `parameter_plateau`, which needs a parameter surface nothing
+   persists — a build job, not a decision.)
+2. **Backfill, and the related question: should S4 filter?** DSR ≈0.14 and SPA p ≈0.84 on
+   fixtures — both correct for two synthetic random walks, and both arguments for widening the
+   data before deciding whether the gates should drop candidates rather than merely score them.
+   The backfill means external Breeze calls on a metered budget with the owner's credentials;
+   the budget is 100k calls/day and 32 parallel fetches.
+3. **The pre-push hook reports a connection failure as `pips-ci is RED`.** It bit this session:
+   Jenkins restarted mid-poll, `curl` got a connection reset, and the hook said the build was
+   red. A gate that could not run and a gate that failed need different responses, and the hook
+   conflates them — the same absence-looking-like-data shape the project refuses everywhere else.
 
-`certify-smoke`: **0 certified, 33 unsupplied.** PBO needs walk-forward IS/OOS matrices and
-plateau needs a parameter surface nothing persists, so neither is a wiring job. The stress
-battery belongs to M14's event engine, capacity to the order-budget planner, operations to
-session policy that does not exist, and `decision.rationale`/`outcome` are written by a human.
+`certify-smoke`: **0 certified, 32 unsupplied.** Remaining: PBO (needs walk-forward IS/OOS
+matrices), plateau (needs a persisted parameter surface), the stress battery (M14's event
+engine), capacity (order-budget planner), operations (session policy that does not exist), and
+`decision.rationale`/`outcome`, which a human writes at certification.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

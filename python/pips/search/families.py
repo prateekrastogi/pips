@@ -35,7 +35,7 @@ import polars as pl
 
 from pips.alphas.dispatch import DRIVERS
 from pips.alphas.spec import load_alpha_spec
-from pips.search.funnel import gate_s4
+from pips.search.funnel import gate_s4, spa_adjusted_p
 from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_domain
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
@@ -395,12 +395,21 @@ def run_family_searches(
     # cycle viewed -- including the promotions themselves. Computing it earlier would deflate
     # against a smaller N, and a smaller N raises the DSR.
     s4 = gate_s4(registry, stage=PROMOTED_STAGE)
+    spa = spa_adjusted_p(registry, stage=PROMOTED_STAGE)
     selection = run_s5_from_registry(
         registry=registry,
         stage=PROMOTED_STAGE,
         # Derived here rather than recorded on the row: the row was written before the trials
         # that deflate it existed.
-        extra_metrics={b.run_id: {"dsr": b.dsr_at_literal} for b in s4.admitted + s4.rejected},
+        extra_metrics={
+            b.run_id: {
+                "dsr": b.dsr_at_literal,
+                # Absent rather than defaulted when the stepdown could not score it: a missing
+                # p-value must reach the dossier as unsupplied, not as a perfect zero.
+                **({"spa_p": spa.adjusted_p[b.run_id]} if b.run_id in spa.adjusted_p else {}),
+            }
+            for b in s4.admitted + s4.rejected
+        },
         objectives=_OBJECTIVES,
         cluster_threshold=0.2,
         max_pairwise_correlation=0.5,
@@ -429,6 +438,8 @@ def run_family_searches(
         "s4_admitted": len(s4.admitted),
         "s4_rejected": len(s4.rejected),
         "s4_excluded": s4.excluded,
+        "spa_scored": len(spa.adjusted_p),
+        "spa_excluded": spa.excluded,
         # The whole result, not only the projection above: `[C-NOM-01]` needs the CLUSTERS, and
         # a report that flattens them forces the caller to re-derive what S5 already computed.
         "s5": selection,

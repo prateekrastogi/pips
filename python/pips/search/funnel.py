@@ -23,6 +23,7 @@ the return.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -30,11 +31,24 @@ import polars as pl
 
 from pips.search.multiplicity import multiplicity
 from pips.validation.deflated_sharpe import deflated_sharpe_ratio
+from pips.validation.romano_wolf import romano_wolf
 
 if TYPE_CHECKING:
     from pips.search.registry import Registry
 
-__all__ = ["DSR_MIN", "MIN_OBSERVATIONS", "DsrBracket", "S4Report", "gate_s4"]
+__all__ = [
+    "DSR_MIN",
+    "MIN_OBSERVATIONS",
+    "SPA_ALPHA",
+    "SPA_BLOCK_LENGTH",
+    "SPA_BOOTSTRAP",
+    "SPA_SEED",
+    "DsrBracket",
+    "S4Report",
+    "SpaReport",
+    "gate_s4",
+    "spa_adjusted_p",
+]
 
 DSR_MIN = 0.95
 """From `G-S4-DSR` in `gates.yaml`, and a test holds the two equal — the ledger is where a bar
@@ -159,3 +173,83 @@ def gate_s4(registry: Registry, *, stage: str) -> S4Report:
         trials_effective=effective,
         sharpe_variance=variance,
     )
+
+
+SPA_BOOTSTRAP = 500
+"""Resamples for the stepdown. Fixed rather than a parameter: a p-value recorded in a dossier
+must not depend on how patient the caller was feeling."""
+
+SPA_BLOCK_LENGTH = 5
+"""Mean block length for the stationary bootstrap. Daily returns of an intraday strategy carry
+short-horizon dependence, and an i.i.d. resample would understate the variance and so the
+p-value — the flattering direction."""
+
+SPA_SEED = 20260902
+"""Fixed so two runs of one cycle produce the same evidence (rule 1).
+
+Any fixed function of the family would be equally deterministic, so `seed + len(models)` is an
+EQUIVALENT mutant and no test distinguishes it. A constant is chosen because a seed derived from
+the population changes the draws when a candidate is added for unrelated reasons, and then two
+reports differ for a cause nobody can see in either."""
+
+SPA_ALPHA = 0.10
+"""Only reaches `RomanoWolfResult.rejected`, which this does not read. The adjusted p-values are
+alpha-independent by construction; passing the gate's own level keeps the unused half of the
+result consistent with `[G-P4-SPA]` rather than arbitrary."""
+
+
+@dataclass(frozen=True)
+class SpaReport:
+    """Per-candidate stepdown-adjusted p-values against a zero benchmark."""
+
+    adjusted_p: dict[str, float]
+    excluded: tuple[str, ...]
+
+
+def spa_adjusted_p(registry: Registry, *, stage: str) -> SpaReport:
+    """Per-candidate SPA evidence for the completed runs at ``stage``.
+
+    The benchmark is **zero** — cash — so a strategy's performance differential against it is
+    its return series unchanged. That is the right null for an intraday cash strategy that is
+    flat overnight, and it is stated because a differential against an unnamed benchmark is a
+    number nobody can reproduce.
+
+    Per-candidate, not family-wise: `spa_test` returns one p-value earned by the BEST model, and
+    writing that into every dossier would hand candidate five the evidence candidate one
+    produced. The stepdown's adjusted p-value is defensible for each on its own.
+    """
+    series: dict[str, list[Decimal]] = {}
+    excluded: list[str] = []
+
+    for row in registry.all_runs():
+        if row["stage"] != stage or row["status"] != "completed":
+            continue
+        run_id = str(row["run_id"])
+        if not row["daily_returns_ref"]:
+            excluded.append(f"{run_id}: no daily returns recorded, so it cannot be scored")
+            continue
+        values = pl.read_parquet(row["daily_returns_ref"])["daily_return"].to_list()
+        series[run_id] = [Decimal(str(v)) for v in values]
+
+    if not series:
+        # `romano_wolf` refuses an empty family, and rightly -- but an empty family here means
+        # nothing reached the stage, which is a finding, not a crash mid-search.
+        return SpaReport(adjusted_p={}, excluded=tuple(excluded))
+
+    lengths = {len(v) for v in series.values()}
+    if len(lengths) != 1:
+        raise ValueError(
+            f"candidates at stage {stage} have return series of differing length "
+            f"{sorted(lengths)}. Truncating to the common length aligns them at index 0, which "
+            "is only correct if every run started on the same day -- otherwise it compares one "
+            "strategy's first days against another's and calls the result a p-value."
+        )
+
+    result = romano_wolf(
+        series,
+        alpha=SPA_ALPHA,
+        n_bootstrap=SPA_BOOTSTRAP,
+        block_length=SPA_BLOCK_LENGTH,
+        seed=SPA_SEED,
+    )
+    return SpaReport(adjusted_p=dict(result.adjusted_p), excluded=tuple(excluded))

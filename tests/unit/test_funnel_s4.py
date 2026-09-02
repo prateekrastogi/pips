@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pytest
 
 from pips.search.funnel import DSR_MIN, gate_s4
 from pips.search.registry import Registry, RunRecord
@@ -279,3 +280,94 @@ def test_candidates_are_reported_in_numeric_run_order(tmp_path: Path) -> None:
     ids = [int(b.run_id) for b in report.admitted + report.rejected]
     assert ids == sorted(ids)
     assert len(ids) == 11
+
+
+# ------------------------------------ per-candidate SPA evidence `[G-S4-DSR]` neighbours -----
+
+
+def test_every_scorable_candidate_gets_an_adjusted_p(tmp_path: Path) -> None:
+    """`stability.spa_p` is per-candidate, so the family-wise `spa_test` p-value cannot fill it
+    (see the Romano-Wolf log entry). These are the stepdown's per-hypothesis values."""
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004, 0.001, 0.0005])
+    result = spa_adjusted_p(registry, stage="S4")
+
+    assert len(result.adjusted_p) == 3
+    assert all(0.0 <= p <= 1.0 for p in result.adjusted_p.values())
+    assert result.excluded == ()
+
+
+def test_a_stronger_candidate_gets_no_worse_a_p(tmp_path: Path) -> None:
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004, 0.0005])
+    result = spa_adjusted_p(registry, stage="S4")
+
+    ids = sorted(result.adjusted_p, key=int)
+    assert result.adjusted_p[ids[0]] <= result.adjusted_p[ids[1]]
+
+
+def test_series_of_different_lengths_are_refused_not_truncated(tmp_path: Path) -> None:
+    """Truncating aligns at index 0, which is only correct if every run started the same day.
+
+    The registry's own `daily_returns_matrix` truncates; doing that here would compare a
+    strategy's first 40 days against another's first 40 and call the result a p-value.
+    """
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004])
+    short = registry.write_daily_returns(tmp_path / "short.parquet", seeded(0.001, n=60))
+    registry.record(record(config_hash="f" * 64, daily_returns_ref=str(short)))
+
+    # Matched on THIS module's reason, not on the word "length": `romano_wolf` refuses unequal
+    # lengths too, so a generic match is satisfied by the downstream check and says nothing
+    # about the guard here — which is the one that explains why truncating is wrong.
+    with pytest.raises(ValueError, match="only correct if every run started on the same day"):
+        spa_adjusted_p(registry, stage="S4")
+
+
+def test_a_candidate_with_no_returns_is_named_in_the_spa_report(tmp_path: Path) -> None:
+    """Renamed after mypy caught it shadowing the DSR gate's test of the same name — a
+    duplicate `def` silently replaces the earlier one, so that test had stopped running."""
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004, 0.001])
+    registry.record(record(config_hash="f" * 64, stage="S4", stage_rank=5))
+
+    result = spa_adjusted_p(registry, stage="S4")
+    assert len(result.adjusted_p) == 2
+    assert any("no daily returns" in note for note in result.excluded)
+
+
+def test_no_scorable_candidates_is_not_an_error(tmp_path: Path) -> None:
+    """An empty family is not a family that passed; `romano_wolf` refuses one, and this must
+    not turn that refusal into a crash mid-search."""
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = Registry(tmp_path / "registry.db")
+    registry.record(record(config_hash="f" * 64))
+
+    result = spa_adjusted_p(registry, stage="S4")
+    assert result.adjusted_p == {}
+    assert len(result.excluded) == 1
+
+
+def test_the_p_values_are_reproducible(tmp_path: Path) -> None:
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004, 0.001, 0.0005])
+    assert spa_adjusted_p(registry, stage="S4") == spa_adjusted_p(registry, stage="S4")
+
+
+def test_only_completed_runs_at_the_stage_are_scored(tmp_path: Path) -> None:
+    """A viewed trial counts toward multiplicity but is not a candidate — the same two halves
+    of rule 4 the DSR gate holds apart."""
+    from pips.search.funnel import spa_adjusted_p
+
+    registry = build(tmp_path, [0.004])
+    path = registry.write_daily_returns(tmp_path / "viewed.parquet", seeded(0.01, seed=99))
+    registry.record(record(config_hash="e" * 64, daily_returns_ref=str(path), status="viewed"))
+
+    result = spa_adjusted_p(registry, stage="S4")
+    assert len(result.adjusted_p) == 1

@@ -328,3 +328,31 @@ def test_the_adjusted_p_does_not_depend_on_alpha() -> None:
     for alpha in (0.10, 0.20, 0.30, 0.50):
         other = romano_wolf(models, alpha=alpha, **kwargs).adjusted_p  # type: ignore[arg-type]
         assert other == baseline, (alpha, other, baseline)
+
+
+def test_a_longer_block_does_not_flatter_serially_dependent_returns() -> None:
+    """The claim `SPA_BLOCK_LENGTH = 5` makes, which nothing tested.
+
+    An i.i.d. resample of a serially dependent series understates its variance, which overstates
+    significance and so produces a SMALLER p-value — the flattering direction. Blocks preserve
+    the dependence, so the honest p-value is the larger one.
+    """
+    # Runs of six, so single-observation resampling destroys dependence that blocks preserve.
+    # The mean is deliberately TINY: my first fixture had a statistic of 3.6, where everything
+    # is significant at any block length and the comparison said nothing. The variance estimate
+    # only decides when the signal is weak enough for it to matter.
+    #
+    # Block 6, not 12: at twelve the blocks align with the full cycle and the effect vanishes.
+    # That is a property of this periodic fixture rather than of the estimator, and widening
+    # the comparison would test the fixture.
+    cycle = [Decimal("0.0202")] * 6 + [Decimal("-0.0198")] * 6
+    dependent = {"a": cycle * 10}
+
+    iid = romano_wolf(dependent, alpha=0.10, n_bootstrap=400, block_length=1, seed=11).adjusted_p[
+        "a"
+    ]
+    blocked = romano_wolf(
+        dependent, alpha=0.10, n_bootstrap=400, block_length=6, seed=11
+    ).adjusted_p["a"]
+
+    assert blocked > iid, (blocked, iid)
