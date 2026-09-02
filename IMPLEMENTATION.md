@@ -792,7 +792,10 @@ human.
   illiquid name passes. Volume enters as a **log** or one mega-cap flattens the rest to noise.
   A symbol missing a component is **excluded, never defaulted** — a missing spread read as zero
   makes an illiquid name look tight;
-  N ∈ {50,100,150,300}; lookback {20,40,60}d; weekly/monthly refresh; stable-core hysteresis;
+  N ∈ {50,100,150,300}; lookback {20,40,60}d; weekly/monthly refresh `[C-UNIV-03]` — over the
+  SESSION list, not calendar dates, so a Monday holiday moves it to Tuesday, and **membership
+  is fixed for each session**: a session earlier than the first refresh has none rather than
+  borrowing a later one's; stable-core hysteresis;
   eligibility gates `[C-UNIV-02]` (series, suspension, MIS/short per capability snapshot,
   history, bands) — decided BEFORE the session opens, because §4.2 is explicit that *the
   completed day's volume cannot retrospectively add a stock to that day's universe*; and

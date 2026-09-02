@@ -507,6 +507,36 @@
   # delistings, token changes, corporate actions and daily eligibility have adequate archival
   # coverage, every result is labelled survivorship-biased and no candidate may be promoted.
 
+- id: C-UNIV-03
+  title: "Universe refresh cadence: over sessions, and membership fixed for each session"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/refresh.py"
+  tests:
+    - "tests/unit/test_refresh.py"
+  status: building
+  owner_milestone: M7
+  # The blueprint's guardrail is one line: "Membership fixed for each session." A universe that
+  # changes mid-session is not a universe; it is a decision made after seeing part of the day.
+  #
+  # A SESSION EARLIER THAN THE FIRST REFRESH HAS NO MEMBERSHIP, and that is refused rather than
+  # filled in: applying a membership decided later to an earlier session is lookahead wearing
+  # the costume of a default, and it leaves no trace -- the panel simply contains names that
+  # were not eligible yet.
+  #
+  # REFRESHES ARE COMPUTED OVER THE SESSION LIST, never over calendar dates. A weekly refresh is
+  # the first SESSION of each week, so a Monday holiday moves it to Tuesday by construction. A
+  # date-based rule would schedule a refresh on a day the exchange was shut -- and the project's
+  # calendar still carries `holidays_verified: false`, so the session list is the caller's to
+  # supply and to have verified (`require_verified_holidays()`).
+  #
+  # Buckets are (ISO year, week) and (year, month), not the week or month alone. A mutation
+  # dropping the year survived two fixtures before one spanning more than a year caught it:
+  # inside a single January the week numbers never repeat, and the second occurrence of week 2
+  # would silently inherit the first year's refresh.
+  #
+  # `building`: the cadence is built and nothing calls it. It joins the score, the stable-core
+  # buffer and the eligibility gates as M7 machinery waiting on the panel.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"
