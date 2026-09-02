@@ -120,11 +120,32 @@ def romano_wolf(
             {k: (sum(series[k][i] for i in indices) / n - means[k]) / scale[k] for k in names}
         )
 
+    # ADJUSTED P-VALUES, computed in STATISTIC order and never consulting alpha.
+    #
+    # The first version walked the alpha-rejection rounds above, which made every value move
+    # with alpha: pure noise read 0.960 at alpha=0.05 and 0.435 at alpha=0.10. A p-value is a
+    # property of the data, and `stability.spa_p` is compared against a fixed bar by someone who
+    # did not run the test. Romano-Wolf's own construction walks the ordered hypotheses instead,
+    # so step j asks "how often does the maximum over THIS ONE AND EVERYTHING WEAKER reach it?"
+    #
+    # The running maximum keeps them monotone: a later step tests against a smaller set and so
+    # produces a smaller raw frequency, and without the clamp a weak model would print a better
+    # number than a strong one.
+    # The `k` breaks ties explicitly. It is redundant -- `names` is already sorted and
+    # Python's sort is stable, so equal statistics keep alphabetical order either way --
+    # but the ordering here decides which hypothesis is tested against which set, and an
+    # implicit two-step argument for that is worse than one visible key.
+    ordered = sorted(names, key=lambda k: (-statistics[k], k))
+    adjusted: dict[str, float] = {}
+    running = 0.0
+    for position, name in enumerate(ordered):
+        remaining = ordered[position:]
+        frequency = sum(1 for draw in draws if max(draw[j] for j in remaining) >= statistics[name])
+        running = max(running, frequency / len(draws))
+        adjusted[name] = running
+
     rejected: list[str] = []
     thresholds: list[float] = []
-    adjusted: dict[str, float] = {}
-    floor = 0.0
-    """The running maximum that makes the adjusted p-values monotone across rounds."""
     surviving = set(names)
     rounds = 0
     # A BOUND, not a belief. Each round either rejects at least one hypothesis or breaks, so
@@ -144,17 +165,9 @@ def romano_wolf(
         threshold = _quantile(maxima, 1.0 - alpha)
         thresholds.append(threshold)
 
-        # The bootstrap frequency with which the maximum over the CURRENT surviving set reaches
-        # each statistic. Computed for everyone still standing, because the round a hypothesis
-        # is not rejected in is the round that fixes its p-value.
-        for k in sorted(surviving):
-            frequency = sum(1 for draw in draws if max(draw[j] for j in surviving) >= statistics[k])
-            adjusted[k] = max(floor, frequency / len(draws))
-
         newly = {k for k in surviving if statistics[k] > threshold}
         if not newly:
             break
-        floor = max([floor, *(adjusted[k] for k in newly)])
         rejected.extend(sorted(newly))
         surviving -= newly
         if not stepdown:

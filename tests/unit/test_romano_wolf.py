@@ -302,3 +302,29 @@ def test_the_running_maximum_actually_binds() -> None:
         "the clamp is what makes these equal; unclamped, b sits below a",
         result.adjusted_p,
     )
+
+
+def test_the_adjusted_p_does_not_depend_on_alpha() -> None:
+    """A p-value is a property of the data, not of a level someone chose to test at.
+
+    The first implementation walked the stepdown's ALPHA-REJECTION rounds, so the surviving set
+    at each step — and therefore every adjusted p-value — moved with alpha. Pure noise read
+    0.960 at alpha=0.05 and 0.435 at alpha=0.10. Recording that in a dossier would pin a number
+    that says as much about the caller as about the strategy, and `stability.spa_p` is compared
+    against a fixed 0.10 bar by someone who did not run it.
+
+    The fix is Romano-Wolf's own construction: walk the hypotheses in STATISTIC order, so round
+    j tests against "this one and everything weaker" and no threshold is consulted at all.
+    """
+    models = {
+        "a": with_edge("0.0016", 1),
+        "b": with_edge("0.0014", 2),
+        "c": with_edge("0.0012", 4),
+        "d": noise(3),
+    }
+    kwargs = {"n_bootstrap": 200, "block_length": 5, "seed": 11}
+    baseline = romano_wolf(models, alpha=0.05, **kwargs).adjusted_p  # type: ignore[arg-type]
+
+    for alpha in (0.10, 0.20, 0.30, 0.50):
+        other = romano_wolf(models, alpha=alpha, **kwargs).adjusted_p  # type: ignore[arg-type]
+        assert other == baseline, (alpha, other, baseline)

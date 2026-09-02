@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 245 files · mypy --strict 245 files · 1772 pytest · clippy clean · cargo test ok
+  ruff 245 files · mypy --strict 245 files · 1773 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,11 +186,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Wire per-candidate SPA into the search** the way the DSR now is. `romano_wolf` reports
-   adjusted p-values as of this tick, so `stability.spa_p` can finally be filled with a number
-   that means something for the candidate it sits beside. Unblocked. **Correction to last
-   tick:** PBO and plateau are NOT "the same pattern" — PBO needs walk-forward IS/OOS matrices
-   and plateau needs a parameter surface that nothing currently persists.
+1. **Wire per-candidate SPA into the search** the way the DSR is. `romano_wolf.adjusted_p` is
+   now alpha-independent and safe to record; last tick's version was not, which is why this did
+   not land yet. The benchmark for an intraday cash strategy is zero, so the performance
+   differential is the daily return series itself. Unblocked.
 2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
    *Tripwires — auto-flags in every report*; the certification table gives no number. Setting it
    = a `gates.yaml` row + enforcing code + an ADR in one commit.
@@ -200,9 +199,10 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    before deciding. The backfill means external Breeze calls on a metered budget with the
    owner's credentials; the budget is 100k calls/day and 32 parallel fetches.
 
-`certify-smoke`: **0 certified, 33 unsupplied.** Of those, the stress battery belongs to M14's
-event engine, capacity to the order-budget planner, operations to session policy that does not
-exist, and `decision.rationale`/`outcome` are written when a human certifies.
+`certify-smoke`: **0 certified, 33 unsupplied.** PBO needs walk-forward IS/OOS matrices and
+plateau needs a parameter surface nothing persists, so neither is a wiring job. The stress
+battery belongs to M14's event engine, capacity to the order-budget planner, operations to
+session policy that does not exist, and `decision.rationale`/`outcome` are written by a human.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
