@@ -792,7 +792,10 @@ human.
   illiquid name passes. Volume enters as a **log** or one mega-cap flattens the rest to noise.
   A symbol missing a component is **excluded, never defaulted** — a missing spread read as zero
   makes an illiquid name look tight;
-  N ∈ {50,100,150,300}; lookback {20,40,60}d; weekly/monthly refresh `[C-UNIV-03]` — over the
+  N ∈ {50,100,150,300}; lookback {20,40,60}d `[C-UNIV-05]` — PRIOR sessions only, and an
+  incomplete window is refused rather than shortened, since a 20-session median over three
+  sessions is a different measurement under the same name; median or lower quartile, never a
+  mean, because a mean carries one day's spike straight through; weekly/monthly refresh `[C-UNIV-03]` — over the
   SESSION list, not calendar dates, so a Monday holiday moves it to Tuesday, and **membership
   is fixed for each session**: a session earlier than the first refresh has none rather than
   borrowing a later one's; stable-core hysteresis;

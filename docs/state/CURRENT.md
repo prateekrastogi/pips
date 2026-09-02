@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 255 files · mypy --strict 255 files · 1954 pytest · clippy clean · cargo test ok
+  ruff 257 files · mypy --strict 257 files · 1966 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -202,12 +202,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
      snapshot, anything with effective dates — which skips the 16 days entirely.
    Note the measured cost model: **1 call per symbol per trading day**, 90,000 usable daily
    (100k cap less 10% headroom in `budget.py`), and the campaign resumes across days.
-2. **Finish M7 once seeded.** Built and all pure: the liquidity score, the stable-core buffer,
-   the daily eligibility gates, the refresh cadence, and the **survivorship audit** — which
-   blocks promotion outright until listings, delistings, token changes, corporate actions and
-   daily eligibility have archival coverage, and blocks on *unknown* coverage too. Nothing calls
-   any of them; every one waits on a panel. Remaining: lookback windows {20,40,60}d, and
-   the **feeds that produce the eligibility flags** — suspension, T2T status, symbol-change
+2. **M7's pure layer is COMPLETE** — six contracts, `[C-UNIV-01]` to `[C-UNIV-05]` plus the
+   audit: the liquidity score, the stable-core buffer, the daily eligibility gates, the refresh
+   cadence, the survivorship audit (which blocks promotion outright, and blocks on *unknown*
+   coverage too), and the liquidity lookback. **Nothing calls any of it**; every piece waits on
+   a panel. What remains of M7 is not pure: the **feeds that produce the eligibility flags** — suspension, T2T status, symbol-change
    resolution, corporate-action certainty. None of those exists, and §4.2's SURVIVORSHIP AUDIT
    is explicit that until listings, delistings, token changes, corporate actions and daily
    eligibility have archival coverage, every result is labelled survivorship-biased and **no

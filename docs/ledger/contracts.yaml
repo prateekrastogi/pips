@@ -570,6 +570,37 @@
   # `building`: nothing produces the coverage flags, so the audit blocks everything today --
   # which is the correct state for a project whose panel is 5 days of 2 synthetic symbols.
 
+- id: C-UNIV-05
+  title: "Liquidity lookback: prior sessions only, and no incomplete window"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/lookback.py"
+  tests:
+    - "tests/unit/test_lookback.py"
+  status: building
+  owner_milestone: M7
+  # The blueprint's guardrail is two rules in one line: "Use prior sessions; prefer median/lower
+  # quartile over one-day volume."
+  #
+  # PRIOR SESSIONS ONLY. The window excludes its own session, for the reason §4.2 gives
+  # outright: the completed day's volume cannot retrospectively add a stock to that day's
+  # universe. A window that includes its own session admits names on the strength of what they
+  # went on to trade, and the panel afterwards looks exactly like one selected honestly.
+  #
+  # AN INCOMPLETE WINDOW IS REFUSED, NOT SHORTENED. A 20-session median over three sessions is
+  # not a 20-session median; shortening it silently admits names on thin evidence at the start
+  # of every panel -- precisely where a backfill begins and precisely where nobody looks. The
+  # BOUNDARY is tested exactly: a mutation allowing position == lookback-1 produces an EMPTY
+  # window rather than a short one, which reads as "no liquidity" for every name that session.
+  #
+  # MEDIAN OR LOWER QUARTILE, NEVER A MEAN. There is no way to ask for one: a mean carries a
+  # single day's spike straight through, which is the thing the guardrail excludes. Quantiles
+  # are nearest-rank, the same choice `romano_wolf._quantile` makes, so there is no
+  # interpolation convention to argue about.
+  #
+  # `building`: nothing calls it. It completes M7's pure layer -- score, stable-core buffer,
+  # eligibility gates, refresh cadence, survivorship audit, lookback -- all six of which wait
+  # on a panel.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"
