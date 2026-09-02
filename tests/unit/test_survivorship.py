@@ -106,3 +106,27 @@ def test_every_gap_is_reported_at_once() -> None:
     verdict = survivorship_audit(coverage(listings=False, delistings=None))
     assert "listings" in " ".join(verdict.missing)
     assert "delistings" in " ".join(verdict.undetermined)
+
+
+def test_no_coverage_field_may_default() -> None:
+    """A defaulted field is *"we did not check"* silently reading as *"covered"*.
+
+    This module's whole argument is that the two are different — reported apart, because one is
+    an archive to obtain and the other a check to run. A default undoes that at construction
+    time instead of in the audit, which is worse: the audit never sees the omission, so the
+    verdict is confidently wrong rather than undetermined.
+
+    Asserted over every field rather than the one that happens to be last, so a sixth
+    requirement cannot arrive with a permissive default the way a fifth could.
+    """
+    for field in dataclasses.fields(ArchivalCoverage):
+        assert field.default is dataclasses.MISSING, f"{field.name} defaults to {field.default!r}"
+        assert field.default_factory is dataclasses.MISSING, f"{field.name} has a default factory"
+
+
+def test_an_omitted_coverage_is_refused_at_construction() -> None:
+    """The same property from the caller's side: you cannot forget one quietly."""
+    with pytest.raises(TypeError, match="daily_eligibility"):
+        ArchivalCoverage(  # type: ignore[call-arg]
+            listings=True, delistings=True, token_changes=True, corporate_actions=True
+        )
