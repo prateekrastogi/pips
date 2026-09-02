@@ -242,3 +242,31 @@ def test_the_winner_is_compared_against_the_median_not_the_mean() -> None:
         f"against the median this is 0.65; against the mean it is 0.80, and the mutation "
         f"swapping them must not pass. Got {result.pbo}"
     )
+
+
+# ------------------------------- gap found by mutation sweep (2026-09-02) -----
+
+
+def test_a_tied_in_sample_winner_resolves_the_same_way_every_split() -> None:
+    """Two configs with IDENTICAL returns tie on every split, and nothing pinned the outcome.
+
+    The tie-break is not cosmetic and it is not redundant. `max(in_sample, key=lambda n:
+    (in_sample[n], n))` takes the alphabetically LAST name among equals; plain
+    `max(in_sample, key=in_sample.get)` takes the first one it meets, which — since `names` is
+    sorted — is the alphabetically FIRST. Two different configs get credited, and
+    `selection_counts` is what a reader uses to ask "which config keeps winning?".
+
+    The module answers this consistently: `most_selected` breaks its tie the same way.
+    """
+    shared = [Decimal((t * 37) % 101 - 50) / Decimal(1000) for t in range(120)]
+    weaker = [Decimal((t * 53) % 101 - 50) / Decimal(4000) for t in range(120)]
+    result = probability_of_backtest_overfitting(
+        {"aaa": list(shared), "zzz": list(shared), "mid": weaker}, n_blocks=8, horizon=1
+    )
+
+    assert result.selection_counts["aaa"] + result.selection_counts["zzz"] > 0, (
+        "the tied pair must win at least one split for this to test anything",
+        result.selection_counts,
+    )
+    assert result.selection_counts["aaa"] == 0, "ties go to the alphabetically LAST name"
+    assert result.most_selected == "zzz"

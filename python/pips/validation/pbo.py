@@ -144,6 +144,11 @@ def probability_of_backtest_overfitting(
         if out_sample[winner] < median:
             below_median += 1
 
+    # Tie-break kept for consistency with the winner selection above, and LEFT UNTESTED
+    # deliberately: a tie here needs two configs each winning exactly half of C(n,n/2) splits,
+    # and both branches are deterministic given `names` is sorted -- plain `max` would take the
+    # alphabetically first, this takes the last. Only the displayed name differs, never a
+    # verdict, so engineering a 35/35 fixture would buy the appearance of coverage.
     most_selected = max(selections, key=lambda n: (selections[n], n))
     return PBOResult(
         pbo=below_median / len(splits),
