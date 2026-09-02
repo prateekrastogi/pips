@@ -18,6 +18,7 @@ the search spent a look on it, and a look that errored is not a look that never 
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -326,3 +327,59 @@ def test_recording_twice_appends_because_the_ledger_is_append_only(
     record_halving_trials(reg, result, metrics_for=metrics_for, context=context)
     record_halving_trials(reg, result, metrics_for=metrics_for, context=context)
     assert len(reg.all_runs()) == 2 * result.trials_viewed
+
+
+# ------------------------------ gaps found by mutation sweep (2026-09-02) -----
+
+
+def test_a_failed_trial_records_why_it_failed(reg: Registry, context: TrialContext) -> None:
+    """The recorder's own comment: *a registry that says a trial failed without saying why is
+    evidence of less than it could be.* Nothing tested it.
+
+    A row that says `failed` with empty metrics tells the next reader that something went wrong
+    somewhere, which is barely more than not recording it — and rule 4 keeps failures precisely
+    so the population can be reconstructed, which needs the reason as well as the count.
+    """
+
+    def explodes(config: str, budget: int) -> dict[str, float]:
+        raise ZeroDivisionError(f"no data for {config} at {budget}")
+
+    result = halving()
+    recorded = record_halving_trials(reg, result, metrics_for=explodes, context=context)
+
+    assert recorded.failures == recorded.rows
+    stored = [json.loads(row["metrics"]) for row in reg.all_runs()]
+    assert all("error" in m for m in stored), "the row must carry the reason, not just the status"
+    assert any("no data for" in m["error"] for m in stored)
+
+
+def test_a_failed_trial_preserves_no_returns(
+    reg: Registry, context: TrialContext, tmp_path: Path
+) -> None:
+    """A trial whose metrics threw has no series worth keeping.
+
+    Calling `returns_for` for it either throws again — turning a recorded failure into an
+    unrecorded crash, losing every row after it — or writes a series produced by code that just
+    failed, which then joins the correlation matrix `M_erank` is computed from.
+    """
+    asked: list[str] = []
+
+    def explodes(config: str, budget: int) -> dict[str, float]:
+        raise ZeroDivisionError("no data")
+
+    def returns_for(config: str, budget: int) -> np.ndarray:
+        asked.append(config)
+        return np.zeros(8)
+
+    result = halving()
+    record_halving_trials(
+        reg,
+        result,
+        metrics_for=explodes,
+        context=context,
+        returns_for=returns_for,
+        returns_dir=tmp_path / "returns",
+    )
+
+    assert asked == [], "no failed trial may be asked for a series"
+    assert all(row["daily_returns_ref"] is None for row in reg.all_runs())
