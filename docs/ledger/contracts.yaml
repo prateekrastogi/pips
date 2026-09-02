@@ -537,6 +537,39 @@
   # `building`: the cadence is built and nothing calls it. It joins the score, the stable-core
   # buffer and the eligibility gates as M7 machinery waiting on the panel.
 
+- id: C-UNIV-04
+  title: "Survivorship audit: a promotion blocker, and unknown coverage blocks too"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  source_refs: ["Indian_Cash_Equity_Intraday_Meta_Algorithm_Blueprint §4.2 SURVIVORSHIP AUDIT"]
+  code: "python/pips/universe/survivorship.py"
+  tests:
+    - "tests/unit/test_survivorship.py"
+  status: building
+  owner_milestone: M7
+  # §4.2 in a box: "If the available history contains only currently listed names or current
+  # broker eligibility, label every result survivorship-biased. NO CANDIDATE MAY BE PROMOTED
+  # until listings, delistings, token changes, corporate actions and daily eligibility have
+  # adequate archival coverage."
+  #
+  # The second clause is the one with teeth. A survivorship-biased backtest is not a caveat to
+  # note in a dossier: the bias is not a wide error band but a systematic lift in one direction
+  # -- the names that failed are simply ABSENT -- so every strategy looks better than it was and
+  # no downstream statistic recovers what was never in the panel. A DSR over survivors is a
+  # confident number about the wrong population.
+  #
+  # BIASED AND MAY_PROMOTE ARE DERIVED, NEVER STORED. Two facts that must agree will eventually
+  # not, and a reader shown "survivorship-biased, promotable" believes the half that lets the
+  # work proceed. Same argument as `Measurement` having no verdict field, and a structural test
+  # asserts there is no field to store the contradiction in.
+  #
+  # UNKNOWN COVERAGE BLOCKS. "We did not check whether delistings are covered" is not
+  # "delistings are covered", and treating them alike is how a survivorship-biased panel gets
+  # promoted by a missing file. Reported apart from known gaps because the fixes differ: an
+  # archive to obtain versus a check to run.
+  #
+  # `building`: nothing produces the coverage flags, so the audit blocks everything today --
+  # which is the correct state for a project whose panel is 5 days of 2 synthetic symbols.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

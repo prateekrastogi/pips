@@ -801,7 +801,11 @@ human.
   completed day's volume cannot retrospectively add a stock to that day's universe*; and
   **unknown is not eligible**, since defaulting a missing feed to a pass admits names on the
   strength of a file that never arrived.
-  *Verify:* PIT test; churn ≤ target; survivorship label logic.
+  *Verify:* PIT test; churn ≤ target; survivorship label logic `[C-UNIV-04]` — §4.2's audit is
+  a **promotion blocker**, not a caveat: until listings, delistings, token changes, corporate
+  actions and daily eligibility have archival coverage, every result is survivorship-biased
+  and no candidate may be promoted. Unknown coverage blocks too — *"we did not check"* is
+  not *"it is covered"*.
 - **M8 feature store + diurnal profiles**: rolling stats via kernel binding; same-clock
   volume baselines; U-shape vol normalization. *Verify:* incremental == full recompute.
 
