@@ -41,6 +41,18 @@ class RomanoWolfResult:
     rejected: tuple[str, ...]
     thresholds: tuple[float, ...]
     statistics: dict[str, float]
+    adjusted_p: dict[str, float]
+    """Per-hypothesis stepdown-adjusted p-value: the smallest family-wise level at which this
+    hypothesis is rejected.
+
+    The quantity `spa_test` cannot give. Its p-value is family-wise and earned by the BEST
+    model; writing it into every candidate's dossier would hand candidate five the evidence
+    candidate one produced. This is per-hypothesis and defensible for each on its own.
+
+    Monotone across rounds by construction. A later round tests against a SMALLER surviving
+    set, so its raw bootstrap frequency is smaller — and without the running maximum a weak
+    model rejected last would print a better number than the strong one rejected first.
+    """
     rounds: int
     stepdown: bool
 
@@ -110,6 +122,9 @@ def romano_wolf(
 
     rejected: list[str] = []
     thresholds: list[float] = []
+    adjusted: dict[str, float] = {}
+    floor = 0.0
+    """The running maximum that makes the adjusted p-values monotone across rounds."""
     surviving = set(names)
     rounds = 0
     # A BOUND, not a belief. Each round either rejects at least one hypothesis or breaks, so
@@ -129,9 +144,17 @@ def romano_wolf(
         threshold = _quantile(maxima, 1.0 - alpha)
         thresholds.append(threshold)
 
+        # The bootstrap frequency with which the maximum over the CURRENT surviving set reaches
+        # each statistic. Computed for everyone still standing, because the round a hypothesis
+        # is not rejected in is the round that fixes its p-value.
+        for k in sorted(surviving):
+            frequency = sum(1 for draw in draws if max(draw[j] for j in surviving) >= statistics[k])
+            adjusted[k] = max(floor, frequency / len(draws))
+
         newly = {k for k in surviving if statistics[k] > threshold}
         if not newly:
             break
+        floor = max([floor, *(adjusted[k] for k in newly)])
         rejected.extend(sorted(newly))
         surviving -= newly
         if not stepdown:
@@ -142,6 +165,7 @@ def romano_wolf(
         rejected=tuple(sorted(rejected)),
         thresholds=tuple(thresholds),
         statistics=statistics,
+        adjusted_p=adjusted,
         rounds=rounds,
         stepdown=stepdown,
     )

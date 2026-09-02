@@ -835,7 +835,11 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 
 - **M18 stats stack**: PSR/DSR (kurtosis convention: γ₄ raw; excess+... guard in code), CSCV/
   PBO with boundary purge, SPA with Hansen recentering + **Romano–Wolf stepdown / model
-  confidence set** for final survivors, stationary bootstrap (day/week blocks), hierarchical
+  confidence set** for final survivors — the stepdown reports **per-hypothesis adjusted
+  p-values**, which is what `stability.spa_p` needs and what `spa_test` cannot give: its
+  p-value is family-wise and earned by the BEST model, so writing it into every candidate's
+  dossier would hand candidate five the evidence candidate one produced — stationary bootstrap
+  (day/week blocks), hierarchical
   partial pooling for family means; sealed-lockbox enforcement in the data layer `[C-DATA-03]` (refuses
   those dates below release stage). *Verify:* Monte-Carlo size/coverage tests; lockbox-refusal
   test; null search on max-Sharpe.

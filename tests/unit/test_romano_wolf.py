@@ -193,3 +193,112 @@ def test_the_loop_cannot_run_more_rounds_than_there_are_hypotheses() -> None:
     models = {f"strong{i}": with_edge("0.02", i) for i in range(4)}
     result = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=8, seed=5)
     assert result.rounds <= len(models) + 1
+
+
+# ------------------------------------------------ per-hypothesis adjusted p-values -----
+
+
+def test_every_hypothesis_gets_an_adjusted_p_value() -> None:
+    """Why this exists: `stability.spa_p` is a PER-CANDIDATE dossier field, and neither
+    `spa_test` nor the reject/no-reject verdict here can fill it.
+
+    `spa_test` returns one family-wise p-value, earned by the BEST model. Writing it into every
+    candidate's dossier would hand candidate five the evidence candidate one produced — the
+    flattering direction, and for every candidate but one. The stepdown's adjusted p-value is
+    the per-hypothesis quantity that is actually defensible.
+    """
+    models = {
+        "strong": with_edge("0.004", 1),
+        "mild": with_edge("0.0015", 2),
+        "flat": noise(3),
+    }
+    result = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=5, seed=11)
+
+    assert set(result.adjusted_p) == set(models)
+    assert all(0.0 <= p <= 1.0 for p in result.adjusted_p.values())
+
+
+def test_the_adjusted_p_agrees_with_the_rejection_set() -> None:
+    """Two answers to one question must not disagree.
+
+    A reader who sees `rejected` and a p-value above alpha beside it has no way to tell which
+    is wrong, and the p-value is the one they will quote.
+    """
+    models = {
+        "strong": with_edge("0.004", 1),
+        "mild": with_edge("0.0015", 2),
+        "flat": noise(3),
+    }
+    for alpha in (0.05, 0.10, 0.20):
+        result = romano_wolf(models, alpha=alpha, n_bootstrap=200, block_length=5, seed=11)
+        by_p = {k for k, p in result.adjusted_p.items() if p <= alpha}
+        assert by_p == set(result.rejected), (alpha, result.adjusted_p, result.rejected)
+
+
+def test_the_adjusted_p_never_falls_as_the_stepdown_proceeds() -> None:
+    """Monotone by construction: a hypothesis rejected in a later round cannot carry stronger
+    evidence than one rejected earlier, whatever the raw bootstrap frequency says.
+
+    Without the running maximum the later rounds' smaller surviving set produces smaller raw
+    p-values, and a weak model rejected last would print a better number than the strong one
+    rejected first.
+    """
+    models = {
+        "strong": with_edge("0.004", 1),
+        "mild": with_edge("0.0015", 2),
+        "weak": with_edge("0.0008", 4),
+        "flat": noise(3),
+    }
+    result = romano_wolf(models, alpha=0.20, n_bootstrap=200, block_length=5, seed=11)
+
+    # NOT read off `rejected`: that tuple is alphabetical, not rejection order. The substantive
+    # claim is monotonicity in the STATISTIC — a stronger model is rejected no later, so its
+    # adjusted p is no larger, and the running maximum is what guarantees it across rounds.
+    by_statistic = sorted(result.statistics, key=lambda k: -result.statistics[k])
+    ladder = [result.adjusted_p[name] for name in by_statistic]
+    assert ladder == sorted(ladder), (by_statistic, result.adjusted_p, result.statistics)
+
+
+def test_a_stronger_model_never_gets_a_worse_adjusted_p() -> None:
+    models = {
+        "strong": with_edge("0.004", 1),
+        "flat": noise(3),
+    }
+    result = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=5, seed=11)
+    assert result.adjusted_p["strong"] <= result.adjusted_p["flat"]
+
+
+def test_the_adjusted_p_is_reproducible() -> None:
+    models = {"a": with_edge("0.003", 1), "b": noise(2)}
+    first = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=5, seed=11)
+    second = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=5, seed=11)
+    assert first.adjusted_p == second.adjusted_p
+
+
+def test_the_running_maximum_actually_binds() -> None:
+    """The previous test asserts monotonicity on a fixture where it holds for free.
+
+    A later round tests against a SMALLER surviving set, so its raw bootstrap frequency is
+    smaller — but only sometimes by enough to matter. On these four models it does: without the
+    running maximum, `b` (rejected in a later round than `a`) prints a p-value BELOW `a`'s, and
+    the ladder inverts. The clamp shows up as the two of them landing on the same number.
+
+    Found by probing, not by reasoning: my first fixture had raw frequencies that were already
+    monotone, so deleting the clamp changed nothing and the test passed anyway.
+    """
+    models = {
+        "a": with_edge("0.0016", 1),
+        "b": with_edge("0.0014", 2),
+        "c": with_edge("0.0012", 4),
+        "d": noise(3),
+    }
+    result = romano_wolf(models, alpha=0.10, n_bootstrap=200, block_length=5, seed=11)
+
+    assert result.rounds > 2, "the fixture must step down more than once to bind anything"
+    by_statistic = sorted(result.statistics, key=lambda k: -result.statistics[k])
+    ladder = [result.adjusted_p[name] for name in by_statistic]
+    assert ladder == sorted(ladder), (by_statistic, result.adjusted_p)
+    assert result.adjusted_p["a"] == result.adjusted_p["b"], (
+        "the clamp is what makes these equal; unclamped, b sits below a",
+        result.adjusted_p,
+    )

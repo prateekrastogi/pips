@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 245 files · mypy --strict 245 files · 1766 pytest · clippy clean · cargo test ok
+  ruff 245 files · mypy --strict 245 files · 1772 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,25 +186,23 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Should S4 actually filter?** `[G-S4-DSR]` now computes and reports, and its DSR reaches
-   dossiers — but candidates it rejects still reach S5. On the fixture every candidate scores
-   ≈0.14 against the 0.95 bar, so filtering would empty the ensemble entirely. That is arguably
-   the honest output for two synthetic random walks, and it changes every downstream report, so
-   it is a decision rather than a side effect. **Related: it is also an argument for the
-   backfill** — on real bars the gate might admit something.
+1. **Wire per-candidate SPA into the search** the way the DSR now is. `romano_wolf` reports
+   adjusted p-values as of this tick, so `stability.spa_p` can finally be filled with a number
+   that means something for the candidate it sits beside. Unblocked. **Correction to last
+   tick:** PBO and plateau are NOT "the same pattern" — PBO needs walk-forward IS/OOS matrices
+   and plateau needs a parameter surface that nothing currently persists.
 2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
    *Tripwires — auto-flags in every report*; the certification table gives no number. Setting it
    = a `gates.yaml` row + enforcing code + an ADR in one commit.
-3. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
-   every number a dossier would record, and widening it means external Breeze calls on a metered
-   budget with the owner's credentials. `pips.data.breeze.campaign` exists; the budget is 100k
-   calls/day and 32 parallel fetches.
+3. **Backfill, and the related question: should S4 filter?** `[G-S4-DSR]` reports but does not
+   gate; on fixtures every candidate scores ≈0.14 against the 0.95 bar, so filtering would empty
+   the ensemble — correct for two synthetic random walks, and an argument for widening the data
+   before deciding. The backfill means external Breeze calls on a metered budget with the
+   owner's credentials; the budget is 100k calls/day and 32 parallel fetches.
 
-`certify-smoke` is at **0 certified, 33 unsupplied**. Of those 33: the stress battery belongs to
-M14's event engine, capacity to the order-budget planner, operations to session policy that does
-not exist, `decision.rationale`/`outcome` are written when a human certifies, and the remaining
-gates need validator outputs (PBO, SPA, plateau) wired the way the DSR now is — which is the
-same pattern repeated, and unblocked.
+`certify-smoke`: **0 certified, 33 unsupplied.** Of those, the stress battery belongs to M14's
+event engine, capacity to the order-budget planner, operations to session policy that does not
+exist, and `decision.rationale`/`outcome` are written when a human certifies.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
