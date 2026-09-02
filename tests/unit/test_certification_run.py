@@ -21,6 +21,7 @@ already contains the holdout result, or the signature covers evidence that was s
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -394,3 +395,57 @@ def test_provenance_naming_a_different_strategy_is_refused(tmp_path: Path) -> No
 
     assert result.certification.certified == ()
     assert "A99" in " | ".join(result.not_finalists[0].reasons)
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_an_incomplete_dossier_does_not_get_the_look(tmp_path: Path) -> None:
+    """The single look is a one-shot resource, so who gets it is the decision that matters.
+
+    A nominee missing a required field cannot be certified whatever the holdout says — the
+    completeness check would reject it afterwards regardless. Spending the unlock on it burns
+    the cycle's one look on a candidate that was never eligible, and the unlock cannot be
+    retried. The screen exists to stop exactly that, and `stability.lockbox_result` is the one
+    gap excused, because it is what the look is for.
+    """
+    intact = nominee("S-INCOMPLETE")
+    sections = {name: dict(body) for name, body in intact.dossier.sections.items()}
+    del sections["operations"]["kill_thresholds"]
+    incomplete = dataclasses.replace(intact, dossier=build_dossier(sections))
+
+    result = run([incomplete], tmp_path)
+
+    assert result.finalists == ()
+    assert result.lockbox is None, "the sealed window stays sealed"
+    reasons = result.not_finalists[0].reasons
+    assert any("kill_thresholds" in r for r in reasons), reasons
+
+
+def test_a_placeholder_in_a_required_field_does_not_get_the_look(tmp_path: Path) -> None:
+    """Hollow is not the same as absent, and the screen has to catch both.
+
+    `TBD` in a required field is *present* — `check_completeness` reports it under `hollow`
+    rather than `missing`, and a screen that consulted only `missing` would hand the single
+    look to a dossier whose content is a promise. Completeness is not passing, and a field
+    whose honest content is "unknown" makes the dossier incomplete.
+    """
+    result = run([nominee("S-HOLLOW", **{"operations.kill_thresholds": "TBD"})], tmp_path)
+
+    assert result.finalists == ()
+    assert result.lockbox is None
+    assert any("kill_thresholds" in r for r in result.not_finalists[0].reasons)
+
+
+def test_a_boolean_net_return_does_not_rank(tmp_path: Path) -> None:
+    """`float(True)` is 1.0, so a boolean would rank above every real return in the field.
+
+    `certify` guards this and is tested for it; the pre-holdout ranking guards it too and was
+    not. The two run on the same value at different moments, and here it decides who gets the
+    single look — a bool would take a finalist slot from a candidate with a real number.
+    """
+    ranked = run([nominee("S-BOOL", net_return=True), nominee("S-REAL", net_return=0.04)], tmp_path)
+
+    assert list(ranked.finalists) == ["S-REAL", "S-BOOL"], (
+        "the boolean scores 0.0, not 1.0, so it ranks below a real 4% return"
+    )
