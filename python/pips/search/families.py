@@ -35,7 +35,7 @@ import polars as pl
 
 from pips.alphas.dispatch import DRIVERS
 from pips.alphas.spec import load_alpha_spec
-from pips.search.funnel import gate_s4, spa_adjusted_p
+from pips.search.funnel import gate_s4, plateau_for_winner, spa_adjusted_p
 from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_domain
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
@@ -208,16 +208,34 @@ def _search_one(
     winner = result.winner
     assert winner is not None
     series = series_for(winner)
-    return _Family(
-        driver=driver,
-        winner=winner,
-        series=series,
-        metrics={
-            "net_return": float(sum(series)),
-            "max_drawdown": _drawdown(series),
-            "rank_ic": float(score(winner, result.rounds[-1].budget)),
-        },
-    )
+
+    def plateau_score(config: str) -> Decimal:
+        """Sharpe of the config's FULL-window PnL, matching the bar's own wording.
+
+        `G-P4-PLATEAU` is stated over net SR, so the surface is measured in the same quantity
+        rather than in the `rank_ic` the halving optimised. Perturbing a parameter and reading
+        a different metric than the bar was calibrated on would compare two things.
+        """
+        values = np.array(series_for(config), dtype=float)
+        spread = float(np.std(values))
+        return Decimal(str(float(np.mean(values)) / spread)) if spread > 0 else Decimal(0)
+
+    # The neighbours are evaluated at FULL fidelity here, which is a fresh look at each of them
+    # (rule 4) -- `series_for` memoises, so a neighbour the halving already ran at full window
+    # costs nothing, and one it eliminated early is genuinely being looked at again.
+    plateau = plateau_for_winner(winner=winner, candidates=candidates, score=plateau_score)
+
+    metrics = {
+        "net_return": float(sum(series)),
+        "max_drawdown": _drawdown(series),
+        "rank_ic": float(score(winner, result.rounds[-1].budget)),
+    }
+    if plateau is not None:
+        # Absent rather than defaulted when the winner sits at a grid edge: one-sided evidence
+        # is not a plateau, and a 1.0 there would read as a perfectly flat one.
+        metrics["parameter_plateau"] = float(plateau)
+
+    return _Family(driver=driver, winner=winner, series=series, metrics=metrics)
 
 
 def flat_series_reason(alpha_id: str, winner: str, *, window: int, total: int) -> str:

@@ -31,9 +31,12 @@ import polars as pl
 
 from pips.search.multiplicity import multiplicity
 from pips.validation.deflated_sharpe import deflated_sharpe_ratio
+from pips.validation.plateau import ParameterPoint, plateau_ratio
 from pips.validation.romano_wolf import romano_wolf
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from pips.search.registry import Registry
 
 __all__ = [
@@ -47,6 +50,7 @@ __all__ = [
     "S4Report",
     "SpaReport",
     "gate_s4",
+    "plateau_for_winner",
     "spa_adjusted_p",
 ]
 
@@ -253,3 +257,38 @@ def spa_adjusted_p(registry: Registry, *, stage: str) -> SpaReport:
         seed=SPA_SEED,
     )
     return SpaReport(adjusted_p=dict(result.adjusted_p), excluded=tuple(excluded))
+
+
+def plateau_for_winner(
+    *,
+    winner: str,
+    candidates: Sequence[str],
+    score: Callable[[str], Decimal],
+) -> Decimal | None:
+    """`[G-P4-PLATEAU]`'s ratio for a search winner, perturbing one grid step either way.
+
+    The neighbours are scored **fresh**, at the winner's own fidelity. Successive halving
+    eliminates most configs at low budget, so its surface has holes exactly where the plateau
+    matters — around the winner — and a ratio computed from what halving happened to leave
+    behind would measure the search's bookkeeping rather than the parameter's robustness. The
+    S3 battery describes a deliberate perturbation study, and this is one.
+
+    ``None`` for a winner at the grid EDGE: one-sided evidence is not a plateau. An optimum at
+    the boundary of the pre-registered domain is precisely the case where the honest answer is
+    "we cannot tell", because the surface continues outside the range nobody registered. That
+    reaches the dossier as unsupplied and `[C-CERT-01]` refuses to certify on it.
+
+    Exactly three evaluations: the winner and its two neighbours.
+    """
+    if winner not in candidates:
+        raise ValueError(
+            f"{winner!r} is not on the grid, so it has no neighbours to perturb toward. A "
+            "winner the search cannot locate is a winner nobody can reproduce."
+        )
+    index = list(candidates).index(winner)
+    points = [
+        ParameterPoint(coords=(offset,), score=score(candidates[offset]))
+        for offset in (index - 1, index, index + 1)
+        if 0 <= offset < len(candidates)
+    ]
+    return plateau_ratio(points, centre=(index,))

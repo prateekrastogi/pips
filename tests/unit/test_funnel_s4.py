@@ -18,6 +18,7 @@ admitted. A series too short to estimate a Sharpe is not evidence of a good one.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -371,3 +372,74 @@ def test_only_completed_runs_at_the_stage_are_scored(tmp_path: Path) -> None:
 
     result = spa_adjusted_p(registry, stage="S4")
     assert len(result.adjusted_p) == 1
+
+
+# ---------------------------------- the winner's neighbourhood, at full fidelity -----
+
+
+def test_the_plateau_evaluates_the_winners_two_neighbours() -> None:
+    """Successive halving eliminates most configs at low budget, so its surface has gaps
+    exactly where the plateau matters — around the winner. The perturbations are evaluated
+    fresh, at the winner's own fidelity, which is what the S3 battery actually describes.
+    """
+    from pips.search.funnel import plateau_for_winner
+
+    grid = ("a", "b", "c", "d", "e")
+    seen: list[str] = []
+
+    def score(config: str) -> Decimal:
+        seen.append(config)
+        return {
+            "a": Decimal("9"),
+            "b": Decimal("0.6"),
+            "c": Decimal("1.0"),
+            "d": Decimal("0.8"),
+            "e": Decimal("9"),
+        }[config]
+
+    ratio = plateau_for_winner(winner="c", candidates=grid, score=score)
+
+    assert ratio == Decimal("0.7")
+    assert sorted(seen) == ["b", "c", "d"], "only the winner and its two neighbours"
+
+
+def test_a_winner_at_the_grid_edge_has_no_plateau() -> None:
+    """One-sided evidence is not a plateau.
+
+    An optimum at the boundary of the PRE-REGISTERED domain is the case where the honest answer
+    is "we cannot tell" — the surface continues outside the range nobody registered. `None`
+    reaches the dossier as unsupplied, and `[C-CERT-01]` then refuses to certify on it.
+    """
+    from pips.search.funnel import plateau_for_winner
+
+    grid = ("a", "b", "c")
+    scores = {"a": Decimal("1.0"), "b": Decimal("0.9"), "c": Decimal("0.8")}
+
+    assert plateau_for_winner(winner="a", candidates=grid, score=scores.__getitem__) is None
+
+
+def test_a_winner_not_on_the_grid_is_refused() -> None:
+    """A winner the grid does not contain has no neighbours to perturb toward."""
+    from pips.search.funnel import plateau_for_winner
+
+    with pytest.raises(ValueError, match="not on the grid"):
+        plateau_for_winner(winner="z", candidates=("a", "b", "c"), score=lambda _: Decimal(1))
+
+
+def test_a_two_point_grid_cannot_show_a_plateau() -> None:
+    """Both points are edges. A search that registered two values registered no surface."""
+    from pips.search.funnel import plateau_for_winner
+
+    scores = {"a": Decimal("1.0"), "b": Decimal("0.9")}
+    assert plateau_for_winner(winner="a", candidates=("a", "b"), score=scores.__getitem__) is None
+
+
+def test_the_bad_neighbour_still_counts() -> None:
+    """Same rule as `plateau_ratio`: the perturbation that went badly is the evidence."""
+    from pips.search.funnel import plateau_for_winner
+
+    grid = ("a", "b", "c")
+    scores = {"a": Decimal("0.1"), "b": Decimal("1.0"), "c": Decimal("0.9")}
+    ratio = plateau_for_winner(winner="b", candidates=grid, score=scores.__getitem__)
+
+    assert ratio == Decimal("0.5"), "median of 0.1 and 0.9, not 0.9 alone"

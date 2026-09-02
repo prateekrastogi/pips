@@ -90,13 +90,23 @@ s1-search: ## Run successive halving over A01 variants and RECORD every trial [C
 	$(PY) -m pips.cli s1-search fixtures $(CURDIR)/build/s1-search/registry.db
 
 s5-smoke: ## Search every alpha family, promote the winners, and run S5 across them [C-S5-01]
+# Fresh registry, for the reason spelled out under certify-smoke: an append-only registry
+# reused across invocations reports a multiplicity that counts how often somebody ran the demo.
+	rm -rf $(CURDIR)/build/s5-smoke
 	$(PY) -m pips.cli s5-smoke fixtures $(CURDIR)/build/s5-smoke/registry.db
 
 s5-smoke-wide: ## s5-smoke on a wider cross-section (8 symbols), generated on demand
+	rm -rf $(CURDIR)/build/s5-wide
 	$(PY) -m pips.cli fixtures generate --wide $(CURDIR)/build/fixtures-wide
 	$(PY) -m pips.cli s5-smoke $(CURDIR)/build/fixtures-wide $(CURDIR)/build/s5-wide/registry.db
 
 certify-smoke: ## Nominate, screen, and report the distance to a certified bundle (§6 M20 Verify)
+# FRESH REGISTRY EVERY RUN. The registry is append-only, so reusing the path accumulates trials
+# across invocations: the multiplicity climbs with the number of times somebody ran the demo,
+# and S5 can select a row written by an OLDER VERSION OF THE CODE. A smoke run must describe
+# the run, not the history of the directory. (Rule 4 is about a research cycle's ledger, which
+# lives on the VM -- not about a scratch path under build/.)
+	rm -rf $(CURDIR)/build/certify-smoke
 	$(PY) -m pips.cli certify-smoke fixtures $(CURDIR)/build/certify-smoke/registry.db
 
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
