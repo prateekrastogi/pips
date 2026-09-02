@@ -217,3 +217,32 @@ def test_the_check_is_registered_and_resolves() -> None:
 
     assert "deflated-sharpe" in CHECK_REGISTRY
     resolve_check("deflated-sharpe")
+
+
+# ------------------------------- guards found untested by mutation (2026-09-02) -----
+
+
+def test_a_degenerate_variance_term_is_refused() -> None:
+    """`variance <= 0` in the PSR denominator had no test, and it is reachable.
+
+    `variance = 1 - skew·S + (kurtosis-1)/4·S²`. As a quadratic in the Sharpe it has real roots
+    only when `skew² >= kurtosis-1`, while `_check_kurtosis` demands `kurtosis-1 >= skew²` — so
+    the two meet at exactly one place, the kurtosis floor `kurtosis = 1 + skew²`. At skew 2,
+    kurtosis 5 and a Sharpe of 1 the term is exactly zero.
+
+    Narrow, but not unreachable, and the alternative is a division by zero returning `inf` —
+    which `normal_cdf` maps to 1.0, a PSR of certainty from moments that describe nothing.
+    """
+    with pytest.raises(ValueError, match="variance term"):
+        probabilistic_sharpe_ratio(1.0, 100, 2.0, 5.0)
+
+
+def test_a_negative_trial_variance_is_refused_by_name() -> None:
+    """`variance < 0` in `expected_max_sharpe` had no test either.
+
+    Without the guard `math.sqrt` still raises `ValueError` — so a bare `pytest.raises(ValueError)`
+    would pass on the mutant. What the guard adds is a message that names the argument, instead
+    of "math domain error" naming nothing, so that is what this asserts.
+    """
+    with pytest.raises(ValueError, match="variance must not be negative"):
+        expected_max_sharpe(10, -1.0)
