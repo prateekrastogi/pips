@@ -28,6 +28,8 @@ from pathlib import Path
 import pytest
 
 from pips.data.breeze.backfill import BackfillResult, Manifest, run_backfill
+from pips.data.breeze.budget import DailyBudgetExceededError
+from pips.data.breeze.ingest import ResponseKind
 
 DAYS = [date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)]
 SYMBOLS = ["RELIND", "ICIBAN"]
@@ -210,3 +212,144 @@ def test_it_refuses_a_bronze_path_inside_the_repository(tmp_path: Path) -> None:
     repo_path = Path(__file__).resolve().parents[2] / "data" / "bronze"
     with pytest.raises(ValueError, match="repository"):
         run_backfill(["RELIND"], [DAYS[0]], FakeFetcher(), repo_path, tmp_path / "m.json")
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_transient_error_writes_no_bronze_and_is_not_counted_as_empty(tmp_path: Path) -> None:
+    """An error is not an answer, so it leaves no record and claims no outcome.
+
+    Falling through to the bronze write puts an error body in the data zone and increments
+    `empty` — which reads, in the report and in the manifest's absence, as "we asked and there
+    was genuinely nothing". The difference between that and "we never got an answer" is the
+    one distinction this whole module exists to preserve.
+    """
+    fetcher = FakeFetcher(default=ERROR)
+    result = run_backfill(["RELIND"], [DAYS[0]], fetcher, bronze(tmp_path), tmp_path / "m.json")
+
+    assert result.errored == 1
+    assert result.empty == 0
+    assert result.fetched == 0
+    assert list(bronze(tmp_path).rglob("*.json")) == []
+    assert not Manifest.load(tmp_path / "m.json").is_done("RELIND", DAYS[0])
+
+
+def test_a_holiday_writes_bronze_as_the_evidence_that_we_asked(tmp_path: Path) -> None:
+    """EMPTY is an answer, and the record is what makes it one.
+
+    Marking a holiday done with nothing on disk leaves the manifest asserting an outcome no
+    later reader can check. `[C-QC-02]`'s coverage check needs exactly this record to tell a
+    quiet market from a hole.
+    """
+    fetcher = FakeFetcher(default=EMPTY)
+    result = run_backfill(["RELIND"], [DAYS[0]], fetcher, bronze(tmp_path), tmp_path / "m.json")
+
+    assert result.empty == 1
+    records = list(bronze(tmp_path).rglob("*.json"))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text())["payload"] == EMPTY
+    assert Manifest.load(tmp_path / "m.json").outcome("RELIND", DAYS[0]) == "EMPTY"
+
+
+def test_a_run_with_transient_errors_is_not_complete(tmp_path: Path) -> None:
+    """`complete` is what a campaign driver reads to decide whether to run again.
+
+    Errors are deliberately left unmarked so the next run retries them — which is only useful
+    if something says a next run is needed.
+    """
+    errored = BackfillResult(
+        attempted=2,
+        fetched=1,
+        empty=0,
+        errored=1,
+        skipped=0,
+        stopped_on_budget=False,
+        stopped_on_rate_limit=False,
+    )
+    assert not errored.complete
+    clean = BackfillResult(
+        attempted=2,
+        fetched=2,
+        empty=0,
+        errored=0,
+        skipped=0,
+        stopped_on_budget=False,
+        stopped_on_rate_limit=False,
+    )
+    assert clean.complete
+
+
+def test_budget_exhaustion_stops_the_run_rather_than_grinding_through_it(tmp_path: Path) -> None:
+    """A clean stop means the fetcher is not asked again.
+
+    Continuing instead of breaking calls the fetcher once per remaining key — 234,900 times
+    on the real campaign — each raising the same exception. The run still reports
+    `stopped_on_budget`, so the difference is invisible in the result and visible only in the
+    hour it takes to finish doing nothing.
+    """
+
+    class BudgetedFetcher(FakeFetcher):
+        def __call__(self, symbol: str, day: date) -> object:
+            self.calls.append((symbol, day))
+            if len(self.calls) > 2:
+                raise DailyBudgetExceededError("out of budget")
+            return OK
+
+    fetcher = BudgetedFetcher()
+    result = run_backfill(SYMBOLS, DAYS, fetcher, bronze(tmp_path), tmp_path / "m.json")
+
+    assert result.stopped_on_budget
+    assert len(fetcher.calls) == 3, "one call discovers the limit; none follow it"
+    assert result.fetched == 2
+
+
+def test_an_unreadable_manifest_costs_calls_rather_than_leaving_holes(tmp_path: Path) -> None:
+    """The documented choice, and the one that is cheap to get backwards.
+
+    Not knowing what is done is recoverable by re-fetching; assuming it is all done writes
+    silent holes into the archive. Raising instead would be a third, worse option on a
+    multi-day campaign: the manifest is rewritten once per key, so a process killed mid-write
+    leaves exactly this file, and aborting there strands the campaign.
+    """
+    manifest_path = tmp_path / "m.json"
+    manifest_path.write_text('{"outcomes": {"RELIND:2026-08-26": "OK"', encoding="utf-8")
+
+    loaded = Manifest.load(manifest_path)
+    assert loaded.outcomes == {}, "an unparseable manifest is not a partial manifest"
+
+    fetcher = FakeFetcher()
+    result = run_backfill(["RELIND"], [DAYS[0]], fetcher, bronze(tmp_path), manifest_path)
+    assert result.fetched == 1, "the campaign continues, paying for what it cannot prove"
+
+
+def test_a_crash_mid_write_does_not_destroy_the_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole file is rewritten once per key; each rewrite is a window.
+
+    `write_text` truncates before it writes, so a process killed part-way through leaves a
+    truncated manifest — which `load` correctly treats as unreadable and starts empty from.
+    On the 3-year x U300 campaign that is 234,900 rewrites and, on the wrong one, the loss of
+    every key already paid for: the restart that was supposed to cost zero calls costs all of
+    them. The write has to land atomically or not at all.
+    """
+    path = tmp_path / "m.json"
+    manifest = Manifest.load(path)
+    manifest.mark("RELIND", DAYS[0], ResponseKind.OK)
+
+    real_write = Path.write_text
+
+    def killed_halfway(self: Path, data: str, **kwargs: object) -> int:
+        real_write(self, data[: len(data) // 2], **kwargs)  # type: ignore[arg-type]
+        raise OSError("process killed mid-write")
+
+    monkeypatch.setattr(Path, "write_text", killed_halfway)
+    with pytest.raises(OSError, match="killed mid-write"):
+        manifest.mark("ICIBAN", DAYS[0], ResponseKind.OK)
+    monkeypatch.undo()
+
+    recovered = Manifest.load(path)
+    assert recovered.is_done("RELIND", DAYS[0]), (
+        "the key already paid for must survive a crash while writing the next one"
+    )

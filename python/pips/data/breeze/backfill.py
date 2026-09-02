@@ -28,6 +28,7 @@ leaves nowhere to check the cleaning against.
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -43,6 +44,11 @@ __all__ = ["BackfillResult", "Manifest", "run_backfill"]
 Fetcher = Callable[[str, date], Any]
 
 # Outcomes that mean "attempted, and we have our answer". Everything else is pending.
+#
+# Always true where it is tested, today: RATE_LIMITED breaks out of the run and ERROR
+# continues past the mark, so only OK and EMPTY ever reach it. Kept anyway, and not as
+# decoration -- it is the safety net for a fifth ResponseKind, which would otherwise fall
+# through and be marked done. Unmarked is the safe default: the next run retries.
 _TERMINAL = {ResponseKind.OK, ResponseKind.EMPTY}
 
 
@@ -83,10 +89,18 @@ class Manifest:
     def mark(self, symbol: str, day: date, outcome: ResponseKind) -> None:
         self.outcomes[self.key(symbol, day)] = outcome.value
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
+        # ATOMIC, because this file is rewritten once per key -- 234,900 times on the 3y x U300
+        # campaign -- and `write_text` truncates before it writes. A process killed inside that
+        # window leaves a truncated manifest; `load` correctly refuses to trust it and starts
+        # empty, so the restart that was supposed to cost zero calls re-fetches everything
+        # already paid for. `os.replace` is atomic within a filesystem: the manifest is either
+        # the old one or the new one, never half of either.
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(
             json.dumps({"outcomes": self.outcomes}, indent=1, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        os.replace(tmp, self.path)
 
 
 @dataclass(frozen=True)
