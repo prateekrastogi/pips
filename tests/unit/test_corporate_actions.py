@@ -273,3 +273,130 @@ def test_an_unadjustable_action_still_records_and_still_reads(
     recorded = master.as_of(D(2026, 6, 15))
     assert [a.kind for a in recorded] == [ActionKind.DIVIDEND]
     assert recorded[0].dividend_paise == 1_200
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+OTHER_ISIN = "INE467B01029"
+
+
+def test_one_names_split_does_not_adjust_another_names_bars(
+    master: CorporateActionMaster,
+) -> None:
+    """The `isin` filter, which nothing exercised because nothing put two names in the store.
+
+    A single-name fixture cannot tell a filter from its absence. On a real master — 5,851
+    names, actions most days — dropping it would apply every split in the market to every
+    symbol's history, silently and multiplicatively.
+    """
+    master.announce(split(date(2026, 2, 1)), known_from=date(2026, 1, 1))
+    assert master.adjustment_factor(ISIN, date(2026, 1, 15), date(2026, 3, 1)) == Decimal("0.5")
+    assert master.adjustment_factor(OTHER_ISIN, date(2026, 1, 15), date(2026, 3, 1)) == Decimal(1)
+
+
+def test_a_jump_is_explained_only_by_that_names_own_action(
+    master: CorporateActionMaster,
+) -> None:
+    """Same gap, on the QC hook — and here it un-quarantines rather than corrupts.
+
+    A verdict of "explained" clears a record from quarantine. Explaining one name's jump with
+    another name's split is how a real corruption gets waved through by the very table that
+    exists to catch it.
+    """
+    master.announce(
+        split(date(2026, 2, 2), isin=OTHER_ISIN, action_id="OTHER-SPLIT"),
+        known_from=date(2026, 1, 1),
+    )
+    verdict = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 50_00)
+    assert not verdict.explained
+    assert "no known action" in verdict.reason
+
+
+def test_a_jump_is_explained_only_by_an_action_on_that_day(
+    master: CorporateActionMaster,
+) -> None:
+    """`ex_date == on`, not merely "this name has actions".
+
+    A split effective next month is known now and explains nothing now. Without the date
+    filter it would clear today's unrelated 50% collapse.
+    """
+    master.announce(split(date(2026, 3, 10)), known_from=date(2026, 1, 1))
+    verdict = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 50_00, as_of=date(2026, 2, 2))
+    assert not verdict.explained
+    assert "no known action" in verdict.reason
+
+
+def test_the_jump_tolerance_scales_with_the_ratio_it_is_checking(
+    master: CorporateActionMaster,
+) -> None:
+    """10% OF THE PREDICTED FACTOR, not 10 percentage points of raw ratio.
+
+    At a 1:10 split the factor is 0.1 and the window is +/-0.01; unscaled it would be +/-0.10,
+    which spans the entire distance from the predicted ratio to no split at all. The action
+    would then explain a name that simply collapsed 90% on its ex-date, which is precisely the
+    coincidence this check exists to refuse.
+    """
+    master.announce(split(date(2026, 2, 2), before=1, after=10), known_from=date(2026, 1, 1))
+    near = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 10_50)
+    assert near.explained, f"0.105 is within 10% of 0.1: {near.reason}"
+    far = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 15_00)
+    assert not far.explained, f"0.15 is not: {far.reason}"
+
+
+def test_two_actions_on_one_ex_date_compose_in_the_verdict(
+    master: CorporateActionMaster,
+) -> None:
+    """A split and a bonus on the same day are one combined factor, not the last one seen.
+
+    `adjustment_factor` composes and is tested; the QC hook computes its own `expected` and
+    was not. Taking only one of the two predicts the wrong ratio, so a correctly-behaving
+    price gets quarantined and the operator learns to distrust the check.
+    """
+    master.announce(split(date(2026, 2, 2), before=1, after=2), known_from=date(2026, 1, 1))
+    master.announce(
+        split(date(2026, 2, 2), before=1, after=5, action_id=f"{ISIN}-second"),
+        known_from=date(2026, 1, 1),
+    )
+    verdict = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 10_00)
+    assert verdict.explained, f"1/2 x 1/5 = 0.1, and 10.00/100.00 is 0.1: {verdict.reason}"
+    assert "0.1000" in verdict.reason
+
+
+def test_a_non_positive_previous_close_has_no_ratio_to_explain(
+    master: CorporateActionMaster,
+) -> None:
+    """The guard is load-bearing: without it this is a DivisionByZero out of a QC hook.
+
+    Same shape as `check_decimal_shift`'s missing `current` guard — a zero price, which is the
+    most basic corruption there is, taking down the machinery meant to report it.
+    """
+    master.announce(split(date(2026, 2, 2)), known_from=date(2026, 1, 1))
+    verdict = master.explains_jump(ISIN, date(2026, 2, 2), 0, 50_00)
+    assert not verdict.explained
+    assert "not positive" in verdict.reason
+
+
+def test_a_dividend_on_the_day_does_not_explain_the_jump(master: CorporateActionMaster) -> None:
+    """It says so, rather than raising out of the QC hook.
+
+    A DIVIDEND has no exact price factor from a share ratio, and whether to adjust for it is a
+    price-return vs total-return decision this project has deliberately not made. So
+    `price_factor` refuses — correctly — and the guard here is what turns that refusal into a
+    verdict instead of an `UnadjustableActionError` thrown from inside a QC pass, which would
+    take the run down and lose every finding collected before it.
+
+    The verdict is "not explained", which quarantines the record: the honest answer while the
+    decision is unmade, and a quarantined bar is recoverable where a wrongly-cleared one is not.
+    """
+    master.announce(
+        split(
+            date(2026, 2, 2),
+            kind=ActionKind.DIVIDEND,
+            action_id=f"{ISIN}-DIV",
+            shares_after=1,
+        ),
+        known_from=date(2026, 1, 1),
+    )
+    verdict = master.explains_jump(ISIN, date(2026, 2, 2), 100_00, 98_00)
+    assert not verdict.explained
+    assert "no exact price factor" in verdict.reason
