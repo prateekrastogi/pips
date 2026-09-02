@@ -16,13 +16,18 @@ the useful artifact while the answer is zero.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from pips.certification.dossier import REQUIRED_FIELDS, is_hollow
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from pips.certification.smoke import (
     KNOWN_FIELDS,
+    REGISTRY_FIELDS,
     RUN_FIELDS,
     evidence_from_run,
     format_gap,
@@ -39,8 +44,6 @@ def run_report(**over: Any) -> dict[str, Any]:
         "multiplicity_literal": 812,
         "multiplicity_effective": 41.5,
         "cost_model": "flattrade-2026H2",
-        "broker": "FLATTRADE",
-        "capital_tier": "2L",
     }
     base.update(over)
     return base
@@ -90,11 +93,11 @@ def test_all_the_gaps_are_named_at_once() -> None:
     """Otherwise a caller with three gaps learns them one run at a time."""
     incomplete = run_report()
     del incomplete["snapshot_root"]
-    del incomplete["broker"]
+    del incomplete["cost_model"]
     with pytest.raises(KeyError) as exc:
         evidence_from_run(incomplete, code_version="a" * 40)
     assert "snapshot_root" in str(exc.value)
-    assert "broker" in str(exc.value)
+    assert "cost_model" in str(exc.value)
 
 
 @pytest.mark.parametrize("blank", ["", "   ", "\t"])
@@ -158,8 +161,125 @@ def test_run_fields_names_every_key_the_evidence_reads() -> None:
         "snapshot_name",
         "snapshot_root",
         "cost_model",
-        "broker",
-        "capital_tier",
         "trials_viewed",
         "multiplicity_effective",
     }
+
+
+# ------------------------------------------- what the REGISTRY knows about this candidate -----
+
+
+def _record(**over: Any) -> Any:
+    from pips.search.registry import RunRecord
+
+    base: dict[str, Any] = {
+        "config_hash": "a" * 64,
+        "stage": "S1",
+        "stage_rank": 1,
+        "family": "A03",
+        "universe_id": "NIFTY100",
+        "session_mask": "MID",
+        "capital_tier": "5L",
+        "broker": "FLATTRADE",
+        "data_snapshot": "silver@2026H1",
+        "snapshot_root": "b" * 64,
+        "cost_model": "c" * 64,
+        "fill_tier": "F1",
+        "seed": 0,
+        "git_sha": "0" * 40,
+        "metrics": {"rank_ic": 0.1},
+        "status": "completed",
+    }
+    base.update(over)
+    return RunRecord(**base)
+
+
+def test_the_registry_supplies_what_it_recorded_about_this_run(tmp_path: Path) -> None:
+    """These four were reported as "the factory cannot supply" while the registry held them.
+
+    Every one is `[C-NOM-01]`'s argument applied a layer down: a number the search already
+    recorded must not be re-typed by a human, because re-typing is how a dossier comes to
+    describe a slightly different run than the one that happened.
+    """
+    from pips.certification.smoke import evidence_from_registry
+    from pips.search.registry import Registry
+
+    registry = Registry(tmp_path / "registry.db")
+    run_id = registry.record(_record())
+
+    evidence = evidence_from_registry(registry, str(run_id))
+    assert evidence["identity.family_graph"] == "A03"
+    assert evidence["trade_context.universe_policy"] == "NIFTY100"
+    assert evidence["trade_context.session_regime"] == "MID"
+    assert evidence["trade_context.capital_range"] == "5L"
+
+
+def test_the_parents_are_the_earlier_runs_of_the_same_config(tmp_path: Path) -> None:
+    """A promotion is a NEW row for the same config at a higher stage, so its parents are the
+    earlier rows carrying that config hash — not a guess, and not the whole registry."""
+    from pips.certification.smoke import evidence_from_registry
+    from pips.search.registry import Registry
+
+    registry = Registry(tmp_path / "registry.db")
+    parent = registry.record(_record(stage="S1", stage_rank=1))
+    registry.record(_record(config_hash="d" * 64, stage="S1", stage_rank=1))
+    promoted = registry.record(_record(stage="S5", stage_rank=6))
+
+    evidence = evidence_from_registry(registry, str(promoted))
+    assert evidence["identity.parent_experiment_ids"] == str(parent)
+
+
+def test_a_run_the_registry_does_not_have_is_refused(tmp_path: Path) -> None:
+    """A candidate with no row is a candidate nobody can trace."""
+    from pips.certification.smoke import evidence_from_registry
+    from pips.search.registry import Registry
+
+    with pytest.raises(LookupError, match="404"):
+        evidence_from_registry(Registry(tmp_path / "registry.db"), "404")
+
+
+def test_a_run_with_no_parents_says_so_rather_than_leaving_it_empty(tmp_path: Path) -> None:
+    """An empty tuple is HOLLOW by the dossier's own rule, and would report "this run has no
+    parents" as "nobody recorded the parents" — the conflation the whole subsystem refuses.
+
+    So the value is always a string: the ids, or an explicit statement that there are none.
+    """
+    from pips.certification.dossier import is_hollow
+    from pips.certification.smoke import evidence_from_registry
+    from pips.search.registry import Registry
+
+    registry = Registry(tmp_path / "registry.db")
+    only = registry.record(_record())
+
+    value = evidence_from_registry(registry, str(only))["identity.parent_experiment_ids"]
+    assert not is_hollow(value)
+    assert "none" in value
+    assert str(only) not in value, "a row that names itself as its own parent is not a lineage"
+
+
+def test_the_two_evidence_sources_are_disjoint() -> None:
+    """A field in both would be supplied twice, and a merge silently prefers one.
+
+    They are not interchangeable: the run report is per-RUN, the registry row is per-CANDIDATE.
+    `broker` and `capital_range` were briefly in both, and the per-candidate one is the truthful
+    answer whenever a search spans more than one venue or tier.
+    """
+    assert not (set(KNOWN_FIELDS) & set(REGISTRY_FIELDS))
+
+
+def test_a_same_stage_sibling_is_not_a_parent(tmp_path: Path) -> None:
+    """The rank comparison is STRICT, and that is what keeps a run out of its own lineage.
+
+    Two rows for one config at the same stage are alternatives, not ancestors — and if `<`
+    became `<=` they would each become the other's parent, and every run its own.
+    """
+    from pips.certification.smoke import evidence_from_registry
+    from pips.search.registry import Registry
+
+    registry = Registry(tmp_path / "registry.db")
+    sibling = registry.record(_record(stage="S5", stage_rank=6))
+    promoted = registry.record(_record(stage="S5", stage_rank=6))
+
+    value = evidence_from_registry(registry, str(promoted))["identity.parent_experiment_ids"]
+    assert str(sibling) not in value
+    assert str(promoted) not in value

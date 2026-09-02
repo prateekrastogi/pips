@@ -25,14 +25,20 @@ if TYPE_CHECKING:
 
     from pips.search.s5 import S5Result
 
-__all__ = ["KNOWN_FIELDS", "RUN_FIELDS", "evidence_from_run", "format_gap", "main"]
+__all__ = [
+    "KNOWN_FIELDS",
+    "REGISTRY_FIELDS",
+    "RUN_FIELDS",
+    "evidence_from_registry",
+    "evidence_from_run",
+    "format_gap",
+    "main",
+]
 
 KNOWN_FIELDS: tuple[str, ...] = (
     "identity.code_version",
     "identity.data_version",
     "identity.cost_version",
-    "trade_context.broker",
-    "trade_context.capital_range",
     "stability.trials_viewed",
     "stability.m_erank",
 )
@@ -49,8 +55,6 @@ RUN_FIELDS: tuple[str, ...] = (
     "snapshot_name",
     "snapshot_root",
     "cost_model",
-    "broker",
-    "capital_tier",
     "trials_viewed",
     "multiplicity_effective",
 )
@@ -85,12 +89,67 @@ def evidence_from_run(report: Mapping[str, Any], *, code_version: str) -> dict[s
         "identity.code_version": code_version,
         "identity.data_version": f"{report['snapshot_name']}@{report['snapshot_root']}",
         "identity.cost_version": report["cost_model"],
-        "trade_context.broker": report["broker"],
-        "trade_context.capital_range": report["capital_tier"],
         # Rule 4's numbers, and the two a dossier cannot fake: understating either RAISES the
         # DSR that gets reported beside them (§3.6).
         "stability.trials_viewed": report["trials_viewed"],
         "stability.m_erank": report["multiplicity_effective"],
+    }
+
+
+REGISTRY_FIELDS: tuple[str, ...] = (
+    "identity.family_graph",
+    "identity.parent_experiment_ids",
+    "trade_context.universe_policy",
+    "trade_context.session_regime",
+    "trade_context.capital_range",
+    "trade_context.broker",
+)
+"""What the registry recorded ABOUT THIS CANDIDATE, as opposed to about the run as a whole.
+
+Every one was being reported as "the factory cannot supply" while the registry held it — which
+is `[C-NOM-01]`'s argument a layer down: a value the search already recorded must not be
+re-typed, because re-typing is how a dossier comes to describe a slightly different run.
+"""
+
+
+def evidence_from_registry(registry: Any, run_id: str) -> dict[str, Any]:
+    """Per-candidate evidence from the row the search wrote. Refuses an unknown run."""
+    rows = {str(row["run_id"]): row for row in registry.all_runs()}
+    row = rows.get(run_id)
+    if row is None:
+        raise LookupError(
+            f"the registry has no run {run_id!r}, so this candidate cannot be traced back to "
+            "the search that produced it."
+        )
+
+    # A promotion is a NEW row for the same config at a higher stage (see `run_family_searches`),
+    # so the parents are the earlier rows carrying that config hash. Not a guess, and not the
+    # whole registry.
+    parents = sorted(
+        (
+            other_id
+            for other_id, other in rows.items()
+            # Self-exclusion follows from the STRICT rank comparison: a row cannot outrank
+            # itself. An explicit `other_id != run_id` was here and no test could distinguish
+            # it, which makes it a claim nobody checks -- so the strictness is what a test
+            # pins instead (a same-stage sibling is not a parent).
+            if other["config_hash"] == row["config_hash"]
+            and other["stage_rank"] < row["stage_rank"]
+        ),
+        key=int,
+    )
+    # ALWAYS a string. An empty tuple is hollow by the dossier's own rule, so it would report
+    # "this run has no parents" as "nobody recorded the parents" -- the conflation this whole
+    # subsystem exists to refuse.
+    lineage = ", ".join(parents) if parents else "none: no earlier runs recorded for this config"
+
+    return {
+        "identity.family_graph": row["family"],
+        "identity.parent_experiment_ids": lineage,
+        "trade_context.universe_policy": row["universe_id"],
+        "trade_context.session_regime": row["session_mask"],
+        "trade_context.capital_range": row["capital_tier"],
+        "trade_context.broker": row["broker"],
     }
 
 
@@ -141,10 +200,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"certify-smoke FAILED: {exc}")
         return 1
 
-    evidence = evidence_from_run(report, code_version=sha)
+    run_evidence = evidence_from_run(report, code_version=sha)
     nomination = nominate(
         s5=cast("S5Result", report["s5"]),
-        evidence_for=lambda _: evidence,
+        # Per-candidate, merged with the per-run half. The registry knows which family, universe
+        # and venue THIS candidate ran under, and the run report does not.
+        evidence_for=lambda strategy_id: {
+            **run_evidence,
+            **evidence_from_registry(registry, strategy_id),
+        },
         provenance_for=lambda strategy_id: {"strategy_id": strategy_id},
         alpha_ir_for=lambda _: (),
         portfolio_ir_for=lambda _: (),
