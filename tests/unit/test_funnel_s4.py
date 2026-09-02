@@ -685,3 +685,54 @@ def test_the_ci_is_reproducible() -> None:
 
     values = [0.01 + 0.001 * ((t * 7) % 5 - 2) for t in range(240)]
     assert bootstrap_sharpe_ci(values) == bootstrap_sharpe_ci(values)
+
+
+# --------------------------------------- what the search knows about its own trades -----
+
+
+def test_the_horizon_names_its_unit() -> None:
+    """`1.0` in a field called `horizon` does not say bars, minutes or days.
+
+    The metric channel carries strings now, so the honest record is the one a reader cannot
+    misread — the same objection as recording a gross return in a field named `net_return`.
+    """
+    from pips.search.funnel import holding_horizon
+
+    assert holding_horizon(bar_interval_ns=60_000_000_000) == "1 bar (60s)"
+
+
+def test_the_horizon_reports_the_actual_bar_length() -> None:
+    from pips.search.funnel import holding_horizon
+
+    assert holding_horizon(bar_interval_ns=300_000_000_000) == "1 bar (300s)"
+
+
+def test_a_non_positive_interval_is_refused() -> None:
+    """A zero-length bar is not a horizon, and would print as `1 bar (0s)`."""
+    from pips.search.funnel import holding_horizon
+
+    with pytest.raises(ValueError, match="interval"):
+        holding_horizon(bar_interval_ns=0)
+
+
+def test_the_breakeven_edge_is_the_cost_of_a_round_trip() -> None:
+    """A position opened and closed within its holding bar breaks even when the move covers the
+    round trip exactly. That is the cost line, and stating it is not a new model."""
+    from pips.search.funnel import breakeven_edge
+
+    assert breakeven_edge(0.0005) == pytest.approx(0.0005)
+
+
+def test_a_zero_cost_line_has_no_breakeven_edge() -> None:
+    """Zero is arithmetically true and reads as "any edge at all will do", which is a claim
+    about implementation feasibility that a costless model cannot support."""
+    from pips.search.funnel import breakeven_edge
+
+    assert breakeven_edge(0.0) is None
+
+
+def test_a_negative_cost_line_is_refused() -> None:
+    from pips.search.funnel import breakeven_edge
+
+    with pytest.raises(ValueError, match="cost"):
+        breakeven_edge(-0.001)

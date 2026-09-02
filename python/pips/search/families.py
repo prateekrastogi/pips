@@ -37,7 +37,9 @@ from pips.alphas.dispatch import DRIVERS
 from pips.alphas.spec import load_alpha_spec
 from pips.search.funnel import (
     bootstrap_sharpe_ci,
+    breakeven_edge,
     gate_s4,
+    holding_horizon,
     pbo_for_configs,
     plateau_for_winner,
     report_card_economics,
@@ -299,6 +301,13 @@ def _search_one(
     metrics.update(report_card_economics(series, gross_turns, stamps[:returns_bars]))
     # NOT `interval` -- that name is already the bar interval in this scope, and mypy caught
     # the shadowing before it became a bug.
+    # What the search knows about its own trades: every position is opened and closed within
+    # one bar, so the horizon is that bar and the breakeven edge is the round trip it must cover.
+    metrics["horizon"] = holding_horizon(bar_interval_ns=interval)
+    edge = breakeven_edge(ROUND_TRIP_COST)
+    if edge is not None:
+        metrics["breakeven_edge"] = edge
+
     sharpe_ci = bootstrap_sharpe_ci(series)
     if sharpe_ci is not None:
         # An INTERVAL, which is why the metric channel was widened: recording the lower bound

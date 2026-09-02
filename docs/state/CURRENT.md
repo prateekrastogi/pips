@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 247 files · mypy --strict 247 files · 1857 pytest · clippy clean · cargo test ok
+  ruff 247 files · mypy --strict 247 files · 1865 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -191,18 +191,18 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    §11.4 *Tripwires — auto-flags in every report*; the certification table gives no number.
    Setting it = a `gates.yaml` row + enforcing code + an ADR in one commit.
 2. **Backfill.** PBO 0.81, cost_1_5x -2.16, delay_1_bar -1.45, bootstrap CI (-3.51, -2.04): the
-   gates now say with numbers that two synthetic random walks are not a strategy. Whether they
+   gates say with numbers that two synthetic random walks are not a strategy. Whether they
    should DROP candidates rather than score them wants real data first. External Breeze calls on
    a metered budget with the owner's credentials; 100k calls/day, 32 parallel.
-3. **Nothing in the remaining 21 is certification code.** They are: capacity and operations (the
-   order-budget planner and session policy, neither of which exists), fill degradation and
-   outage/restart (M14's event engine), `outer_folds` and `universe_sensitivity` (the nested
-   walk-forward that nothing calls), `decision.rationale`/`outcome` (a human at certification),
-   `lockbox_result` (filled by the run itself), `parameter_plateau` where the winner sits at a
-   grid edge, `breakeven_edge`, `trade_context.horizon` and `side_product`. Each needs a
-   subsystem or a decision, not more wiring here.
+3. **The remaining 19 need a subsystem or a decision — verified field by field, not recalled.**
+   capacity (4) needs a fixed-cost model; operations (5) needs a session policy that does not
+   exist — `plan_flatten` takes its cutoff as a parameter; fill degradation and outage/restart
+   need M14's event engine; `outer_folds` and `universe_sensitivity` need the nested
+   walk-forward nothing calls; `decision.rationale`/`outcome` a human writes; `lockbox_result`
+   the certification run fills; `parameter_plateau` is undefined for an edge winner;
+   `side_product` is a broker-feasibility question, not a property of the search.
 
-`certify-smoke`: **0 certified, 21 unsupplied**, ~9 minutes.
+`certify-smoke`: **0 certified, 19 unsupplied**, ~9 minutes.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

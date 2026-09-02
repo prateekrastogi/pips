@@ -114,6 +114,8 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     MetricSource("orders_per_day", "economics.orders_per_day"),
     MetricSource("cvar", "economics.cvar"),
     MetricSource("bootstrap_ci", "stability.bootstrap_ci"),
+    MetricSource("horizon", "trade_context.horizon"),
+    MetricSource("breakeven_edge", "economics.breakeven_edge"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(

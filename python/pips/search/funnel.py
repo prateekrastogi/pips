@@ -57,7 +57,9 @@ __all__ = [
     "S4Report",
     "SpaReport",
     "bootstrap_sharpe_ci",
+    "breakeven_edge",
     "gate_s4",
+    "holding_horizon",
     "pbo_for_configs",
     "plateau_for_winner",
     "report_card_economics",
@@ -440,3 +442,37 @@ def bootstrap_sharpe_ci(series: Sequence[float]) -> tuple[float, float] | None:
     low = sharpes[max(0, min(len(sharpes) - 1, int(tail * len(sharpes))))]
     high = sharpes[max(0, min(len(sharpes) - 1, int((1.0 - tail) * len(sharpes))))]
     return (low, high)
+
+
+def holding_horizon(*, bar_interval_ns: int) -> str:
+    """§12.2's `trade_context.horizon`, with its unit attached.
+
+    Every position this search evaluates is opened and closed within one bar, so the horizon is
+    one bar — and `1.0` in a field called `horizon` does not say bars, minutes or days. The
+    metric channel carries strings, so the record is the one a reader cannot misread. Same
+    objection as a gross return in a field named `net_return`.
+    """
+    if bar_interval_ns <= 0:
+        raise ValueError(
+            f"bar_interval_ns must be positive, got {bar_interval_ns}. A zero-length bar is not "
+            "a horizon, and would be recorded as `1 bar (0s)`."
+        )
+    return f"1 bar ({bar_interval_ns // 1_000_000_000}s)"
+
+
+def breakeven_edge(cost_per_round_trip: float) -> float | None:
+    """§12.2's `economics.breakeven_edge`: the move a trade must make to cover its own cost.
+
+    A position opened and closed within its holding bar breaks even exactly when the move covers
+    the round trip, so the breakeven edge IS the cost line. Stating it is not a new model.
+
+    ``None`` at a zero cost line: arithmetically the answer is zero, and zero reads as "any edge
+    at all will do" — a claim about implementation feasibility that a costless model cannot
+    support.
+    """
+    if cost_per_round_trip < 0:
+        raise ValueError(
+            f"cost_per_round_trip must not be negative, got {cost_per_round_trip}: a negative "
+            "cost would give a negative breakeven edge, i.e. a trade that profits by existing."
+        )
+    return cost_per_round_trip or None
