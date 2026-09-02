@@ -41,10 +41,24 @@
   threshold: {dsr_min: 0.95, path: "economics.dsr", value: 0.95, direction: at_least}
   enforced_by: "python/pips/search/funnel.py::gate_s4"
   evidence: "docs/reports/dossiers/<bundle_id>.md"
-  code: null
-  tests: []
-  status: planned
+  code: "python/pips/search/funnel.py"
+  tests: ["tests/unit/test_funnel_s4.py"]
+  status: building
   owner_milestone: M18
+  # THE VERDICT READS N = M, NEVER N = M_erank. Understating the trial count RAISES the DSR and
+  # M_erank <= M always, so deflating by the effective count is the flattering direction. Both
+  # ends are reported (§3.6 asks for the bracket) and only the conservative one decides -- pinned
+  # by a fixture where a candidate scores 0.874 at M and 0.958 at M_erank, straddling the bar.
+  #
+  # N IS EVERY TRIAL EVER VIEWED, not the candidates in front of the gate. On the smoke fixture
+  # that is 403 trials against an effective rank of 2.99, because only three runs preserved
+  # returns. A gate deflating by "how many am I looking at now" would use 3.
+  #
+  # A candidate that cannot be scored is NAMED and refused: no returns, too few observations, or
+  # a flat series whose Sharpe is undefined. Never dropped, never admitted.
+  #
+  # `building`, not `enforced`: nothing calls it yet. Wiring it into `run_family_searches` is
+  # what puts `economics.dsr` into a dossier, and it is the next step rather than this one.
 
 - id: G-TDD-01
   title: "Test-first: no commit adds production code before a covering test"
