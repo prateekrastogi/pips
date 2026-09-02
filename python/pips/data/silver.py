@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import polars as pl
 
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
+from pips.data.qc.checks import Severity, check_bar_sanity, check_monotonic_labels
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -142,6 +143,37 @@ def promote_bronze(
             continue
 
         bars = normalize_candles(payload, trade_date, _INTERVAL_MINUTES)
+        # THE CHECKS THIS PATH CAN RUN ITSELF. `check_bar_sanity` has caught a negative price
+        # since M5, but QC is a separate pass that nothing invokes -- so promotion wrote
+        # impossible bars into the panel with `quarantined: 0`, and downstream they poison every
+        # return, every cross-sectional z and every cost line that touches them while looking
+        # like data the whole way.
+        #
+        # Only the checks that need NOTHING BEYOND THE RECORD belong here. `check_session_
+        # coverage` would call a two-bar record truncated -- correctly, in a QC pass that knows
+        # from the backfill manifest that the fetch succeeded; promotion knows no such thing and
+        # would be quarantining partial records on a guess. Same for the ratio jump, which needs
+        # the previous session and the corporate-action master.
+        #
+        # The record is quarantined WHOLE rather than having the bad bar dropped: a silent
+        # repair hides the thing it repairs, and a record with one impossible bar is not
+        # trustworthy in its others.
+        failures = [
+            f
+            for f in (*check_bar_sanity(bars), *check_monotonic_labels(bars))
+            if f.severity is Severity.QUARANTINE
+        ]
+        if failures:
+            detail = "; ".join(f"{f.check}: {f.detail}" for f in failures[:3])
+            more = "" if len(failures) <= 3 else f" (and {len(failures) - 3} more)"
+            quarantined.append(
+                Quarantined(
+                    str(path),
+                    f"{len(failures)} bar(s) fail the checks promotion runs -- {detail}{more}. "
+                    "Refusing the record whole: dropping the bad bars would be a silent repair.",
+                )
+            )
+            continue
         if not bars:
             quarantined.append(
                 Quarantined(str(path), f"no bars survived normalization for {vendor_code}")

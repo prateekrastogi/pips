@@ -26,8 +26,10 @@ from pathlib import Path
 
 import pytest
 
+from pips.data import silver as silver_module
 from pips.data.pit.instruments import Instrument, InstrumentMaster
 from pips.data.pit.store import PitStore
+from pips.data.qc.checks import Finding, Severity
 from pips.data.silver import promote_bronze
 from pips.search.silver_panel import load_silver_panel
 
@@ -35,8 +37,8 @@ KNOWN_ON = date(2026, 8, 29)
 TRADE_DAY = date(2026, 8, 26)
 
 
-def candle(minute: int, close: float = 1309.6) -> dict[str, object]:
-    return {
+def candle(minute: int, close: float = 1309.6, **over: float) -> dict[str, object]:
+    row = {
         "datetime": f"2026-08-26 {9 + (15 + minute) // 60:02d}:{(15 + minute) % 60:02d}:00",
         "open": 1311.1,
         "high": 1314.6,
@@ -46,6 +48,8 @@ def candle(minute: int, close: float = 1309.6) -> dict[str, object]:
         "stock_code": "RELIND",
         "exchange_code": "NSE",
     }
+    row.update(over)
+    return row
 
 
 def write_bronze(root: Path, payload: dict[str, object], symbol: str = "RELIND") -> Path:
@@ -499,3 +503,91 @@ def test_a_capture_with_no_request_says_so(tmp_path: Path, master: InstrumentMas
 
     assert [q.source for q in report.quarantined] == [str(path)]
     assert "'request'" in report.quarantined[0].reason, report.quarantined[0].reason
+
+
+# ------------------------------------------------------ the checks promotion can run --
+
+
+def test_an_impossible_bar_does_not_reach_the_panel(
+    tmp_path: Path, master: InstrumentMaster
+) -> None:
+    """A negative price promoted cleanly into silver, and nothing noticed.
+
+    `check_bar_sanity` has caught this since M5 — but QC is a separate pass nobody runs, so
+    promotion wrote ₹-5 into the panel with `quarantined: 0`. Downstream it poisons every
+    return, every cross-sectional z and every cost line that touches it, and it looks like
+    data the whole way.
+
+    Promotion has already normalised the bars by this point, so the per-record checks cost
+    nothing extra here. The record is quarantined WHOLE rather than having the bad bar dropped:
+    a silent repair hides the thing it repairs, and a record with one impossible bar is not
+    trustworthy in its other bars either.
+    """
+    write_bronze(tmp_path / "bronze", ok([candle(0), candle(1, close=-5.0), candle(2)]))
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.rows == []
+    assert report.files_promoted == 0
+    assert len(report.quarantined) == 1
+    assert "bar_sanity" in report.quarantined[0].reason
+    assert not (tmp_path / "silver" / "bars_1m.parquet").exists()
+
+
+def test_a_bar_whose_high_is_below_its_open_is_also_refused(
+    tmp_path: Path, master: InstrumentMaster
+) -> None:
+    """Impossible in a different way, and just as ordinary-looking once written."""
+    write_bronze(tmp_path / "bronze", ok([candle(0), candle(1, high=90.0)]))
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+    assert report.files_promoted == 0
+    assert "bar_sanity" in report.quarantined[0].reason
+
+
+def test_out_of_order_labels_are_refused(tmp_path: Path, master: InstrumentMaster) -> None:
+    """Duplicates and reordering both corrupt every window computed over the panel."""
+    rows = [candle(0), candle(1), candle(1)]
+    write_bronze(tmp_path / "bronze", ok(rows))
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+    assert report.files_promoted == 0
+    assert "label_order" in report.quarantined[0].reason
+
+
+def test_a_short_session_still_promotes(tmp_path: Path, master: InstrumentMaster) -> None:
+    """The line between the checks promotion runs and the ones only QC can.
+
+    `check_session_coverage` would call a two-bar record a truncated response — correctly, in a
+    QC pass that knows from the backfill manifest that the fetch succeeded. Promotion knows no
+    such thing, so running it here would quarantine every partial record on a guess. Only the
+    checks that need nothing beyond the record itself belong on this path, and this test is
+    what stops the others from drifting onto it.
+    """
+    write_bronze(tmp_path / "bronze", ok([candle(0), candle(1)]))
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+    assert report.files_promoted == 1
+    assert report.bars_written == 2
+    assert report.quarantined == []
+
+
+def test_a_warn_finding_does_not_stop_a_promotion(
+    tmp_path: Path, master: InstrumentMaster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The severity filter is dormant, not absent — every check ships QUARANTINE today.
+
+    Which is exactly when it is cheap to pin: the first WARN check anyone adds would otherwise
+    start refusing whole records over an advisory finding, and it would look like the check
+    working. The same distinction `[C-QC-02]` pins one layer up, so the two paths cannot drift
+    into disagreeing about what a WARN means.
+    """
+    monkeypatch.setattr(
+        silver_module,
+        "check_bar_sanity",
+        lambda bars: [Finding("noticed", Severity.WARN, "worth a look, not a refusal")],
+    )
+    write_bronze(tmp_path / "bronze", ok([candle(0), candle(1)]))
+
+    report = promote_bronze(tmp_path / "bronze", tmp_path / "silver", master, known_on=KNOWN_ON)
+
+    assert report.files_promoted == 1, "an advisory finding does not refuse the record"
+    assert report.quarantined == []
+    assert report.bars_written == 2

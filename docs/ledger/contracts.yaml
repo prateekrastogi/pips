@@ -1069,6 +1069,21 @@
   # that dropped it would silently re-resolve every historical panel against today's corrected
   # master, and the run that saw the old mapping becomes irreproducible.
   #
+  # AND AN IMPOSSIBLE BAR IS THE FIFTH. `check_bar_sanity` has caught a negative price since
+  # M5, but QC is a separate pass that nothing invokes, so promotion wrote impossible bars into
+  # the panel with `quarantined: 0` -- and downstream they poison every return, every
+  # cross-sectional z and every cost line that touches them, looking like data the whole way.
+  # Promotion has already normalised the bars, so the per-record checks cost nothing here.
+  #
+  # ONLY the checks that need nothing beyond the record. `check_session_coverage` would call a
+  # two-bar record truncated -- correctly, in a QC pass that knows from the backfill manifest
+  # that the fetch succeeded; promotion knows no such thing and would be quarantining partial
+  # records on a guess. Same for the ratio jump, which needs the previous session and the
+  # corporate-action master. That line is held by a test, not by good intentions.
+  #
+  # The record is refused WHOLE rather than having its bad bars dropped: a silent repair hides
+  # the thing it repairs, and a record with one impossible bar is not trustworthy in its others.
+  #
   # A RECORD IT CANNOT READ IS THE FOURTH REASON, not an exception. Bronze will not hold one
   # shape forever -- a range-spanning capture, which is what a cheap universe seed needs, has no
   # single trade_date -- and a bare KeyError took the whole run down, discarding every reason
