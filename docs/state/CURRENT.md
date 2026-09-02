@@ -104,7 +104,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ```
 make ci -> ci: green
   ruff 263 files · mypy --strict 263 files · 2082 pytest · clippy clean · cargo test ok
-  determinism bit-identical · ledger-check 59 rows (planned=8 building=27 enforced=24)
+  determinism bit-identical · ledger-check 63 rows (planned=8 building=28 enforced=27)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
   Merkle duplicates odd node       -> killed (test_every_index_proves_against_the_root[9])
@@ -272,7 +272,13 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    dimension except the stable-core `k`, whose column holds the rule rather than numbers.
 3. **Not decided, per the owner: whether the gates FILTER rather than score.** Waits until the
    gates have real data.
-4. **QC is not wired into anything.** `[C-QC-01]`/`[C-QC-02]` now exist and both say why they
+4. **Two subsystems are built and nothing runs them.** `[C-M4-04]`: the WS capture writer
+   appears in its own module and its own test and nowhere else — no CLI command, no Make
+   target, no compose service — and "forward capture from day one" is the milestone's own
+   phrase, so every session that passes is spread and depth that cannot be recovered later.
+   The same is true of QC below. Both are pipeline changes rather than code defects.
+
+5. **QC is not wired into anything.** `[C-QC-01]`/`[C-QC-02]` now exist and both say why they
    are `building`: `promote_bronze` does not consult QC, `make ci` does not run it, and no
    compose service or Jenkins stage invokes it — the only entry point is a human typing
    `make qc`, so **bars reach the panel with QC never having run**. Making promotion depend on

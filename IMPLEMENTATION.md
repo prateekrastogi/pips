@@ -768,15 +768,30 @@ human.
   WS capture write to VM volumes, never to a laptop; harvest-first: the harvest map's Breeze
   donors — token flow, fetchers, WS capture — are vendored/ported before any new connector
   code is written):
-  session-token bootstrap; historical v2 fetcher with resumable budgeter reading
+  session-token bootstrap; historical v2 fetcher with resumable budgeter `[C-M4-01]` reading
   `config/breeze.yaml` (**100,000 calls/day, 32 parallel fetches** per ADR-0012; per-minute
-  throttle conservative until measured; 1,000 candles/call). The 1m priority campaign
-  (U100/U150/U300 ≈ 28k–85k calls for 3y) now fits **inside a single day's budget** rather
-  than the 6–17 quota-days originally planned, so it is bounded by wall-clock and politeness,
-  not quota — the budgeter is still required, because a fetch interrupted at call 60,000 must
-  resume, not restart. 1s only for a predeclared liquid subset; **forward WS capture from day one** (ticks/quotes/depth →
-  bronze with receive timestamps, reconnect + gap log). *Verify:* recorded-cassette tests; no
-  live calls in CI; backfill runbook.
+  throttle conservative until measured; 1,000 candles/call). **The campaign marks done only
+  what it has an answer for** `[C-M4-02]`, and **states its cost before spending it**
+  `[C-M4-03]`.
+
+  *Costs corrected 2026-09-03, and the correction is the point.* The 1m priority campaign was
+  written up at ≈28k–85k calls for 3y, which is the cost of a **range** fetch — one call
+  spanning many sessions — and the code fetched one call per symbol-DAY. Both figures are now
+  computed by `plan_campaign` rather than asserted:
+
+  | U300 × 3y at 1m | calls | quota-days at 90k |
+  |---|---|---|
+  | per symbol-day (what `run_backfill` does) | 234,600 | 2.6 |
+  | per range (`run_range_backfill`, `[C-M4-02]`) | 88,200 | 0.98 |
+
+  So "inside a single day's budget" holds **only for a range fetch**, which exists as of
+  2026-09-03 and whose multi-day window is **unverified against the live API** — `ist_window`
+  exists because Breeze silently CLIPS a UTC window rather than erroring. Either way the
+  budgeter is required, because a fetch interrupted at call 60,000 must resume, not restart.
+
+  1s only for a predeclared liquid subset; **forward WS capture from day one** `[C-M4-04]`
+  (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log). *Verify:*
+  recorded-cassette tests; no live calls in CI; backfill runbook.
 - **M5 QC + quarantine** `[C-QC-01]`: OHLC sanity, calendar gaps, spike/decimal detection, CA
   cross-check, explicit stale/missing states — quarantine retaining the record together with
   its reason, and bronze never modified `[C-QC-02]`. *Verify:* seeded corrupt fixtures caught;

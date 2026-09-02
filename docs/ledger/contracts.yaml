@@ -1147,3 +1147,119 @@
   # which is a pipeline change and not a test.
   status: building
   owner_milestone: M5
+
+- id: C-M4-01
+  title: "Resumable call budgeter: paced under the published cap, and never assumes it spent nothing"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/budget.py"
+  tests:
+    - "tests/unit/test_breeze_budget.py"
+  # M4 had NO ledger rows until now -- no contract row's `code` was under data/breeze/ at all,
+  # so the backfill, the budgeter, the capture writer and the campaign planner were ledgered
+  # nowhere. This is the first of four.
+  #
+  # THE QUOTA IS DATA, NOT CODE (rule 6). daily_cap, per_minute and max_parallel come from
+  # config/breeze.yaml; an entitlement that changed once will change again, and a constant in
+  # code is the wrong place to notice. Paced 10% UNDER the published cap, because SAL-0003
+  # records real enforcement biting before the published number.
+  #
+  # NOT KNOWING WHAT WE SPENT MUST NOT READ AS ZERO. An unreadable state file, and a readable
+  # one missing `calls_made`, both assume the day is spent: stopping early is recoverable
+  # tomorrow, double-spending is not recoverable at all. The state is written atomically
+  # (`pips.core.atomic`) because it is rewritten once per call -- 90,000 windows a day.
+  #
+  # `enforced` covers what the row claims -- the budgeter is complete, tested and unbypassable
+  # from inside. It does NOT claim that no call escapes a budget: `run_backfill` accepts any
+  # fetcher, which is how the tests supply one. Wiring that shut is a pipeline change.
+  status: enforced
+  owner_milestone: M4
+
+- id: C-M4-02
+  title: "A backfill marks done only what it has an answer for, at symbol-day or range grain"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/backfill.py"
+  tests:
+    - "tests/unit/test_backfill.py"
+    - "tests/unit/test_range_backfill.py"
+  # The donor's best idea (SAL-0004) is what it refuses to mark done, and pips draws one
+  # further distinction the classification work at M4 made available: data returned and EMPTY
+  # are answers and are marked; a transient error is not and retries; a RATE LIMIT is not, and
+  # stops the run. That last row is the one that matters -- Breeze sends a rejection as HTTP
+  # 200 with an empty body, so marking it done writes a permanent hole no later QC can tell
+  # from a quiet market, and unlike a crash it leaves nothing to notice.
+  #
+  # The table lives once, in `_decide`, because there are TWO fetch shapes. RETRY is its
+  # default branch and that is the safety property: a fifth ResponseKind added later is retried
+  # rather than marked done, since unmarked costs a call and marked-wrongly costs a hole.
+  #
+  # TWO GRAINS, deliberately. Per symbol-day is right for 1-minute data -- 375 candles fill a
+  # call and the manifest makes a resume granular. Per RANGE is right for anything coarser,
+  # where the per-day toll is paid whatever the interval: three years of daily bars costs 782
+  # calls per symbol and returns one candle for each, against ONE call for the range. That gap
+  # is the entire cost of a universe seed. A range key carries its interval as well as its
+  # span, or a daily seed would mark a 1-second seed done over the same dates.
+  #
+  # UNVERIFIED, and the row does not claim otherwise: the multi-day window has never been tried
+  # against the live API. `ist_window` exists because SAL-0002 found Breeze reads these as IST
+  # and SILENTLY CLIPS a UTC window rather than erroring, so a three-year request may clip too,
+  # or cap below the documented 1,000 candles -- and it would surface as missing bars, not as a
+  # failure. One call for one symbol settles it. `enforced` is about the marking rules, which
+  # are complete and tested; it is not a claim about the vendor.
+  status: enforced
+  owner_milestone: M4
+
+- id: C-M4-03
+  title: "A campaign states its cost before spending it, for the fetch shape it will issue"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/campaign.py"
+  tests:
+    - "tests/unit/test_backfill_cli.py"
+  # A backfill that starts fetching and works out later how many calls it needed can burn a
+  # day's quota on a range nobody meant to request, and that mistake is one typo away: a date
+  # range is two strings.
+  #
+  # COSTED FOR THE SHAPE THIS CODE ISSUES, which is the correction that earned this row. The
+  # same seeding cost was written down wrong twice in two days -- once in IMPLEMENTATION.md at
+  # the vendor's range allowance while the code fetched per symbol-day, once in CURRENT.md the
+  # same way -- both times in prose rather than in code anyone could run. `estimated_calls` now
+  # costs the per-symbol-day toll and `estimated_calls_if_ranged` states the vendor allowance,
+  # with `describe()` printing the gap whenever they differ. An unknown interval is REFUSED
+  # rather than costed as a minute, because a typo'd `1min` would inherit the 1-minute model
+  # and under-state a 1-second plan by 23x.
+  #
+  # `--dry-run` opens no session and reaches no fetcher, and there is a control test asserting
+  # a real run does -- so a `main` that fetched nothing at all could not pass both. The exit
+  # code is the scheduler's resume signal: a rate-limited stop exits 1 (exiting 0 would tell a
+  # scheduler it succeeded, so it stops re-running); a budget stop exits 0, because spending
+  # the day's quota is the plan working. The exit code therefore cannot carry that difference
+  # and the MESSAGE does -- a run that stopped with work outstanding must not say "campaign
+  # complete."
+  status: enforced
+  owner_milestone: M4
+
+- id: C-M4-04
+  title: "Forward capture makes its own gaps visible: a disconnect is a record in the stream"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/capture.py"
+  tests:
+    - "tests/unit/test_ws_capture.py"
+  # From scratch and pre-authorised: SAL-0025 is NONE_FOUND after a full sweep of every ref in
+  # ../past. No capture code exists anywhere in the harvest source.
+  #
+  # THE FAILURE THIS PREVENTS IS A SILENT HOLE. A capture service that reconnects and resumes
+  # produces an archive whose gaps are invisible, and months later nobody can tell a quiet
+  # market from an outage. So a disconnect writes a GAP record INTO THE STREAM, carrying
+  # `messages_missed: null` -- the count is unknowable after the fact, and a zero would assert
+  # that nothing was missed. Null is the honest value and a reader can act on it.
+  #
+  # JSONL so a kill mid-write costs one record rather than the file -- and the partial line is
+  # closed at startup, because "a" mode would otherwise append onto it and fuse the fragment
+  # with the first record after the restart, making ONE lost record silently become two.
+  #
+  # `building`: NOTHING RUNS IT. `CaptureWriter` appears in its own module and its own test and
+  # nowhere else -- no CLI command, no Make target, no compose service. "Forward capture from
+  # day one" is the milestone's phrase and day one has not started, so every session that
+  # passes is spread and depth that cannot be recovered later. Enforced when something runs it.
+  status: building
+  owner_milestone: M4
+
