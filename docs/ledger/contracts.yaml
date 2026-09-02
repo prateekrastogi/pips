@@ -475,6 +475,38 @@
   # spread, Amihud and gap-rate all need bars this project does not have yet, which is the
   # circularity the backfill runs into.
 
+- id: C-UNIV-02
+  title: "Daily eligibility gates: decided before the open, and unknown is not eligible"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/eligibility.py"
+  tests:
+    - "tests/unit/test_eligibility.py"
+  status: building
+  owner_milestone: M7
+  # §4.2 states the causality rule outright: "Intraday causal liquidity gate may veto a trade,
+  # but the completed day's volume cannot retrospectively add a stock to that day's universe."
+  # A name admitted on the strength of the volume it went on to trade is a name selected by its
+  # own outcome, and every measurement over that panel inherits it. So EligibilityInputs carries
+  # NOTHING from the session being decided, and a test asserts the dataclass has nowhere to
+  # receive it -- the same construction as `[C-LBOX-01]` taking no dates from its caller.
+  #
+  # UNKNOWN IS NOT ELIGIBLE. A flag nobody could resolve before the open -- a suspension feed
+  # that did not arrive, a corporate action whose adjustment handling is uncertain -- leaves the
+  # name OUT. Defaulting to eligible admits names on the strength of a missing file, which is
+  # the flattering direction and produces a universe indistinguishable from one that qualified.
+  # This is the live case, not a hypothetical: the vendor scrip file has a blank DateOfListing
+  # on all 5,873 rows, so `sessions_listed` is unknown for every name today.
+  #
+  # INELIGIBLE AND UNDETERMINED ARE REPORTED APART. One is a fact about the security, the other
+  # a gap in the feed, and collapsing them sends the reader to argue with an exchange about a
+  # file that never arrived. Every gate is evaluated, not the first that fails.
+  #
+  # `building`: the flags are consumed but nothing PRODUCES them. Suspension, T2T status,
+  # symbol-change resolution and corporate-action certainty all need archival feeds this project
+  # does not have -- and §4.2's SURVIVORSHIP AUDIT box is explicit that until listings,
+  # delistings, token changes, corporate actions and daily eligibility have adequate archival
+  # coverage, every result is labelled survivorship-biased and no candidate may be promoted.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

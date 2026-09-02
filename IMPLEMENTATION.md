@@ -793,7 +793,11 @@ human.
   A symbol missing a component is **excluded, never defaulted** — a missing spread read as zero
   makes an illiquid name look tight;
   N ∈ {50,100,150,300}; lookback {20,40,60}d; weekly/monthly refresh; stable-core hysteresis;
-  eligibility gates (series, suspension, MIS/short per capability snapshot, history, bands).
+  eligibility gates `[C-UNIV-02]` (series, suspension, MIS/short per capability snapshot,
+  history, bands) — decided BEFORE the session opens, because §4.2 is explicit that *the
+  completed day's volume cannot retrospectively add a stock to that day's universe*; and
+  **unknown is not eligible**, since defaulting a missing feed to a pass admits names on the
+  strength of a file that never arrived.
   *Verify:* PIT test; churn ≤ target; survivorship label logic.
 - **M8 feature store + diurnal profiles**: rolling stats via kernel binding; same-clock
   volume baselines; U-shape vol normalization. *Verify:* incremental == full recompute.
