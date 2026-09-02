@@ -329,3 +329,53 @@ def test_a_measurement_does_not_hash_like_a_plain_dict() -> None:
         economics={"dsr": {"value": 0.97, "threshold": 0.95, "direction": "at_least"}}
     )
     assert as_measurement.dossier_hash() != as_dict.dossier_hash()
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_the_hash_separates_the_value_from_the_bar_it_was_held_to() -> None:
+    """Moving a gate's bar must move the dossier hash.
+
+    `bind_dossier` ties a dossier to a SIGNED bundle by this hash. If the bar were outside it,
+    a certified strategy's threshold could be relaxed after signing and the signature would
+    still verify — rule 10's failure mode wearing a signature, and undetectable by the check
+    built to detect exactly this.
+    """
+    strict = build_dossier({"economics": {"dsr": Measurement(0.9, 0.95, "at_least")}})
+    lax = build_dossier({"economics": {"dsr": Measurement(0.9, 0.50, "at_least")}})
+    assert strict.dossier_hash() != lax.dossier_hash()
+
+
+def test_the_hash_separates_the_direction_of_a_gate() -> None:
+    """The same argument for the other half of a bar.
+
+    `at_most` read as `at_least` turns the worst PBO in the run into a pass — the constructor
+    refuses a missing direction for that reason, and the hash has to carry it for the same one.
+    """
+    at_least = build_dossier({"stability": {"pbo": Measurement(0.5, 0.5, "at_least")}})
+    at_most = build_dossier({"stability": {"pbo": Measurement(0.5, 0.5, "at_most")}})
+    assert at_least.dossier_hash() != at_most.dossier_hash()
+    assert at_least.sections["stability"]["pbo"].passed()
+    assert at_most.sections["stability"]["pbo"].passed(), (
+        "a value equal to its bar passes either way, so the verdict cannot tell these apart — "
+        "only the hash does"
+    )
+
+
+def test_a_plain_dict_cannot_impersonate_a_measurement_in_the_hash() -> None:
+    """Why the canonical form is tagged.
+
+    A hand-written dict carrying value/threshold/direction looks like a gate to a reader and is
+    not one to `certify` — it has no `passed()`, so `gate_reasons` rejects it as ungated. The
+    tag keeps the two apart in the hash as well, so a dossier cannot be rewritten from a real
+    Measurement into a lookalike while still binding to the bundle that was signed over it.
+    """
+    real = build_dossier({"economics": {"dsr": Measurement(0.9, 0.5, "at_least")}})
+    lookalike = build_dossier(
+        {"economics": {"dsr": {"value": 0.9, "threshold": 0.5, "direction": "at_least"}}}
+    )
+    assert real.dossier_hash() != lookalike.dossier_hash()
+    assert not hasattr(lookalike.sections["economics"]["dsr"], "passed"), (
+        "and the lookalike is not a gate: certify refuses it as ungated"
+    )
