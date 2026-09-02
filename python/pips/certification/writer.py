@@ -116,6 +116,10 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     MetricSource("bootstrap_ci", "stability.bootstrap_ci"),
     MetricSource("horizon", "trade_context.horizon"),
     MetricSource("breakeven_edge", "economics.breakeven_edge"),
+    # No threshold: no bar is declared for concentration anywhere (ADR-0014), so it is recorded
+    # as a plain number and `[C-CERT-01]` refuses to certify on it. Measured but ungated is the
+    # honest state, and it is not the same as unmeasured.
+    MetricSource("concentration", "stability.concentration"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(

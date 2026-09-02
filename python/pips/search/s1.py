@@ -406,7 +406,7 @@ def _pnl_by_delay(
     spec: AlphaSpec,
     compute_fn: ComputeFn = compute,
     delays: Sequence[int] = (0,),
-) -> dict[int, tuple[list[float], list[int]]]:
+) -> dict[int, tuple[list[float], list[int], dict[str, tuple[float, int]]]]:
     """Gross PnL and turnover for several entry delays, from ONE pass over the bars.
 
     The decision is made from the as-of view at bar *i* whatever the delay; only which prices
@@ -431,14 +431,16 @@ def _pnl_by_delay(
                 "improve every result it touched."
             )
 
-    out = {d: ([0.0] * (len(stamps) - 1), [0] * (len(stamps) - 1)) for d in delays}
+    out: dict[int, tuple[list[float], list[int], dict[str, tuple[float, int]]]] = {
+        d: ([0.0] * (len(stamps) - 1), [0] * (len(stamps) - 1), {}) for d in delays
+    }
     for i, ts in enumerate(stamps[:-1]):
         view = AsOfPanelView(panel, decision_ts=ts)
         forecasts = list(compute_fn(view, params, spec))
         if not forecasts:
             continue
         for delay in delays:
-            gross, turns = out[delay]
+            gross, turns, per_name = out[delay]
             entry_index, exit_index = i + delay, i + delay + 1
             if exit_index >= len(stamps):
                 continue
@@ -448,8 +450,14 @@ def _pnl_by_delay(
                 if here in (None, 0) or nxt is None:
                     continue
                 direction = 1.0 if float(forecast.expected_return_bps) >= 0 else -1.0
-                gross[i] += direction * (nxt - here) / here
+                realised = direction * (nxt - here) / here
+                gross[i] += realised
                 turns[i] += 1
+                # Attributed in the SAME pass. Whether one name dominates the P&L is a
+                # certification question (§12.2), and a second pass to answer it would re-run
+                # the alpha for a number the first pass already had in hand.
+                had, count = per_name.get(forecast.instrument_id, (0.0, 0))
+                per_name[forecast.instrument_id] = (had + realised, count + 1)
     return out
 
 
@@ -470,9 +478,10 @@ def _pnl_and_turns(
     re-running the panel three times for two subtractions made the milestone's own Verify four
     times slower than the thing it verifies.
     """
-    return _pnl_by_delay(
+    gross, turns, _per_name = _pnl_by_delay(
         panel, closes, stamps, params, spec, compute_fn=compute_fn, delays=(delay_bars,)
     )[delay_bars]
+    return gross, turns
 
 
 def run_s1_search(

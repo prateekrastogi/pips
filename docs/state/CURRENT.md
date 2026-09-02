@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 247 files · mypy --strict 247 files · 1865 pytest · clippy clean · cargo test ok
+  ruff 247 files · mypy --strict 247 files · 1873 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -187,32 +187,32 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 
 ## Next 3 actions — both remaining items are the owner's
 
-*Regression watch 2026-09-02: deploy rail clean (0 errors/6h, current at `cf6a298`), Jenkins green #137-#168, suite 1865. Nothing drifted.*
+**`certify-smoke`: 0 certified, 18 unsupplied.** Six of seven hard gates compute and all six
+agree: DSR 0.229, SPA p 0.844, PBO 0.814, plateau 0.903, delay_1_bar -1.45, cost_1_5x -2.16,
+bootstrap CI (-3.51, -2.04). The seventh, concentration, is now **measured but ungated**.
 
-**M20's certification chain is as complete as it can be without a decision.** Six of seven hard
-gates compute on fixtures and all six agree: DSR 0.229, SPA p 0.844, PBO 0.814, plateau 0.903,
-delay_1_bar -1.45, cost_1_5x -2.16, bootstrap CI (-3.51, -2.04). `certify-smoke` reports
-**0 certified, 19 unsupplied** — and none of the 19 is certification code.
+1. **`stability.concentration` — a bar, and the numbers now exist to set one against.** The
+   measurement landed this tick: the largest single name's share of net P&L, costs charged to
+   the name that traded. It reaches `[C-CERT-01]` as a plain number and is refused as ungated,
+   which is honest and is not the same as unmeasured. The figures the blueprint gives (>40% from
+   one name, >30% of PnL from <5% of days) appear only under §11.4 *Tripwires — auto-flags in
+   every report*: a tripwire fires on a running strategy, a gate refuses one that has never
+   traded. Setting it = a `gates.yaml` row + enforcing code + an ADR, in one commit.
+2. **The backfill — and it blocks more than volume.** The panel is 5 days and 2 synthetic
+   symbols. M15's nested walk-forward needs 168 trading days, so `outer_folds` is data-blocked;
+   `universe_sensitivity` perturbs a universe that does not exist with two names; six of eight
+   winners sit at a grid **edge**, which is what an argmax does on noise and is exactly where
+   `parameter_plateau` is undefined. External Breeze calls on a metered budget with the owner's
+   credentials; 100k calls/day, 32 parallel.
+3. **Then: should the gates FILTER rather than score?** They compute and report but do not drop
+   candidates. On noise every candidate fails, so filtering would empty the ensemble — correct,
+   and it changes every downstream report. Worth deciding once the gates have real data.
 
-1. **`stability.concentration` — a threshold decision.** The last hard gate with no declared bar.
-   Its figures appear only under §11.4 *Tripwires — auto-flags in every report*; the
-   certification table gives no number. A tripwire fires on a running strategy; a gate refuses
-   one that has never traded. Setting it = a `gates.yaml` row + enforcing code + an ADR, in one
-   commit; the ledger-agreement test will hold them together.
-2. **The backfill — and it blocks more than data volume.** The fixture panel is **5 days and 2
-   synthetic symbols**. M15's nested walk-forward needs 168 trading days, so `outer_folds` is
-   data-blocked; `universe_sensitivity` perturbs a universe that does not exist with two names;
-   and six of eight winners sit at a grid **edge**, which is what an argmax does on noise and is
-   exactly where `parameter_plateau` is undefined. External Breeze calls on a metered budget
-   with the owner's credentials; 100k calls/day, 32 parallel.
-3. **Then: should the gates FILTER rather than score?** `[G-S4-DSR]` computes and reports but
-   does not drop candidates. On noise every candidate fails, so filtering would empty the
-   ensemble — correct, and it changes every downstream report. Worth deciding once the gates
-   have real data behind them.
-
-The rest of the 19 wait on subsystems the milestone order has not reached: a fixed-cost model
-(capacity), a session policy (operations), M14's event engine (fill degradation, outage/restart),
-plus fields a human writes at certification and one the run fills itself.
+The remaining 18 wait on subsystems the milestone order has not reached: a fixed-cost model
+(capacity, 4), a session policy (operations, 5), M14's event engine (fill degradation,
+outage/restart), the nested walk-forward (outer_folds, universe_sensitivity), plus two fields a
+human writes at certification, one the run fills itself, `parameter_plateau` for an edge winner,
+and `side_product`, which is a broker-feasibility question rather than a property of the search.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

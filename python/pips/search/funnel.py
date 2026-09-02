@@ -58,6 +58,7 @@ __all__ = [
     "SpaReport",
     "bootstrap_sharpe_ci",
     "breakeven_edge",
+    "concentration_share",
     "gate_s4",
     "holding_horizon",
     "pbo_for_configs",
@@ -476,3 +477,38 @@ def breakeven_edge(cost_per_round_trip: float) -> float | None:
             "cost would give a negative breakeven edge, i.e. a trade that profits by existing."
         )
     return cost_per_round_trip or None
+
+
+def concentration_share(
+    per_name: Mapping[str, tuple[float, int]], *, cost_per_round_trip: float
+) -> float | None:
+    """§12.2's `stability.concentration`: the largest single name's share of net P&L.
+
+    The certification row asks whether *a single stock, day, session or regime dominates net
+    P&L*. This answers the stock half, which is the one the search can attribute — every
+    forecast names its instrument.
+
+    Costs are charged to the name that traded, so the share is of NET contribution. Sharing them
+    evenly, or ignoring them, credits a churner with edge it spent on commission.
+
+    ``None`` against a **non-positive total**, because the share inverts there: a name that lost
+    less takes the larger fraction, and 0.9 would read as dominance when it means "lost the
+    least". That is why this is absent on fixture data rather than reported — the candidates all
+    lose money once the cost line is applied.
+
+    Only the largest CONTRIBUTOR is reported. A loser's negative fraction is not an answer to
+    "does a single stock dominate", and the share may exceed 1 when other names lose — which is
+    a real and informative state, not a bug.
+
+    **A measurement, not a gate.** No bar is declared for it anywhere (ADR-0014): its figures
+    live only in §11.4's tripwires — *>40% from one name* — which fire on a running strategy
+    rather than refusing one that has never traded. Recorded as a plain number, it reaches
+    `[C-CERT-01]` honestly UNGATED and says so.
+    """
+    if not per_name:
+        return None
+    net = {name: gross - turns * cost_per_round_trip for name, (gross, turns) in per_name.items()}
+    total = sum(net.values())
+    if total <= 0:
+        return None
+    return max(net.values()) / total

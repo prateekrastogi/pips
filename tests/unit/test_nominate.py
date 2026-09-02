@@ -190,7 +190,9 @@ def test_the_writers_refusals_still_apply() -> None:
     def evidence(strategy_id: str) -> Mapping[str, Any]:
         return {
             **evidence_for(strategy_id),
-            "stability.concentration": Measurement(0.1, 9.9, "at_most"),
+            # A field neither derived nor gated: concentration is derived now, so the rule
+            # is exercised where it still applies.
+            "capacity.positions": Measurement(0.1, 9.9, "at_most"),
         }
 
     with pytest.raises(ValueError, match="no declared threshold"):
@@ -200,9 +202,9 @@ def test_the_writers_refusals_still_apply() -> None:
 def test_the_unsupplied_paths_are_carried_for_the_reader() -> None:
     """The gap the draft found is the finding; losing it here hides it until certification.
 
-    A caller who fills everything leaves no gap — including `stability.concentration`, which may
-    be supplied as a plain number and is then honestly *ungated* rather than absent. The gap
-    this carries is the one a caller actually leaves.
+    A caller who fills everything leaves no gap. `stability.concentration` is derived from the
+    metrics now — measured but ungated, since no bar is declared for it — so it is not the
+    caller's to leave. The gap this carries is the one a caller actually leaves.
     """
 
     def thin(strategy_id: str) -> Mapping[str, Any]:

@@ -38,6 +38,7 @@ from pips.alphas.spec import load_alpha_spec
 from pips.search.funnel import (
     bootstrap_sharpe_ci,
     breakeven_edge,
+    concentration_share,
     gate_s4,
     holding_horizon,
     pbo_for_configs,
@@ -269,11 +270,14 @@ def _search_one(
         driver.build(by_config[winner], bars=bars),
         spec,
         driver.compute,
-        delays=(1, 2),
+        # Zero too, for the per-name attribution: it is the undelayed run that the dossier's
+        # concentration describes, and it rides this pass rather than costing another.
+        delays=(0, 1, 2),
     )
+    by_delay_zero = by_delay[0]
 
     def _delayed(delay: int) -> list[float]:
-        g, t = by_delay[delay]
+        g, t, _ = by_delay[delay]
         return [a - b * ROUND_TRIP_COST for a, b in zip(g, t, strict=True)]
 
     delayed = _delayed(1)
@@ -304,6 +308,13 @@ def _search_one(
     # What the search knows about its own trades: every position is opened and closed within
     # one bar, so the horizon is that bar and the breakeven edge is the round trip it must cover.
     metrics["horizon"] = holding_horizon(bar_interval_ns=interval)
+    # MEASURED, not gated: no bar is declared for concentration anywhere (ADR-0014), so this
+    # reaches `[C-CERT-01]` as a plain number and is refused as ungated -- which is the honest
+    # state, and gives the owner the figures to set a bar against.
+    _, _, per_name = by_delay_zero
+    share = concentration_share(per_name, cost_per_round_trip=ROUND_TRIP_COST)
+    if share is not None:
+        metrics["concentration"] = share
     edge = breakeven_edge(ROUND_TRIP_COST)
     if edge is not None:
         metrics["breakeven_edge"] = edge

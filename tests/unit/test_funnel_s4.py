@@ -736,3 +736,60 @@ def test_a_negative_cost_line_is_refused() -> None:
 
     with pytest.raises(ValueError, match="cost"):
         breakeven_edge(-0.001)
+
+
+# ------------------------------------- concentration: measured, still ungated -----
+
+
+def test_the_share_is_the_largest_single_name() -> None:
+    """§12.2 asks whether a single stock dominates net P&L. This is that fraction."""
+    from pips.search.funnel import concentration_share
+
+    per_name = {"A": (0.6, 0), "B": (0.3, 0), "C": (0.1, 0)}
+    assert concentration_share(per_name, cost_per_round_trip=0.0) == pytest.approx(0.6)
+
+
+def test_costs_are_charged_to_the_name_that_traded() -> None:
+    """A name that traded more pays more, so the share is of NET and not gross contribution.
+
+    Sharing costs evenly, or ignoring them, credits a churner with edge it spent on commission.
+    """
+    from pips.search.funnel import concentration_share
+
+    per_name = {"A": (0.6, 100), "B": (0.3, 0)}
+    # A nets 0.6 - 100*0.002 = 0.4; B nets 0.3. Total 0.7, so A holds 4/7.
+    assert concentration_share(per_name, cost_per_round_trip=0.002) == pytest.approx(4 / 7)
+
+
+def test_a_single_name_is_total_concentration() -> None:
+    from pips.search.funnel import concentration_share
+
+    assert concentration_share({"A": (0.5, 0)}, cost_per_round_trip=0.0) == pytest.approx(1.0)
+
+
+def test_a_non_positive_total_has_no_share() -> None:
+    """The share INVERTS against a negative total: a name that lost less takes the larger
+    fraction, so 0.9 would read as dominance when it means "lost the least".
+
+    This is why the field is absent on the fixture data rather than reported as a number — the
+    candidates all lose money once costs are applied.
+    """
+    from pips.search.funnel import concentration_share
+
+    assert concentration_share({"A": (-0.1, 0), "B": (-0.5, 0)}, cost_per_round_trip=0.0) is None
+    assert concentration_share({"A": (0.2, 0), "B": (-0.2, 0)}, cost_per_round_trip=0.0) is None
+
+
+def test_no_attribution_has_no_share() -> None:
+    from pips.search.funnel import concentration_share
+
+    assert concentration_share({}, cost_per_round_trip=0.0) is None
+
+
+def test_a_losing_name_does_not_take_a_negative_share() -> None:
+    """Only the LARGEST contributor is reported; a loser's negative fraction is not the answer
+    to "does a single stock dominate"."""
+    from pips.search.funnel import concentration_share
+
+    share = concentration_share({"A": (1.0, 0), "B": (-0.5, 0)}, cost_per_round_trip=0.0)
+    assert share == pytest.approx(2.0), "A contributed 1.0 of a 0.5 total"

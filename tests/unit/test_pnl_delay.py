@@ -183,7 +183,7 @@ def by_delay(prices: list[int], delays: tuple[int, ...]) -> dict[int, list[float
         compute_fn=always_long,  # type: ignore[arg-type]
         delays=delays,
     )
-    return {d: gross for d, (gross, _turns) in out.items()}
+    return {d: gross for d, (gross, _turns, _per_name) in out.items()}
 
 
 def test_one_pass_matches_a_pass_per_delay() -> None:
@@ -234,3 +234,26 @@ def test_a_repeated_delay_is_refused() -> None:
 def test_no_delays_at_all_is_refused() -> None:
     with pytest.raises(ValueError, match="delays"):
         by_delay([100, 110, 120, 130, 140], ())
+
+
+def test_the_attribution_rides_the_same_pass() -> None:
+    """Whether one name dominates the P&L is a certification question (§12.2), and answering it
+    in a second pass would re-run the alpha for a number the first pass already had."""
+    from pips.search.s1 import _pnl_by_delay
+
+    panel, closes = panel_of([100, 110, 120, 130, 140])
+    out = _pnl_by_delay(
+        panel,
+        closes,
+        STAMPS,
+        object(),
+        _Spec(),  # type: ignore[arg-type]
+        compute_fn=always_long,  # type: ignore[arg-type]
+        delays=(0,),
+    )
+    gross, turns, per_name = out[0]
+
+    assert set(per_name) == {"SYM"}
+    attributed, counted = per_name["SYM"]
+    assert attributed == pytest.approx(sum(gross)), "attribution must sum to the total"
+    assert counted == sum(turns), "and account for every round trip"
