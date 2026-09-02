@@ -304,3 +304,26 @@ def test_the_core_breaks_ties_on_the_symbol() -> None:
     kept = stable_core(previous=(), scores=scores, n=50, k=0)
     assert "S049" in kept
     assert "S050" not in kept
+
+
+def test_an_unscored_incumbent_is_dropped_not_carried_forward() -> None:
+    """A name with no score today was not measured today.
+
+    Suspended, delisted, or simply absent from the cross-section — and carrying it forward on
+    the strength of yesterday's membership would put a universe member in the panel with **no
+    bars behind it**. Every alpha then reads zero prices for a name the universe says is
+    tradeable, and the failure surfaces three modules deep as a KeyError or, worse, as a
+    silently short series.
+
+    The hysteresis is a buffer against RANK noise, not against absence: an incumbent survives
+    slipping to rank 53, and does not survive not existing.
+    """
+    from pips.universe.liquidity import stable_core
+
+    kept = stable_core(previous=("S001", "SUSPENDED"), scores=sixty(), n=50, k=5)
+
+    assert "S001" in kept, "the incumbent that was measured is kept"
+    assert "SUSPENDED" not in kept, "the one that was not, is not"
+    assert all(symbol in sixty() for symbol in kept), (
+        "every member of the universe must have a score behind it"
+    )

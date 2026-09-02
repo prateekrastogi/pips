@@ -86,6 +86,11 @@ def _z(values: Mapping[str, float]) -> dict[str, float]:
     zero only at some lengths, and dividing by 1e-19 of float noise gives a z around 1e15 —
     one name would take the whole universe. The same trap `gate_s4` had.
     """
+    # Kept although `liquidity_scores` never reaches it with fewer than two, and although the
+    # `min == max` guard below already answers the one-value case identically. What it uniquely
+    # protects is the EMPTY mapping, where `min(())` raises -- so this is the guard for a second
+    # caller, the same reason `_TERMINAL` is kept in the backfill. Unreachable today, and a
+    # mutation of it is correspondingly equivalent.
     if len(values) < 2:
         return dict.fromkeys(values, 0.0)
     ordered = list(values.values())
