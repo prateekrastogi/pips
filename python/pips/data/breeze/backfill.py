@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from pips.core.atomic import atomic_write_text
+from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.budget import DailyBudgetExceededError
 from pips.data.breeze.ingest import ResponseKind, classify_response
 
@@ -135,23 +136,6 @@ def _write_bronze(root: Path, symbol: str, day: date, payload: Any) -> Path:
     return path
 
 
-def _refuse_repo_paths(bronze_root: Path) -> None:
-    """Rule 14: market data lives on the VM, never in the working tree.
-
-    Easy to get wrong from a laptop, and the consequence is market data in git -- which,
-    unlike most mistakes here, cannot be fully undone.
-    """
-    repo = Path(__file__).resolve().parents[4]
-    try:
-        bronze_root.resolve().relative_to(repo)
-    except ValueError:
-        return
-    raise ValueError(
-        f"refusing to write bronze inside the repository ({bronze_root}). ALL market data "
-        "lives on arb-vm under /srv/pips (rule 14); the laptop holds code and fixtures only."
-    )
-
-
 def run_backfill(
     symbols: list[str],
     days: list[date],
@@ -160,7 +144,7 @@ def run_backfill(
     manifest_path: Path,
 ) -> BackfillResult:
     """Fetch every unfinished (symbol, day) key, writing bronze and updating the manifest."""
-    _refuse_repo_paths(bronze_root)
+    refuse_repo_paths(bronze_root, what="bronze")
     manifest = Manifest.load(manifest_path)
 
     attempted = fetched = empty = errored = skipped = 0

@@ -27,6 +27,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from pips.core.locality import refuse_repo_paths
+
 __all__ = ["CaptureWriter", "MessageKind"]
 
 
@@ -39,19 +41,6 @@ class MessageKind(StrEnum):
 
 
 _GAP = "GAP"
-
-
-def _refuse_repo_paths(root: Path) -> None:
-    """Rule 14. A live tick stream is the worst possible thing to write into a git tree."""
-    repo = Path(__file__).resolve().parents[4]
-    try:
-        root.resolve().relative_to(repo)
-    except ValueError:
-        return
-    raise ValueError(
-        f"refusing to capture into the repository ({root}). ALL market data lives on arb-vm "
-        "under /srv/pips (rule 14); the laptop holds code and fixtures only."
-    )
 
 
 @dataclass
@@ -70,16 +59,37 @@ class CaptureWriter:
     outage_ns: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
-        _refuse_repo_paths(self.root)
+        refuse_repo_paths(self.root, what="tick capture")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Resume the sequence from what is already on disk. A restart is the most likely
         # moment to reuse a sequence number, and two records sharing one make the stream
         # unorderable -- which is precisely what the gap records exist to keep it from being.
+        self._close_partial_line()
         self._seq = self._last_seq_on_disk()
 
     @property
     def path(self) -> Path:
         return self.root / "ws" / self.day / f"{self.session_id}.jsonl"
+
+    def _close_partial_line(self) -> None:
+        """Terminate a half-written final line before appending after it.
+
+        A kill mid-write leaves a line with no newline, and "a" mode appends straight onto it
+        -- fusing the fragment and the first record written after the restart into one line
+        that neither parses. ONE lost record silently becomes two, and the JSONL claim in the
+        class docstring stops being true. Closing the line keeps the loss to the record that
+        was actually half-written.
+        """
+        if not self.path.exists():
+            return
+        with self.path.open("rb") as handle:
+            if handle.seek(0, 2) == 0:
+                return
+            handle.seek(-1, 2)
+            if handle.read(1) == b"\n":
+                return
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write("\n")
 
     def _last_seq_on_disk(self) -> int:
         if not self.path.exists():
@@ -90,10 +100,15 @@ class CaptureWriter:
                 continue
             try:
                 last = max(last, int(json.loads(line)["seq"]))
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError):
                 # A truncated final line from a kill mid-write. Skipping it is right: the
                 # record is lost either way, and refusing to start would turn one lost message
                 # into an outage.
+                #
+                # TypeError belongs here with the others: a line of valid JSON that is not an
+                # object -- `null`, a bare number, a list -- indexes as `None["seq"]`, and
+                # concatenated fragments and hand-repaired files both produce them. Both are
+                # things people do to a capture after an outage.
                 continue
         return last
 

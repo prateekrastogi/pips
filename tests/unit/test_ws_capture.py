@@ -137,3 +137,72 @@ def test_capture_refuses_a_path_inside_the_repository(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[2] / "data" / "bronze"
     with pytest.raises(ValueError, match="repository"):
         CaptureWriter(repo, session_id="s1")
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_truncated_final_line_costs_one_record_not_the_session(tmp_path: Path) -> None:
+    """The reason this file is JSONL rather than a JSON array.
+
+    A capture killed mid-write leaves a partial last line. Refusing to start on it would turn
+    one lost message into an outage — and an outage that nobody recorded as a GAP, which is
+    precisely the silent hole the whole design exists to prevent. The record is lost either
+    way; the session is not.
+    """
+    writer = CaptureWriter(tmp_path / "cap", "s1")
+    writer.write(MessageKind.TICK, TICK)
+    writer.write(MessageKind.TICK, TICK)
+    with writer.path.open("a", encoding="utf-8") as handle:
+        handle.write('{"seq": 3, "kind": "TIC')  # killed here
+
+    resumed = CaptureWriter(tmp_path / "cap", "s1")
+    assert resumed.write(MessageKind.TICK, TICK) == 3, (
+        "the half-written record is skipped, and its sequence number is reused — it never "
+        "reached a reader"
+    )
+    # Parsed leniently on purpose: the file legitimately contains one unparseable line, which
+    # is the whole point, so `read` cannot be used here.
+    seqs = []
+    for line in resumed.path.read_text().splitlines():
+        try:
+            seqs.append(json.loads(line)["seq"])
+        except ValueError:
+            continue
+    assert seqs == [1, 2, 3], f"no sequence number appears twice: {seqs}"
+
+
+def test_a_line_that_is_not_a_record_does_not_stop_the_session(tmp_path: Path) -> None:
+    """`TypeError` belongs with `ValueError` and `KeyError` in that guard.
+
+    A line of valid JSON that is not an object — `null`, a bare number, a list — indexes as
+    `None["seq"]` and raises TypeError straight out of the constructor, past a guard written
+    to keep exactly this from stopping a capture. Concatenated fragments and hand-repaired
+    files both produce them, and both are things people do to a capture after an outage.
+    """
+    writer = CaptureWriter(tmp_path / "cap", "s1")
+    writer.write(MessageKind.TICK, TICK)
+    with writer.path.open("a", encoding="utf-8") as handle:
+        handle.write("null\n[1, 2]\n42\n")
+
+    resumed = CaptureWriter(tmp_path / "cap", "s1")
+    assert resumed.write(MessageKind.TICK, TICK) == 2
+
+
+def test_the_sequence_resumes_from_the_highest_seen_not_the_last_line(tmp_path: Path) -> None:
+    """Concatenating two fragments after an outage is a thing people do.
+
+    Order on disk stops being sequence order the moment someone merges files to recover a
+    session, and resuming from the last line would then hand out sequence numbers that already
+    exist — making the stream unorderable, which is the one property the gap records exist to
+    protect.
+    """
+    writer = CaptureWriter(tmp_path / "cap", "s1")
+    writer.write(MessageKind.TICK, TICK)
+    writer.write(MessageKind.TICK, TICK)
+    with writer.path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"seq": 9, "kind": "TICK"}) + "\n")
+        handle.write(json.dumps({"seq": 4, "kind": "TICK"}) + "\n")
+
+    resumed = CaptureWriter(tmp_path / "cap", "s1")
+    assert resumed.write(MessageKind.TICK, TICK) == 10, "9 was seen, so 10 is the next free one"
