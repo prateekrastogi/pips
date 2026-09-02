@@ -455,11 +455,25 @@
   # pre-registered, and choosing one after seeing the scores is the multiplicity problem moved
   # down a layer. N is a MAXIMUM: fewer qualify when fewer were scored.
   #
-  # `building`: the score is the core, and the rest of M7 -- lookback windows, weekly/monthly
-  # refresh, stable-core hysteresis, and the eligibility gates (series, suspension, MIS/short
-  # per capability snapshot, history, bands) -- is not built. Nor are the daily inputs: median
-  # rupee volume, spread, Amihud and gap-rate all need bars this project does not have yet,
-  # which is the circularity the backfill runs into.
+  # THE STABLE-CORE BUFFER is the blueprint's own rule, verbatim: "enter above N-k; exit below
+  # N+k". The ASYMMETRY is the mechanism -- symmetric bars would just be a wider universe and
+  # would stabilise nothing, while a name oscillating around rank N would enter and leave every
+  # refresh, costing the panel a warm-up and the strategy a turnover it never asked for.
+  #
+  # AN UNSCORED INCUMBENT CANNOT BE KEPT: a name with no score today was not measured today,
+  # and carrying it forward puts a universe member in the panel with no bars behind it.
+  #
+  # `k` is a POLICY parameter, not a tuned one, and unlike WEIGHTS it is meant to be searched --
+  # the blueprint lists the stable-core buffer among the policy dimensions guarded by
+  # "stress-tested for liquidity, not tuned to maximize strategy P&L". Its starter values are
+  # the ONE COLUMN of that table the blueprint leaves empty, so there is no registered set to
+  # validate against; only that it cannot be negative, which would invert the bars.
+  #
+  # `building`: the score and the buffer are built. Lookback windows {20,40,60}d, weekly/monthly
+  # refresh, and the eligibility gates (series, suspension, MIS/short per capability snapshot,
+  # listing history {60,120,250}, bands) are not. Nor are the daily inputs: median rupee volume,
+  # spread, Amihud and gap-rate all need bars this project does not have yet, which is the
+  # circularity the backfill runs into.
 
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"

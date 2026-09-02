@@ -193,3 +193,114 @@ def test_an_unsupported_n_is_refused() -> None:
     """M7 declares N in {50, 100, 150, 300}. An arbitrary N is a universe nobody registered."""
     with pytest.raises(ValueError, match="300"):
         top_n({"A": 1.0}, 137)
+
+
+# ---------------------------------------- the stable-core buffer `[C-UNIV-01]` -----
+
+
+def ranked(names: list[str]) -> dict[str, float]:
+    """Scores descending in the given order, so rank 1 is `names[0]`."""
+    return {name: float(len(names) - i) for i, name in enumerate(names)}
+
+
+def sixty() -> dict[str, float]:
+    """A realistic cross-section: S000 is rank 1, S059 is rank 60.
+
+    Small readable fixtures cannot be used here — `n` must be one of M7's registered sizes, and
+    a universe size nobody pre-registered is exactly what `SUPPORTED_N` refuses. With n=50 and
+    k=5 the buffer is ranks 46-55.
+    """
+    return {f"S{i:03d}": float(100 - i) for i in range(60)}
+
+
+def test_an_incumbent_inside_the_band_is_kept() -> None:
+    """The asymmetry IS the hysteresis: *enter above N-k; exit below N+k*.
+
+    A name already in the universe survives a slip into the buffer. Without that, a name
+    oscillating around rank N enters and leaves every refresh, and each round trip is a warm-up
+    the panel pays for and a turnover the strategy did not ask for.
+    """
+    from pips.universe.liquidity import stable_core
+
+    kept = stable_core(previous=("S052",), scores=sixty(), n=50, k=5)
+    assert "S052" in kept, "rank 53 is inside the 46-55 buffer, and it was already a member"
+
+
+def test_a_newcomer_inside_the_band_is_not_admitted() -> None:
+    """The other half of the asymmetry. If the band admitted newcomers it would just be a wider
+    universe, and nothing would be stabilised."""
+    from pips.universe.liquidity import stable_core
+
+    kept = stable_core(previous=(), scores=sixty(), n=50, k=5)
+    assert "S052" not in kept
+    assert len(kept) == 45, "newcomers must clear the TIGHTER bar, n-k"
+
+
+def test_an_incumbent_below_the_wide_bar_is_dropped() -> None:
+    from pips.universe.liquidity import stable_core
+
+    kept = stable_core(previous=("S058",), scores=sixty(), n=50, k=5)
+    assert "S058" not in kept, "rank 59 is below n+k=55"
+
+
+def test_an_unscored_incumbent_cannot_be_kept() -> None:
+    """A name with no score today was not measured today — suspended, delisted, or simply
+    absent from the cross-section. Keeping it carries a universe member on stale evidence, and
+    the panel would then contain a name with no bars.
+    """
+    from pips.universe.liquidity import stable_core
+
+    kept = stable_core(previous=("GONE", "S000"), scores=sixty(), n=50, k=5)
+    assert "GONE" not in kept
+    assert "S000" in kept
+
+
+def test_no_buffer_is_a_plain_top_n() -> None:
+    """`k=0` is the "daily as stress" policy: no hysteresis, and it must reduce exactly."""
+    from pips.universe.liquidity import stable_core, top_n
+
+    scores = {f"S{i:03d}": float(100 - i) for i in range(60)}
+    assert stable_core(previous=("S059",), scores=scores, n=50, k=0) == top_n(scores, 50)
+
+
+def test_membership_stays_within_the_band() -> None:
+    """Hysteresis lets the size drift, but only inside the buffer — a universe called U50 that
+    quietly grows to 200 is not the policy that was registered."""
+    from pips.universe.liquidity import stable_core
+
+    scores = {f"S{i:03d}": float(100 - i) for i in range(100)}
+    everyone = tuple(scores)
+    kept = stable_core(previous=everyone, scores=scores, n=50, k=10)
+    assert len(kept) <= 60
+
+
+def test_a_negative_buffer_is_refused() -> None:
+    """A negative k inverts the bars: names would have to be WORSE to stay."""
+    from pips.universe.liquidity import stable_core
+
+    with pytest.raises(ValueError, match="k"):
+        stable_core(previous=(), scores=sixty(), n=50, k=-1)
+
+
+def test_the_universe_size_is_still_registered() -> None:
+    from pips.universe.liquidity import stable_core
+
+    with pytest.raises(ValueError, match="300"):
+        stable_core(previous=(), scores=sixty(), n=137, k=1)
+
+
+def test_the_core_breaks_ties_on_the_symbol() -> None:
+    """Two refreshes of one day must name the same universe.
+
+    The tied loser is inserted FIRST, so a stable sort alone keeps it and only the explicit
+    tie-break puts the right name in — the same shape that let `ties-unbroken` survive against
+    `top_n`.
+    """
+    from pips.universe.liquidity import stable_core
+
+    scores: dict[str, float] = {"S050": 11.0, "S049": 11.0}
+    scores.update({f"S{i:03d}": float(100 - i) for i in range(49)})
+
+    kept = stable_core(previous=(), scores=scores, n=50, k=0)
+    assert "S049" in kept
+    assert "S050" not in kept

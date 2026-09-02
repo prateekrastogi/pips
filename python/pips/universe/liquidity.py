@@ -35,7 +35,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-__all__ = ["SUPPORTED_N", "WEIGHTS", "SymbolStats", "liquidity_scores", "top_n"]
+__all__ = [
+    "SUPPORTED_N",
+    "WEIGHTS",
+    "SymbolStats",
+    "liquidity_scores",
+    "stable_core",
+    "top_n",
+]
 
 WEIGHTS: dict[str, float] = {
     "median_rupee_volume": 1.0,
@@ -126,3 +133,55 @@ def top_n(scores: Mapping[str, float], n: int) -> tuple[str, ...]:
         )
     ranked = sorted(scores, key=lambda symbol: (-scores[symbol], symbol))
     return tuple(ranked[:n])
+
+
+def stable_core(
+    *, previous: Sequence[str], scores: Mapping[str, float], n: int, k: int
+) -> tuple[str, ...]:
+    """The blueprint's stable-core buffer: *enter above N-k; exit below N+k*.
+
+    **The asymmetry is the whole mechanism.** A newcomer must beat the tighter bar to get in; an
+    incumbent survives until it falls past the looser one. Symmetric bars would just be a wider
+    universe and would stabilise nothing — a name oscillating around rank N would enter and
+    leave every refresh, and each round trip costs the panel a warm-up and the strategy a
+    turnover it never asked for.
+
+    **An unscored incumbent cannot be kept.** A name with no score today was not measured today
+    — suspended, delisted, or simply absent from the cross-section — and carrying it forward
+    would put a universe member in the panel with no bars behind it.
+
+    ``k`` is a POLICY parameter, not a tuned one, and unlike :data:`WEIGHTS` it is meant to be
+    searched: the blueprint lists the stable-core buffer among the policy dimensions whose
+    guardrail is *"stress-tested for liquidity, not tuned to maximize strategy P&L"*. Its
+    starter values are the one column of that table the blueprint leaves empty, so there is no
+    registered set to validate against here — only that it cannot be negative, which would
+    invert the bars and require a name to get WORSE to stay.
+
+    Membership drifts inside the buffer by construction and is bounded by ``n + k``: hysteresis
+    that let a U50 grow to 200 would not be the policy anybody registered.
+    """
+    if n not in SUPPORTED_N:
+        raise ValueError(
+            f"n={n} is not one of M7's registered universe sizes {sorted(SUPPORTED_N)}."
+        )
+    if k < 0:
+        raise ValueError(
+            f"k={k} is negative, which inverts the bars: a name would have to get WORSE to stay "
+            "in the universe."
+        )
+
+    ranking = sorted(scores, key=lambda symbol: (-scores[symbol], symbol))
+    rank = {symbol: position + 1 for position, symbol in enumerate(ranking)}
+    incumbents = set(previous)
+
+    kept = [
+        symbol
+        for symbol in ranking
+        # Enter above n-k; incumbents survive until they fall past n+k.
+        if rank[symbol] <= (n + k if symbol in incumbents else max(0, n - k))
+    ]
+    # No trailing slice. An incumbent is kept only at rank <= n+k and a newcomer only at
+    # rank <= n-k, so the membership is already a subset of ranks <= n+k and a cap on top of
+    # that is a bound nothing can reach. The fifth guard this project has removed for being
+    # indistinguishable; the bound is a consequence of the rule, and a test asserts it.
+    return tuple(kept)
