@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 241 files · mypy --strict 241 files · 1719 pytest · clippy clean · cargo test ok
+  ruff 243 files · mypy --strict 243 files · 1742 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,21 +186,24 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **`stability.concentration` — the owner's call, and the ONLY thing between the factory and a
-   certified bundle.** Every part of M20 now exists: nominate `[C-NOM-01]` → draft `[C-WRIT-01]`
-   → screen → one holdout look `[C-LBOX-01]` → sign `[C-WRIT-02]` → certify `[C-CERT-01]`, driven
-   by `[C-RUN-01]`. A test pins the honest outcome: nothing certified, the box never opened, the
-   report naming concentration. Its figures appear only under §11.4 *Tripwires — auto-flags in
-   every report*; the certification table gives no number. A tripwire fires on a running
-   strategy; a gate refuses one that has never traded. Setting it = a `gates.yaml` row + the
-   enforcing code + an ADR in one commit; the ledger-agreement test holds them together.
-2. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
+1. **Run `make certify-smoke` and read the 38.** M20's Verify is now runnable and says
+   `0 certified` with **38 dossier fields the factory cannot supply** — capacity, operations,
+   stress, most of trade_context, and the six gates. That list is the real remaining scope of
+   P4, and it is mostly *other subsystems* (the event engine's stress runs, the order-budget
+   planner's capacity numbers, session policy) rather than certification code. Deciding which
+   of those M20 should own is the next judgement call.
+2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
+   *Tripwires — auto-flags in every report*; the certification table gives no number. A tripwire
+   fires on a running strategy; a gate refuses one that has never traded. Setting it = a
+   `gates.yaml` row + enforcing code + an ADR in one commit.
+3. **Backfill — the owner's call.** Two symbols over three days is the binding constraint on
    every number a dossier would record, and widening it means external Breeze calls on a metered
    budget with the owner's credentials. `pips.data.breeze.campaign` exists; the budget is 100k
    calls/day and 32 parallel fetches.
-3. **M20's Verify, once (1) lands**: bundle round-trip and dossier completeness on real S5
-   output rather than fixtures — then the P4 gate, which is a human sign-off
-   (`docs/state/gates/P4-approved.md`), not something this loop can grant itself.
+
+Noted, not fixed: S5 candidate ids surface as bare registry `run_id`s, so `certify-smoke` reports
+the strategy as `59`. A dossier naming a strategy `59` is not naming it; changing the id scheme
+is its own change.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

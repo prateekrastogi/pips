@@ -402,6 +402,29 @@
   # environment is the remaining piece, and end-to-end certification is still held by
   # `stability.concentration` having no bar (ADR-0014).
 
+- id: C-SMOKE-01
+  title: "certify-smoke: run M20's Verify and report the distance to a certified bundle"
+  spec: "IMPLEMENTATION.md#398-certify-smoke-the-distance-to-a-certified-bundle"
+  code: "python/pips/certification/smoke.py"
+  tests:
+    - "tests/unit/test_certification_smoke.py"
+  status: building
+  owner_milestone: M20
+  # Every other milestone's Verify has a target; M20's did not, so "the chain works and is
+  # blocked on one threshold" was a claim in a session log rather than something runnable.
+  #
+  # The honest difficulty: a §12.2 dossier wants things the factory does not produce -- kill
+  # thresholds, flatten deadlines, minimum economic ticket. The tempting smoke fills them with
+  # "smoke" and reports a certified bundle, which is a lie with a signature on it. So this
+  # supplies ONLY what the run knows (commit, snapshot root, registry trial counts, cost model,
+  # venue) and reports the rest. THE GAP LIST IS THE ARTIFACT while the answer is zero.
+  #
+  # Running it immediately found a gap in `[C-NOM-01]`: `identity.strategy_id` was reported as
+  # unsuppliable while the adapter held it the whole time. Now S5-owned alongside the cluster.
+  #
+  # `building`: it reports 0 certified and 38 unsupplied fields. It flips when the factory can
+  # actually fill them -- which is a question about the rest of the system, not about this file.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

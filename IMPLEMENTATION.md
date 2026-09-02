@@ -532,6 +532,21 @@ skip shrinks the field and reads as "S5 found fewer".
 Drafting goes through `[C-WRIT-01]`, so every refusal there still applies. This is a join, not a
 way around it.
 
+### 3.9.8 `certify-smoke`: the distance to a certified bundle `[C-SMOKE-01]`
+
+M20's *Verify* made runnable. Every other milestone's has a target — `s1-smoke`, `s5-smoke`,
+`backtest-smoke` — so "the chain works and is blocked on one threshold" was a claim in a log
+rather than something anyone could run.
+
+The honest difficulty is that a §12.2 dossier wants things the factory does not produce: kill
+thresholds, flatten deadlines, minimum economic ticket. The tempting smoke run fills them with
+`"smoke"` and reports a certified bundle — a lie with a signature on it. So this supplies only
+what the run genuinely knows (the commit, the snapshot root, the registry's trial counts, the
+cost model and venue) and reports the rest as unsupplied. **The gap list is the artifact** while
+the answer is zero: it says what to build or decide next, with evidence rather than recollection.
+
+Today it prints `0 certified` and **38 dossier fields the factory cannot supply**.
+
 ### 3.10 Order plane `[C-OMS-01…03]`
 
 ```
@@ -835,7 +850,7 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
   per alpha family, with every exclusion reasoned `[C-DISP-01]`. *Verify:* frontier reproduction on fixtures; netting ratio reported.
 - **M20 bundles + dossiers**: `[C-BNDL-01]` build/sign/validate + tamper test; the certification
   dossier `[C-DOSS-01]` (report card fields from the reference blueprint §12.2); the lockbox
-  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`; the cycle driver `[C-RUN-01]`; the S5 nomination adapter `[C-NOM-01]`;
+  one-shot run `[C-LBOX-01]`; the dossier writer `[C-WRIT-01]`; the bundle writer `[C-WRIT-02]`; the cycle driver `[C-RUN-01]`; the S5 nomination adapter `[C-NOM-01]`; `certify-smoke`, which reports the distance `[C-SMOKE-01]`;
   **top-5 is a maximum — fewer is a valid output** `[C-CERT-01]`. *Verify:* bundle round-trip; dossier
   completeness check.
 

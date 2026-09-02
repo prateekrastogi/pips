@@ -15,6 +15,7 @@ commands:
   authority check [record]   report GATE-0 data-use authority [G-AUTH-0]
   deploy guard <service>     may the rail restart this service now? (§2.2)
   s1-smoke [fixtures]        run the S1 funnel end to end on fixtures (§6 M12)
+  certify-smoke [fixtures]   how far the factory is from certifying (§6 M20)
   backfill --symbols ...     Breeze historical campaign (§6 M4; runs on arb-vm)
   qc [data_root]             quality-check bronze, quarantine failures (§6 M5)
   fixtures generate [out]    regenerate the seeded smoke fixtures
@@ -53,6 +54,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.ops.deploy_guard import main as guard_main
 
         return guard_main(rest[1:])
+    if command == "certify-smoke":
+        from pips.certification.smoke import main as certify_main
+
+        return certify_main(rest)
     if command == "s5-smoke":
         from pips.search.families import main as families_main
 

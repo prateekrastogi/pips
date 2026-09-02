@@ -63,6 +63,12 @@ __all__ = ["PROMOTED_STAGE", "run_family_searches"]
 
 _NS = 1_000_000_000
 _SPECS = Path("config/search_spaces")
+COST_MODEL = "0" * 64
+"""Placeholder cost model for the fixture run. Named once so the RunRecords and the report that
+summarises them cannot disagree about which one was used."""
+BROKER = "FLATTRADE"
+CAPITAL_TIER = "2L"
+
 PROMOTED_STAGE = "S4"
 _PROMOTED_RANK = 5
 _SECOND = _NS
@@ -312,13 +318,13 @@ def run_family_searches(
             family=alpha_id,
             data_snapshot=snapshot_name,
             snapshot_root=root,
-            cost_model="0" * 64,
+            cost_model=COST_MODEL,
             fill_tier="F1",
             git_sha="0" * 40,
             universe_id="FIXTURES",
             session_mask="ALL",
-            capital_tier="2L",
-            broker="FLATTRADE",
+            capital_tier=CAPITAL_TIER,
+            broker=BROKER,
         )
         try:
             families.append(
@@ -365,11 +371,11 @@ def run_family_searches(
                 family=family.driver.alpha_id,
                 universe_id="FIXTURES",
                 session_mask="ALL",
-                capital_tier="2L",
-                broker="FLATTRADE",
+                capital_tier=CAPITAL_TIER,
+                broker=BROKER,
                 data_snapshot=snapshot_name,
                 snapshot_root=root,
-                cost_model="0" * 64,
+                cost_model=COST_MODEL,
                 fill_tier="F1",
                 seed=0,
                 git_sha="0" * 40,
@@ -412,7 +418,17 @@ def run_family_searches(
             f"{counts.effective_count:.3f}" if counts.effective_count is not None else None
         ),
         "ensemble": selection.ensemble,
+        # The whole result, not only the projection above: `[C-NOM-01]` needs the CLUSTERS, and
+        # a report that flattens them forces the caller to re-derive what S5 already computed.
+        "s5": selection,
         "s5_funnel": selection.funnel,
+        # What this run READ and ran UNDER. Recorded here because a dossier that cannot name its
+        # snapshot, cost model or venue is describing some other run (`[C-SMOKE-01]`).
+        "snapshot_name": snapshot_name,
+        "snapshot_root": root,
+        "cost_model": COST_MODEL,
+        "broker": BROKER,
+        "capital_tier": CAPITAL_TIER,
         "netting_ratio": selection.netting.netting_ratio,
         "s5_admissible": selection.admissible,
         "_is_an_edge": False,

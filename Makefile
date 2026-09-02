@@ -96,6 +96,9 @@ s5-smoke-wide: ## s5-smoke on a wider cross-section (8 symbols), generated on de
 	$(PY) -m pips.cli fixtures generate --wide $(CURDIR)/build/fixtures-wide
 	$(PY) -m pips.cli s5-smoke $(CURDIR)/build/fixtures-wide $(CURDIR)/build/s5-wide/registry.db
 
+certify-smoke: ## Nominate, screen, and report the distance to a certified bundle (§6 M20 Verify)
+	$(PY) -m pips.cli certify-smoke fixtures $(CURDIR)/build/certify-smoke/registry.db
+
 backtest-smoke: ## Event-engine backtest smoke run on fixtures (M14)
 	@echo "backtest-smoke: not implemented until M14"; exit 1
 

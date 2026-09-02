@@ -19,13 +19,14 @@ reads as "S5 found fewer", which is a claim about the search rather than about t
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from pips.bundle import IrNode
 from pips.certification.dossier import REQUIRED_FIELDS, Measurement
-from pips.certification.nominate import CLUSTER_FIELD, NoProvenanceError, nominate
+from pips.certification.nominate import S5_OWNED, NoProvenanceError, nominate
 from pips.certification.writer import GATE_SOURCES, METRIC_SOURCES
 from pips.selection.cluster import Cluster
 from pips.selection.pareto import Candidate
@@ -55,7 +56,7 @@ def evidence_for(strategy_id: str) -> dict[str, Any]:
         f"{s}.{f}": f"{strategy_id}:{s}.{f}"
         for s, fields in REQUIRED_FIELDS.items()
         for f in fields
-        if f"{s}.{f}" not in DERIVED_PATHS and f"{s}.{f}" != CLUSTER_FIELD
+        if f"{s}.{f}" not in DERIVED_PATHS and f"{s}.{f}" not in S5_OWNED
     }
 
 
@@ -219,3 +220,21 @@ def test_metrics_reach_the_dossier_as_gates() -> None:
     dsr = result.nominees[0].dossier.sections["economics"]["dsr"]
     assert isinstance(dsr, Measurement)
     assert dsr.threshold == 0.95
+
+
+def test_the_strategy_id_comes_from_s5() -> None:
+    """Found by running `make certify-smoke`: the report listed `identity.strategy_id` as a
+    field the factory cannot supply, while the adapter was holding it the whole time.
+
+    Same argument as the correlation cluster — it is S5's to state, so the caller is refused.
+    """
+    result = call(FakeS5((candidate("A01"),)))
+    assert result.nominees[0].dossier.sections["identity"]["strategy_id"] == "A01"
+
+
+def test_the_caller_may_not_supply_the_strategy_id() -> None:
+    def evidence(strategy_id: str) -> Mapping[str, Any]:
+        return {**evidence_for(strategy_id), "identity.strategy_id": "something-else"}
+
+    with pytest.raises(ValueError, match=re.escape("identity.strategy_id")):
+        call(FakeS5((candidate("A01"),)), evidence_for=evidence)

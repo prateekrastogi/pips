@@ -38,12 +38,19 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CLUSTER_FIELD",
+    "ID_FIELD",
+    "S5_OWNED",
     "NoProvenanceError",
     "NominationResult",
     "nominate",
 ]
 
 CLUSTER_FIELD = "decision.correlation_cluster"
+ID_FIELD = "identity.strategy_id"
+
+S5_OWNED = (CLUSTER_FIELD, ID_FIELD)
+"""Fields S5 states and the caller may not. A supplied cluster describes a comparison that did
+not happen; a supplied id names a strategy other than the one that was searched."""
 
 
 class NoProvenanceError(LookupError):
@@ -55,9 +62,13 @@ class NoProvenanceError(LookupError):
 
 
 class _S5Like(Protocol):
-    ensemble: Sequence[Candidate]
-    clusters: Sequence[Cluster]
+    """Only what the adapter is allowed to read. Read-only members, because `S5Result` is a
+    frozen dataclass and a settable protocol member would refuse it."""
 
+    @property
+    def ensemble(self) -> Sequence[Candidate]: ...
+    @property
+    def clusters(self) -> Sequence[Cluster]: ...
     @property
     def admissible(self) -> bool: ...
 
@@ -110,13 +121,16 @@ def nominate(
 
     for candidate in s5.ensemble:
         evidence = dict(evidence_for(candidate.id))
-        if CLUSTER_FIELD in evidence:
-            raise ValueError(
-                f"{CLUSTER_FIELD} is S5's to state, not the caller's. A supplied one describes "
-                "a comparison that did not happen, and nothing outside S5 can reconstruct which "
-                "near-variants collapsed together."
-            )
+        for owned in S5_OWNED:
+            if owned in evidence:
+                raise ValueError(
+                    f"{owned} is S5's to state, not the caller's. A supplied cluster describes "
+                    "a comparison that did not happen -- nothing outside S5 can reconstruct "
+                    "which near-variants collapsed together -- and a supplied id names a "
+                    "strategy other than the one that was searched."
+                )
         evidence[CLUSTER_FIELD] = _cluster_note(candidate.id, s5.clusters)
+        evidence[ID_FIELD] = candidate.id
 
         try:
             provenance = provenance_for(candidate.id)
