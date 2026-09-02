@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 245 files · mypy --strict 245 files · 1761 pytest · clippy clean · cargo test ok
+  ruff 245 files · mypy --strict 245 files · 1766 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,10 +186,12 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **Wire `gate_s4` into `run_family_searches`.** `[G-S4-DSR]` now computes the DSR bracket from
-   the registry but nothing calls it, so `economics.dsr` is still absent from every dossier.
-   Wiring it puts a real DSR into the candidate metrics, which `[C-WRIT-01]` then derives as a
-   gate — one of the 34 closed by code rather than by a decision. Unblocked.
+1. **Should S4 actually filter?** `[G-S4-DSR]` now computes and reports, and its DSR reaches
+   dossiers — but candidates it rejects still reach S5. On the fixture every candidate scores
+   ≈0.14 against the 0.95 bar, so filtering would empty the ensemble entirely. That is arguably
+   the honest output for two synthetic random walks, and it changes every downstream report, so
+   it is a decision rather than a side effect. **Related: it is also an argument for the
+   backfill** — on real bars the gate might admit something.
 2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
    *Tripwires — auto-flags in every report*; the certification table gives no number. Setting it
    = a `gates.yaml` row + enforcing code + an ADR in one commit.
@@ -198,10 +200,11 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    budget with the owner's credentials. `pips.data.breeze.campaign` exists; the budget is 100k
    calls/day and 32 parallel fetches.
 
-The remaining `planned` rows are all M21/M23 (Rust plant, order plane) — later phases, not this
-one. Of `certify-smoke`'s 34 unsupplied fields, the stress battery belongs to M14's event engine,
-capacity to the order-budget planner, operations to session policy that does not exist, and
-`decision.rationale`/`outcome` are written when a human certifies.
+`certify-smoke` is at **0 certified, 33 unsupplied**. Of those 33: the stress battery belongs to
+M14's event engine, capacity to the order-budget planner, operations to session policy that does
+not exist, `decision.rationale`/`outcome` are written when a human certifies, and the remaining
+gates need validator outputs (PBO, SPA, plateau) wired the way the DSR now is — which is the
+same pattern repeated, and unblocked.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments

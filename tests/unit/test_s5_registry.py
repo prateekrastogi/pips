@@ -256,3 +256,54 @@ def test_the_run_is_deterministic(reg: Registry, tmp_path: Path) -> None:
     add(reg, tmp_path, "b", OTHER, metrics={"net_return": 0.10, "max_drawdown": 0.02})
     first, second = go(reg), go(reg)
     assert [c.id for c in first.ensemble] == [c.id for c in second.ensemble]
+
+
+# --------------------------------------- metrics derived at selection time `[G-S4-DSR]` -----
+
+
+def test_derived_metrics_reach_the_candidate(reg: Registry, tmp_path: Path) -> None:
+    """The DSR is derived over the WHOLE trial ledger, so it cannot live in the row: the row was
+    written before the trials that deflate it existed. It joins at selection time instead."""
+    first = add(reg, tmp_path, "a", BASE)
+    add(reg, tmp_path, "b", OTHER)
+
+    result = go(reg, extra_metrics={str(first): {"dsr": 0.97}})
+    by_id = {c.id: c.metrics for c in result.ensemble}
+    assert by_id[str(first)]["dsr"] == 0.97
+    assert by_id[str(first)]["net_return"] == 0.20
+
+
+def test_a_derived_metric_may_not_overwrite_a_recorded_one(reg: Registry, tmp_path: Path) -> None:
+    """Otherwise the ranking can be changed after the runs are in the append-only ledger — the
+    ledger's whole point defeated by a keyword argument."""
+    first = add(reg, tmp_path, "a", BASE)
+    add(reg, tmp_path, "b", OTHER)
+
+    with pytest.raises(ValueError, match="net_return"):
+        go(reg, extra_metrics={str(first): {"net_return": 9.99}})
+
+
+def test_a_derived_metric_for_an_unknown_run_is_refused(reg: Registry, tmp_path: Path) -> None:
+    """A mapping naming a candidate that is not there is a stale mapping, and applying the rest
+    of it silently means applying a mapping nobody has checked."""
+    add(reg, tmp_path, "a", BASE)
+
+    with pytest.raises(ValueError, match="9999"):
+        go(reg, extra_metrics={"9999": {"dsr": 0.97}})
+
+
+def test_a_candidate_with_no_derived_metrics_is_left_alone(reg: Registry, tmp_path: Path) -> None:
+    """Absent, not defaulted: a missing DSR must reach the dossier as unsupplied rather than as
+    a zero, which is a perfect failure dressed as a measurement."""
+    first = add(reg, tmp_path, "a", BASE)
+    second = add(reg, tmp_path, "b", OTHER)
+
+    result = go(reg, extra_metrics={str(first): {"dsr": 0.97}})
+    by_id = {c.id: c.metrics for c in result.ensemble}
+    assert "dsr" not in by_id[str(second)]
+
+
+def test_no_derived_metrics_at_all_is_the_default(reg: Registry, tmp_path: Path) -> None:
+    add(reg, tmp_path, "a", BASE)
+    result = go(reg)
+    assert all("dsr" not in c.metrics for c in result.ensemble)

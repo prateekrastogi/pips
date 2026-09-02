@@ -304,8 +304,17 @@ def run_s5_from_registry(
     bucket_ns: int,
     budget: OrderBudget,
     turnover: TurnoverInputs,
+    extra_metrics: Mapping[str, Mapping[str, float]] | None = None,
 ) -> S5Result:
     """Read completed runs at ``stage`` and run S5 over them.
+
+    ``extra_metrics`` carries values DERIVED at selection time rather than recorded with the
+    run — the deflated Sharpe above all (`[G-S4-DSR]`), which is computed against every trial in
+    the ledger and so cannot have been in a row written before those trials existed. It may not
+    overwrite a recorded metric: the runs table is append-only precisely so a ranking cannot be
+    changed after the fact, and a keyword argument that silently replaced `net_return` would
+    undo that. A run named here that is not among the candidates is refused rather than ignored,
+    because a stale mapping means the rest of it has not been checked either.
 
     ``stage`` is REQUIRED with no default. S5 selects from what survived the earlier stages, and
     pooling every run in the registry mixes S1 exploratory trials with S4 survivors — producing
@@ -339,10 +348,29 @@ def run_s5_from_registry(
             continue
 
         run_id = str(row["run_id"])
-        candidates.append(Candidate(run_id, json.loads(row["metrics"])))
+        recorded = json.loads(row["metrics"])
+        derived = (extra_metrics or {}).get(run_id, {})
+        if clash := sorted(set(recorded) & set(derived)):
+            raise ValueError(
+                f"run {run_id} already recorded {clash}, so a derived value cannot replace it. "
+                "The runs table is append-only so that a ranking cannot be changed after the "
+                "fact; overwriting here would undo that from the caller's side."
+            )
+        # Merge order cannot matter: the two are disjoint by the check above, and
+        # swapping them is an equivalent mutant. That is the point of refusing the
+        # clash rather than resolving it by precedence -- a precedence rule is a silent
+        # decision about which value wins, made once and forgotten.
+        candidates.append(Candidate(run_id, {**recorded, **derived}))
         series[run_id] = [
             float(v) for v in pl.read_parquet(row["daily_returns_ref"])["daily_return"]
         ]
+
+    if unknown := sorted(set(extra_metrics or {}) - {c.id for c in candidates}):
+        raise ValueError(
+            f"extra_metrics names run(s) {unknown} that are not candidates at stage {stage!r}. "
+            "A mapping that has drifted from the population is a mapping nobody has checked, "
+            "so the rest of it is not applied either."
+        )
 
     intake = RegistryIntake(
         rows_read=len(rows),

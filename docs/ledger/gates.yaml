@@ -57,8 +57,13 @@
   # A candidate that cannot be scored is NAMED and refused: no returns, too few observations, or
   # a flat series whose Sharpe is undefined. Never dropped, never admitted.
   #
-  # `building`, not `enforced`: nothing calls it yet. Wiring it into `run_family_searches` is
-  # what puts `economics.dsr` into a dossier, and it is the next step rather than this one.
+  # `building`, not `enforced`, and the distinction is exact: `run_family_searches` now CALLS
+  # it after every promotion (so the deflation counts every trial the cycle viewed, including
+  # the promotions themselves) and feeds the bracket into S5 as a derived metric, which is what
+  # puts a real `economics.dsr` into a dossier. But it REPORTS rather than GATES -- candidates
+  # it rejects still reach S5. Making it filter is a separate change with real consequences: on
+  # the smoke fixture every candidate scores ~0.14 against the 0.95 bar, which is correct for
+  # two synthetic random walks and would empty the ensemble entirely.
 
 - id: G-TDD-01
   title: "Test-first: no commit adds production code before a covering test"
