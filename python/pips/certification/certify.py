@@ -220,6 +220,11 @@ def certify(candidates: Sequence[CertificationCandidate], *, key: bytes) -> Cert
                     f"{'.'.join(_RANK_FIELD)} is not a number, so the candidate cannot be ranked"
                 )
 
+        # `or score is None` is redundant at RUNTIME -- an unrankable score has already had
+        # its reason appended above, so `reasons` is non-empty whenever it is None -- and a
+        # mutation dropping it is correspondingly equivalent. It stays because it is what
+        # narrows `float | None` to `float` for the constructor below; without it `make ci`'s
+        # typecheck fails, which is the check that would otherwise catch the same mistake.
         if reasons or score is None:
             rejected.append(Rejection(strategy_id=strategy_id, reasons=tuple(reasons)))
             continue
