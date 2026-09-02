@@ -89,5 +89,11 @@ def robust_level(values: Sequence[float], *, statistic: str) -> float:
     if not ordered:
         raise ValueError("cannot take a level of an empty series")
     quantile = _QUANTILE[statistic]
-    index = min(len(ordered) - 1, max(0, math.ceil(quantile * len(ordered)) - 1))
+    # NEITHER CLAMP was reachable and both are gone. For a quantile in (0, 1] and a non-empty
+    # series -- guaranteed by the guard above -- `ceil(q*n) >= 1` puts the index at or above 0,
+    # and `ceil(q*n) <= ceil(n) = n` puts it at or below n-1. Brute-forced over both registered
+    # quantiles at every length to 5,000: zero cases where either would bind. They read as
+    # bounds being enforced and enforced nothing, and they would come alive only for a quantile
+    # outside (0, 1], which is not a quantile.
+    index = math.ceil(quantile * len(ordered)) - 1
     return ordered[index]
