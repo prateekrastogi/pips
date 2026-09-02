@@ -332,20 +332,23 @@ def test_a_dossier_from_the_writer_cannot_reach_the_holdout_yet(tmp_path: Path) 
     finding, not a failure. Inventing the bar to make this test green is the one thing the whole
     `[C-WRIT-01]` design refuses.
     """
-    from pips.certification.writer import GATE_SOURCES, draft_dossier
+    from pips.certification.writer import METRIC_SOURCES, draft_dossier
     from pips.selection.pareto import Candidate
 
-    gate_paths = {spec.path for spec in GATE_SOURCES}
+    # Every DERIVED path excluded, enumerated from METRIC_SOURCES rather than listed: adding
+    # gross_to_net and cost_share left a hand-written exclusion list silently short.
+    derived = {spec.path for spec in METRIC_SOURCES}
     evidence = {
         f"{s}.{f}": f"{s}.{f}"
         for s, fields in REQUIRED_FIELDS.items()
         for f in fields
-        if f"{s}.{f}" not in gate_paths
-        and f"{s}.{f}" not in {"economics.net_return", "economics.max_drawdown"}
+        if f"{s}.{f}" not in derived
     }
     del evidence["stability.lockbox_result"]
-    metrics = {spec.metric: (0.0 if spec.direction == "at_most" else 1.0) for spec in GATE_SOURCES}
-    metrics["net_return"] = 0.04
+    metrics = {
+        spec.metric: (0.0 if spec.direction == "at_most" else 1.0) if spec.threshold else 0.04
+        for spec in METRIC_SOURCES
+    }
     draft = draft_dossier(candidate=Candidate(id="A01", metrics=metrics), evidence=evidence)
 
     holdout = Holdout()

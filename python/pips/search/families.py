@@ -40,7 +40,7 @@ from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_doma
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry, RunRecord
-from pips.search.s1 import _evaluate, _pnl_series, load_panel
+from pips.search.s1 import _evaluate, _pnl_and_turns, _pnl_series, load_panel
 from pips.search.s5 import TurnoverInputs, run_s5_from_registry
 from pips.search.silver_panel import load_silver_panel
 from pips.search.trials import (
@@ -64,6 +64,15 @@ __all__ = ["PROMOTED_STAGE", "run_family_searches"]
 
 _NS = 1_000_000_000
 _SPECS = Path("config/search_spaces")
+ROUND_TRIP_COST = 0.0005
+"""The all-in cost line, per round trip and per unit notional. Named once because the search's
+PnL and S5's turnover economics must price the same trade the same way -- and because a gross
+return recorded in a field called `net_return` is a claim the number does not support."""
+
+COST_STRESS = 1.5
+"""`[G-P4-COST15]`: *positive after 1.5x cost*. The 2x figure on the same blueprint row is
+DISCLOSED, not gated (ADR-0014), and is not computed here."""
+
 COST_MODEL = "0" * 64
 """Placeholder cost model for the fixture run. Named once so the RunRecords and the report that
 summarises them cannot disagree about which one was used."""
@@ -174,14 +183,19 @@ def _search_one(
             )
         return scored[key]
 
-    pnl: dict[str, list[float]] = {}
+    pnl: dict[str, tuple[list[float], list[int]]] = {}
 
-    def series_for(config: str) -> list[float]:
+    def gross_and_turns(config: str) -> tuple[list[float], list[int]]:
+        """Cached GROSS series and turnover counts.
+
+        Cached in this form rather than as a netted series so the winner's cost stress costs no
+        extra evaluation: every cost line is arithmetic on the same two lists.
+        """
         if config not in pnl:
             # The FULL window for every config, so preserved series are equal-length and
             # correlatable -- a config's return stream is a property of the config, not of how
             # long the search looked at it.
-            pnl[config] = _pnl_series(
+            pnl[config] = _pnl_and_turns(
                 panel,
                 closes,
                 stamps[:returns_bars],
@@ -190,6 +204,10 @@ def _search_one(
                 driver.compute,
             )
         return pnl[config]
+
+    def series_for(config: str, cost: float = ROUND_TRIP_COST) -> list[float]:
+        gross_series, turns_series = gross_and_turns(config)
+        return [g - t * cost for g, t in zip(gross_series, turns_series, strict=True)]
 
     result = successive_halving(candidates, score, initial_budget=initial_budget, eta=2)
 
@@ -227,6 +245,11 @@ def _search_one(
 
     # `[G-P4-DELAY1]`: *survives +1-bar delay*. The decision is unchanged and only the ENTRY
     # moves, so the strategy gets no later view of the market -- delaying the decision would.
+    # ONE evaluation, priced three ways. A cost line shifts each traded bar by a constant, so
+    # gross, net and the 1.5x stress differ only by arithmetic on the same turnover counts --
+    # re-running the panel per line made this Verify four times slower for two subtractions.
+    gross = series_for(winner, 0.0)
+    stressed = series_for(winner, ROUND_TRIP_COST * COST_STRESS)
     delayed = _pnl_series(
         panel,
         closes,
@@ -235,13 +258,23 @@ def _search_one(
         spec,
         driver.compute,
         delay_bars=1,
+        cost_per_round_trip=ROUND_TRIP_COST,
     )
 
+    net, gross_total = float(sum(series)), float(sum(gross))
     metrics = {
-        "net_return": float(sum(series)),
+        # NET, now that the line is applied. It was gross until this commit, in a field named
+        # net_return that `[C-CERT-01]` ranks on.
+        "net_return": net,
         "max_drawdown": _drawdown(series),
         "rank_ic": float(score(winner, result.rounds[-1].budget)),
+        "cost_1_5x": float(sum(stressed)),
     }
+    if gross_total != 0:
+        # Undefined against a zero gross, and NOT 1.0: a strategy that made nothing gross has no
+        # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.
+        metrics["gross_to_net"] = net / gross_total
+        metrics["cost_share"] = (gross_total - net) / gross_total
     if any(delayed):
         # Absent when the delayed run never trades. `at_least 0.0` would PASS a net return of
         # zero, and a strategy that stops trading under a one-bar delay has not survived the
@@ -449,7 +482,9 @@ def run_family_searches(
         cluster_threshold=0.2,
         max_pairwise_correlation=0.5,
         blotter_for=_blotter_for,
-        gross_cost=CostLine(0.0005),
+        # The SAME line the PnL is netted with. Two literals would drift, and S5 would then
+        # price a trade differently from the series it is selecting on.
+        gross_cost=CostLine(ROUND_TRIP_COST),
         bucket_ns=_SECOND,
         budget=NSE_RETAIL_BUDGET,
         turnover=_turnover_inputs(),

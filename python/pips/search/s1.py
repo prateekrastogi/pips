@@ -356,12 +356,21 @@ def _pnl_series(
     spec: AlphaSpec,
     compute_fn: ComputeFn = compute,
     delay_bars: int = 0,
+    cost_per_round_trip: float = 0.0,
 ) -> list[float]:
     """Per-bar realised PnL of taking every forecast's sign, zero where there was no forecast.
 
     Zero-filled rather than compacted, so every config's series has the same length at the same
     budget whatever its warm-up costs it. Compacting would make the series lengths depend on the
     parameter, and correlating those would need a truncation that aligns at index 0.
+
+    ``cost_per_round_trip`` is charged for every forecast ACTED ON — each opens and closes
+    within its holding bar, so each is one round trip. Charged per position taken rather than
+    per bar or per forecast emitted: a forecast skipped for a missing price traded nothing, and
+    billing it would invent turnover. Defaults to zero so the series is gross unless a caller
+    names a line; the caller that certifies must name one, because a gross return recorded in a
+    field called `net_return` is a claim the number does not support — and `[C-CERT-01]` RANKS
+    on that field.
 
     ``delay_bars`` shifts ENTRY, never the decision: the forecast is still computed from the
     as-of view at ``ts``, and the position is taken ``delay_bars`` bars later. That is
@@ -372,13 +381,42 @@ def _pnl_series(
     which would fabricate a return out of the shift. The series length is unchanged so a
     stressed run stays comparable with its baseline.
     """
+    if cost_per_round_trip < 0:
+        raise ValueError(
+            f"cost_per_round_trip must not be negative, got {cost_per_round_trip}. A negative "
+            "cost pays the strategy to trade, which would make turnover a source of alpha."
+        )
     if delay_bars < 0:
         raise ValueError(
             f"delay_bars must not be negative, got {delay_bars}. A negative delay enters BEFORE "
             "the decision — the lookahead this project exists to prevent, and it would improve "
             "every result it touched."
         )
-    series = [0.0] * (len(stamps) - 1)
+    gross, turns = _pnl_and_turns(
+        panel, closes, stamps, params, spec, compute_fn=compute_fn, delay_bars=delay_bars
+    )
+    return [g - t * cost_per_round_trip for g, t in zip(gross, turns, strict=True)]
+
+
+def _pnl_and_turns(
+    panel: pl.DataFrame,
+    closes: dict[str, dict[int, int]],
+    stamps: list[int],
+    params: object,
+    spec: AlphaSpec,
+    compute_fn: ComputeFn = compute,
+    delay_bars: int = 0,
+) -> tuple[list[float], list[int]]:
+    """Gross PnL per bar and the number of round trips that produced it.
+
+    Separated so a caller pricing the SAME series at several cost lines pays for one evaluation
+    rather than one per line: a cost shifts each traded bar by a constant, so every other line
+    is arithmetic. `certify-smoke` needs the gross, the net and the 1.5x stress together, and
+    re-running the panel three times for two subtractions made the milestone's own Verify four
+    times slower than the thing it verifies.
+    """
+    gross = [0.0] * (len(stamps) - 1)
+    turns = [0] * (len(stamps) - 1)
     for i, ts in enumerate(stamps[:-1]):
         entry_index, exit_index = i + delay_bars, i + delay_bars + 1
         if exit_index >= len(stamps):
@@ -390,8 +428,9 @@ def _pnl_series(
             if here in (None, 0) or nxt is None:
                 continue
             direction = 1.0 if float(forecast.expected_return_bps) >= 0 else -1.0
-            series[i] += direction * (nxt - here) / here
-    return series
+            gross[i] += direction * (nxt - here) / here
+            turns[i] += 1
+    return gross, turns
 
 
 def run_s1_search(

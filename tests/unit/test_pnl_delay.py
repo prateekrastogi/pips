@@ -109,3 +109,59 @@ def test_the_delay_erodes_a_trending_series() -> None:
     """Direction check: on a decelerating uptrend, entering later earns less."""
     prices = [100, 200, 250, 275, 280]
     assert sum(series(prices, delay_bars=1)) < sum(series(prices))
+
+
+# ------------------------------------------------- costs, so that "net" means net -----
+
+
+def costed(prices: list[int], cost: float, delay_bars: int = 0) -> list[float]:
+    panel, closes = panel_of(prices)
+    return _pnl_series(
+        panel,
+        closes,
+        STAMPS,
+        object(),
+        _Spec(),  # type: ignore[arg-type]
+        compute_fn=always_long,  # type: ignore[arg-type]
+        delay_bars=delay_bars,
+        cost_per_round_trip=cost,
+    )
+
+
+def test_no_cost_is_the_default_and_the_existing_behaviour() -> None:
+    """S1's own search calls this too; a default that charged would move its results."""
+    assert costed([100, 110, 120, 130, 140], 0.0) == series([100, 110, 120, 130, 140])
+
+
+def test_a_cost_is_charged_per_round_trip() -> None:
+    """Every forecast here opens and closes within the bar, so each one is a round trip."""
+    gross = series([100, 110, 120, 130, 140])
+    net = costed([100, 110, 120, 130, 140], 0.001)
+    assert net == pytest.approx([g - 0.001 for g in gross])
+
+
+def test_nothing_is_charged_where_no_position_was_taken() -> None:
+    """A forecast skipped for a missing price cost nothing, because nothing was traded.
+
+    Charging per BAR, or per forecast EMITTED, would bill for trades that never happened — and
+    on the last bars under a delay it would bill for every one of them.
+    """
+    net = costed([100, 110, 120, 130, 140], 0.001, delay_bars=1)
+    assert net[-1] == 0.0, "the final decision has no exit bar, so it is not a trade"
+
+
+def test_a_negative_cost_is_refused() -> None:
+    """A negative cost pays the strategy to trade, and would make turnover a source of alpha."""
+    with pytest.raises(ValueError, match="cost_per_round_trip"):
+        costed([100, 110, 120, 130, 140], -0.001)
+
+
+def test_net_never_exceeds_gross() -> None:
+    prices = [100, 90, 130, 95, 140]
+    assert sum(costed(prices, 0.002)) <= sum(series(prices))
+
+
+def test_more_cost_is_never_better() -> None:
+    """The 1.5x stress leans on this: raising the cost line must not raise the result."""
+    prices = [100, 90, 130, 95, 140]
+    assert sum(costed(prices, 0.003)) <= sum(costed(prices, 0.002))

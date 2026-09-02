@@ -27,7 +27,7 @@ import pytest
 from pips.bundle import IrNode
 from pips.certification.dossier import REQUIRED_FIELDS, Measurement
 from pips.certification.nominate import S5_OWNED, NoProvenanceError, nominate
-from pips.certification.writer import GATE_SOURCES, METRIC_SOURCES
+from pips.certification.writer import METRIC_SOURCES
 from pips.selection.cluster import Cluster
 from pips.selection.pareto import Candidate
 
@@ -40,10 +40,16 @@ DERIVED_PATHS = {spec.path for spec in METRIC_SOURCES}
 
 
 def metrics() -> dict[str, float]:
-    values = {spec.metric: (0.0 if spec.direction == "at_most" else 1.0) for spec in GATE_SOURCES}
-    values["net_return"] = 0.04
-    values["max_drawdown"] = 0.02
-    return values
+    """Enumerated from METRIC_SOURCES, not listed by hand.
+
+    A hand-written list does not grow with the model: adding `gross_to_net` and `cost_share` as
+    derived metrics left this fixture silently short, and the gap surfaced as two paths the
+    writer reported unsupplied.
+    """
+    return {
+        spec.metric: (0.0 if spec.direction == "at_most" else 1.0) if spec.threshold else 0.04
+        for spec in METRIC_SOURCES
+    }
 
 
 def evidence_for(strategy_id: str) -> dict[str, Any]:

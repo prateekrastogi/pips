@@ -98,6 +98,8 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     # is the same objection as a caller-supplied gate one step further along.
     MetricSource("net_return", "economics.net_return"),
     MetricSource("max_drawdown", "economics.max_drawdown"),
+    MetricSource("gross_to_net", "economics.gross_to_net"),
+    MetricSource("cost_share", "economics.cost_share"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(
@@ -106,6 +108,9 @@ GATE_SOURCES: tuple[MetricSource, ...] = tuple(
 
 _GATE_PATHS = frozenset(spec.path for spec in GATE_SOURCES)
 _DERIVED_PATHS = frozenset(spec.path for spec in METRIC_SOURCES)
+_RANK_PATH = "economics.net_return"
+"""The one derived field `[C-CERT-01]` ranks on, and so the one whose refusal has a
+different consequence to explain."""
 _ALL_PATHS = frozenset(
     f"{section}.{field}" for section, fields in REQUIRED_FIELDS.items() for field in fields
 )
@@ -139,10 +144,16 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
                 f"{path} is a gate and is derived from the measured metric, not supplied. "
                 "Accepting it here would let a caller hand the certifier a passing Measurement."
             )
-        if path in _DERIVED_PATHS:
+        if path == _RANK_PATH:
             raise UndeclaredEvidenceError(
                 f"{path} is derived from the measured metric, not supplied. Certification ranks "
                 "on it, so a caller-supplied value is a caller-chosen ranking."
+            )
+        if path in _DERIVED_PATHS:
+            raise UndeclaredEvidenceError(
+                f"{path} is derived from the measured metric, not supplied. Supplying it would "
+                "put a number the search did not measure into a field the certifier reads as "
+                "measured."
             )
         if path not in _ALL_PATHS:
             raise UndeclaredEvidenceError(
