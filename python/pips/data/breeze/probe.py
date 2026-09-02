@@ -25,6 +25,7 @@ __all__ = [
     "BREEZE_BAR_LABELLING",
     "BarLabelling",
     "infer_bar_labelling",
+    "ist_range",
     "ist_window",
     "session_minutes",
     "summarise_candles",
@@ -63,6 +64,22 @@ def ist_window(day: date, start: str = "09:15", end: str = "15:30") -> tuple[str
     """
     iso = day.isoformat()
     return f"{iso}T{start}:00.000Z", f"{iso}T{end}:00.000Z"
+
+
+def ist_range(
+    start: date, end: date, open_at: str = "09:15", close_at: str = "15:30"
+) -> tuple[str, str]:
+    """``(from_date, to_date)`` spanning many sessions, as IST wall-clock.
+
+    Same convention as :func:`ist_window` and for the same reason: Breeze reads these as IST and
+    ignores the trailing ``Z``, so a UTC window is silently CLIPPED rather than refused.
+
+    **The multi-day span itself is UNVERIFIED.** SAL-0002 established the timestamp convention on
+    single-session windows; nobody has asked this vendor for three years in one call. It may clip,
+    or cap below the documented 1,000 candles. Only a live probe settles it, and the manifest is
+    what makes that probe cheap to repeat.
+    """
+    return f"{start.isoformat()}T{open_at}:00.000Z", f"{end.isoformat()}T{close_at}:00.000Z"
 
 
 def session_minutes(session_open: time, session_close: time) -> int:

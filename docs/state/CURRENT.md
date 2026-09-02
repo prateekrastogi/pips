@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 262 files · mypy --strict 262 files · 2060 pytest · clippy clean · cargo test ok
+  ruff 263 files · mypy --strict 263 files · 2082 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 59 rows (planned=8 building=27 enforced=24)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -216,9 +216,12 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    | 1minute | 15.6 | 5.9 |
    | 1second | 359.7 | 351.9 |
 
-   So the cheap seed is real and is **gated on a bounded code change** — a range-spanning fetch
-   and a manifest keyed by range rather than by day — not on sixteen days of quota. That is
-   engineering work, not an owner decision.
+   So the cheap seed is real and was **gated on a bounded code change** — which has now landed:
+   `run_range_backfill` + `ranged_fetcher` fetch one call per symbol over a span, keyed in the
+   manifest by symbol, interval and range. **What remains is a live probe**, not engineering:
+   the multi-day window has never been tried, and `ist_window` exists because Breeze silently
+   CLIPS a UTC window rather than erroring. One call for one symbol would settle it, and it
+   needs the owner's authorisation.
 
    **And the score's four inputs are not equally cheap, which the old framing never mentioned.**
    Daily bars give median ₹volume, Amihud and gap-rate. They cannot give **spread** — OHLC has

@@ -32,6 +32,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -40,9 +41,37 @@ from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.budget import DailyBudgetExceededError
 from pips.data.breeze.ingest import ResponseKind, classify_response
 
-__all__ = ["BackfillResult", "Manifest", "run_backfill"]
+__all__ = ["BackfillResult", "Manifest", "run_backfill", "run_range_backfill"]
 
 Fetcher = Callable[[str, date], Any]
+RangeFetcher = Callable[[str, date, date], Any]
+
+
+class _Decision(StrEnum):
+    """What one reply means for the run -- the module docstring's table, as code.
+
+    In one place because there are now two fetch shapes, per symbol-day and per range, and two
+    copies of this table would be two places for it to drift with only one under test.
+    """
+
+    STORE = "STORE"  # an answer: write bronze, mark done
+    RETRY = "RETRY"  # no answer: write nothing, mark nothing, keep going
+    STOP = "STOP"  # the vendor refused us: write nothing, mark nothing, end the run
+
+
+def _decide(kind: ResponseKind) -> _Decision:
+    """RETRY is the default, and that is the safety property.
+
+    A fifth `ResponseKind` added later lands here rather than on STORE, so an outcome nobody has
+    taught this module about is retried rather than marked done. Unmarked costs a call; marked
+    wrongly costs a permanent hole that reads as a holiday.
+    """
+    if kind is ResponseKind.RATE_LIMITED:
+        return _Decision.STOP
+    if kind in _TERMINAL:
+        return _Decision.STORE
+    return _Decision.RETRY
+
 
 # Outcomes that mean "attempted, and we have our answer". Everything else is pending.
 #
@@ -68,6 +97,23 @@ class Manifest:
     def key(symbol: str, day: date) -> str:
         return f"{symbol}:{day.isoformat()}"
 
+    @staticmethod
+    def range_key(symbol: str, interval: str, start: date, end: date) -> str:
+        """A range's key carries its INTERVAL as well as its span.
+
+        Without both, a daily seed would mark a 1-second seed done over the same dates and the
+        archive would hold neither while the manifest claimed both.
+        """
+        return f"{symbol}:{interval}:{start.isoformat()}:{end.isoformat()}"
+
+    def is_done_range(self, symbol: str, interval: str, start: date, end: date) -> bool:
+        return self.range_key(symbol, interval, start, end) in self.outcomes
+
+    def mark_range(
+        self, symbol: str, interval: str, start: date, end: date, outcome: ResponseKind
+    ) -> None:
+        self._write(self.range_key(symbol, interval, start, end), outcome)
+
     @classmethod
     def load(cls, path: Path) -> Manifest:
         if not path.exists():
@@ -88,7 +134,10 @@ class Manifest:
         return self.outcomes.get(self.key(symbol, day))
 
     def mark(self, symbol: str, day: date, outcome: ResponseKind) -> None:
-        self.outcomes[self.key(symbol, day)] = outcome.value
+        self._write(self.key(symbol, day), outcome)
+
+    def _write(self, key: str, outcome: ResponseKind) -> None:
+        self.outcomes[key] = outcome.value
         # ATOMIC: this file is rewritten once per key -- 234,900 times on the 3y x U300
         # campaign -- and a truncated manifest sends `load` back to empty, so the restart that
         # was supposed to cost zero calls re-fetches everything already paid for.
@@ -136,6 +185,41 @@ def _write_bronze(root: Path, symbol: str, day: date, payload: Any) -> Path:
     return path
 
 
+def _write_range_bronze(
+    root: Path, symbol: str, interval: str, start: date, end: date, payload: Any
+) -> Path:
+    """One raw observation covering a SPAN of sessions.
+
+    Laid out under the interval so it cannot collide with the per-day tree, and its request
+    block carries `from`/`to` rather than `trade_date` -- there is no single trading day to
+    name. `promote_bronze` quarantines a shape it cannot read rather than raising over it,
+    which is what lets both trees share one bronze root.
+    """
+    directory = root / symbol / interval / f"{start.isoformat()}_{end.isoformat()}"
+    directory.mkdir(parents=True, exist_ok=True)
+    received = time.time_ns()
+    path = directory / f"{received}.json"
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "request": {
+                    "symbol": symbol,
+                    "interval": interval,
+                    "from": start.isoformat(),
+                    "to": end.isoformat(),
+                },
+                "received_at_ns": received,
+                "payload": payload,
+            },
+            indent=1,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    return path
+
+
 def run_backfill(
     symbols: list[str],
     days: list[date],
@@ -166,12 +250,13 @@ def run_backfill(
             attempted += 1
             kind = classify_response(payload)
 
-            if kind is ResponseKind.RATE_LIMITED:
-                # Stop the whole run. Pushing on would collect more rejections, and marking
-                # this key done would record a hole that looks like a holiday forever.
+            decision = _decide(kind)
+            if decision is _Decision.STOP:
+                # Pushing on would collect more rejections, and marking this key done would
+                # record a hole that looks like a holiday forever.
                 stopped_rate = True
                 break
-            if kind is ResponseKind.ERROR:
+            if decision is _Decision.RETRY:
                 errored += 1
                 continue  # deliberately NOT marked: the next run retries it
 
@@ -180,10 +265,79 @@ def run_backfill(
                 fetched += 1
             else:
                 empty += 1
-            if kind in _TERMINAL:
-                manifest.mark(symbol, day, kind)
+            manifest.mark(symbol, day, kind)
         if stopped_budget or stopped_rate:
             break
+
+    return BackfillResult(
+        attempted=attempted,
+        fetched=fetched,
+        empty=empty,
+        errored=errored,
+        skipped=skipped,
+        stopped_on_budget=stopped_budget,
+        stopped_on_rate_limit=stopped_rate,
+    )
+
+
+def run_range_backfill(
+    symbols: list[str],
+    start: date,
+    end: date,
+    interval: str,
+    fetcher: RangeFetcher,
+    bronze_root: Path,
+    manifest_path: Path,
+) -> BackfillResult:
+    """One call per symbol covering the whole range -- the shape a universe seed needs.
+
+    The per-symbol-day campaign is right for 1-minute data: 375 candles fill a call, and a
+    manifest keyed per symbol-day makes a resume granular. It is wrong for anything coarser,
+    where the per-day toll is paid whatever the interval -- three years of daily bars costs 782
+    calls per symbol and returns one candle for each. The vendor allows <=1,000 candles over an
+    arbitrary range, which makes the same three years ONE call.
+
+    Resume is per symbol-range rather than per symbol-day, which is the right grain here: a
+    range IS one call, so there is nothing finer to resume to.
+
+    **The multi-day window is unverified against the live API** -- see :func:`ist_range`. This
+    fixes the shape of the request and the accounting around it; only a probe can confirm the
+    vendor honours it.
+    """
+    refuse_repo_paths(bronze_root, what="bronze")
+    if end < start:
+        raise ValueError(f"end {end} is before start {start}")
+    manifest = Manifest.load(manifest_path)
+
+    attempted = fetched = empty = errored = skipped = 0
+    stopped_budget = stopped_rate = False
+
+    for symbol in symbols:
+        if manifest.is_done_range(symbol, interval, start, end):
+            skipped += 1
+            continue
+        try:
+            payload = fetcher(symbol, start, end)
+        except DailyBudgetExceededError:
+            stopped_budget = True
+            break
+
+        attempted += 1
+        kind = classify_response(payload)
+        decision = _decide(kind)
+        if decision is _Decision.STOP:
+            stopped_rate = True
+            break
+        if decision is _Decision.RETRY:
+            errored += 1
+            continue
+
+        _write_range_bronze(bronze_root, symbol, interval, start, end, payload)
+        if kind is ResponseKind.OK:
+            fetched += 1
+        else:
+            empty += 1
+        manifest.mark_range(symbol, interval, start, end, kind)
 
     return BackfillResult(
         attempted=attempted,
