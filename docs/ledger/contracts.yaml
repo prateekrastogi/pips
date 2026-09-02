@@ -1127,6 +1127,13 @@
   # answered is a hole, not a quiet market, and a day the calendar has nothing to say about is
   # precisely when a silent fetch failure would otherwise pass.
   #
+  # AND A REJECTION IS NOT ALSO A COVERAGE PROBLEM. A rate-limited record used to collect two
+  # findings: the rejection, plus coverage's "truncated response rather than thin trading" --
+  # a claim about the DATA on a record whose problem is our QUOTA. They contradict each other
+  # about the same record, and a finding that is sometimes false is one everybody learns to
+  # skip. Coverage is skipped once the reply is classified a rejection, because by then we
+  # already know why there are no bars.
+  #
   # `building`, and this is the row that says why the QC subsystem is not load-bearing yet:
   # NOTHING RUNS IT. `promote_bronze` does not consult QC -- silver.py mentions neither
   # `Finding` nor `Severity` -- and the only entry point is a human typing `make qc`. Bars

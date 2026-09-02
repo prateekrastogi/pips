@@ -238,7 +238,8 @@ def run_qc(
 
         payload = record["payload"]
         findings: list[Finding] = []
-        if classify_response(payload) is ResponseKind.RATE_LIMITED:
+        rejected = classify_response(payload) is ResponseKind.RATE_LIMITED
+        if rejected:
             findings.append(
                 Finding("rate_limited", Severity.QUARANTINE, "bronze holds a rate rejection")
             )
@@ -256,9 +257,14 @@ def run_qc(
         # fixture's 30 minutes — which made the check vacuous on real data: a genuine
         # 375-minute session arriving with 50 bars scored 50/30 and passed. The expectation
         # must describe the session, not the test data.
-        findings += check_session_coverage(
-            bars, expected_minutes=expected_minutes, fetch_succeeded=key in fetched_keys
-        )
+        # Not for a rejection. We already know why there are no bars, and coverage would add
+        # "truncated response rather than thin trading" -- a claim about the DATA, on a record
+        # whose problem is our QUOTA. The two findings contradict each other about the same
+        # record, and a finding that is sometimes false is one everybody learns to skip.
+        if not rejected:
+            findings += check_session_coverage(
+                bars, expected_minutes=expected_minutes, fetch_succeeded=key in fetched_keys
+            )
 
         # The overnight ratio, but ONLY across genuinely adjacent sessions. Bronze is not
         # guaranteed contiguous -- a partial backfill leaves holes -- and comparing a close

@@ -13,12 +13,14 @@ deleting it makes the finding unverifiable.
 from __future__ import annotations
 
 import json
+import time
 from datetime import date
 from pathlib import Path
 
 import pytest
 
 from pips.data.qc import runner as runner_module
+from pips.data.qc.checks import Finding, Severity
 from pips.data.qc.runner import (
     CORRUPTIONS,
     main,
@@ -316,4 +318,137 @@ def test_the_cli_reports_coverage_and_warns_about_the_unverified_holiday_list(
     assert "holiday list" in out, (
         "an unverified holiday list makes real adjacent sessions look non-adjacent, so the "
         "run must say so rather than presenting its coverage as complete"
+    )
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def _quarantine_records(root: Path) -> list[dict[str, object]]:
+    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(root.rglob("*.json"))]
+
+
+def test_a_rate_limited_record_is_quarantined_as_a_rate_limit(tmp_path: Path) -> None:
+    """The right verdict for the wrong reason is not the right verdict.
+
+    Breeze puts the rejection in the BODY, not the HTTP status, so a throttled fetch is a 200
+    carrying no candles. Delete the rate-limit branch and the record still gets quarantined —
+    by the coverage check, as "truncated response rather than thin trading". The archive then
+    records a data problem where there was a quota problem, and the backfill that caused it
+    reads as clean.
+    """
+    day = date(2026, 8, 28)
+    path = tmp_path / "bronze" / "CLEAN" / day.isoformat() / "1.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "request": {"symbol": "CLEAN", "trade_date": day.isoformat()},
+                "received_at_ns": 1,
+                "payload": {"Success": None, "Status": 5, "Error": "API rate limit exceeded"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"CLEAN:2026-08-28"})
+
+    assert report.quarantined == 1
+    assert {f.check for f in report.findings} == {"rate_limited"}, (
+        "a quota rejection must not be recorded as a data problem"
+    )
+
+
+def test_the_quarantine_record_carries_the_severity_and_when_it_was_written(
+    tmp_path: Path,
+) -> None:
+    """The reason travels with the record, and so does its weight and its date.
+
+    A severity of "" makes every finding equally loud, and a `quarantined_at_ns` of 0 dates
+    the quarantine to 1970 — the same falsified provenance `[C-SILVER-01]` refuses for bars,
+    for the same reason: an epoch stamp is not "unknown", it is early, and it sorts and
+    filters as though it were.
+    """
+    seed_corrupt_bronze(tmp_path / "bronze", corruption="bar_sanity")
+    before = time.time_ns()
+    run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"CLEAN:2026-08-28"})
+    after = time.time_ns()
+
+    records = _quarantine_records(tmp_path / "quarantine")
+    assert len(records) == 1
+    stamp = records[0]["quarantined_at_ns"]
+    assert isinstance(stamp, int) and before <= stamp <= after, (
+        f"quarantined_at_ns {stamp} is not a time this run could have written"
+    )
+    findings = records[0]["findings"]
+    assert isinstance(findings, list) and findings
+    assert {f["severity"] for f in findings} == {"QUARANTINE"}
+
+
+def test_a_warn_only_record_is_not_quarantined(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Quarantine is for QUARANTINE findings, and the distinction is dormant, not absent.
+
+    Every check ships QUARANTINE today, so `if findings:` and `if any(... QUARANTINE ...)`
+    behave identically and nothing notices the difference. That is exactly when the semantics
+    are cheapest to pin: the first WARN check anyone adds would otherwise start pulling
+    records out of the archive, and it would look like the check working.
+    """
+    seed_corrupt_bronze(tmp_path / "bronze", corruption=None)
+    monkeypatch.setattr(
+        runner_module,
+        "check_bar_sanity",
+        lambda bars: [Finding("noticed", Severity.WARN, "worth a look, not a quarantine")],
+    )
+
+    report = run_qc(tmp_path / "bronze", tmp_path / "quarantine", fetched_keys={"CLEAN:2026-08-28"})
+
+    assert [f.check for f in report.findings] == ["noticed"], "the finding is still reported"
+    assert report.quarantined == 0, "but it does not pull the record"
+    assert _quarantine_records(tmp_path / "quarantine") == []
+
+
+def test_without_a_calendar_the_ratio_check_is_skipped_not_crashed(tmp_path: Path) -> None:
+    """Adjacency needs a calendar; absence of one is a skip with a count, not an exception.
+
+    `_previous_trading_day` takes a calendar, so dropping the `calendar is not None` guard
+    does not weaken the check — it raises AttributeError the first time two sessions of one
+    symbol appear, which is the normal case on real bronze.
+    """
+    seed_two_sessions(tmp_path / "bronze", first_close_paise=10_000, second_open_paise=5_000)
+
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-27", "CLEAN:2026-08-28"},
+        calendar_path=None,
+    )
+
+    assert report.ratio_checks_run == 0
+    assert report.ratio_checks_skipped == 2
+    assert "ratio_jump" not in {f.check for f in report.findings}
+
+
+def test_the_close_carried_into_tomorrow_is_the_sessions_last_bar(tmp_path: Path) -> None:
+    """Not its first.
+
+    The seeder ramps a cent a minute and then sets the closing bar, so the first bar's close
+    sits 10 paise above the last one's. Carrying the wrong one forward shifts every overnight
+    ratio by the intraday move — small enough to keep looking plausible, and enough to walk a
+    genuine 1:2 split out of tolerance or an ordinary night into it.
+    """
+    seed_two_sessions(tmp_path / "bronze", first_close_paise=10_000, second_open_paise=5_000)
+
+    report = run_qc(
+        tmp_path / "bronze",
+        tmp_path / "quarantine",
+        fetched_keys={"CLEAN:2026-08-27", "CLEAN:2026-08-28"},
+        calendar_path=Path("config/calendars/nse_equity.yaml"),
+    )
+
+    jumps = [f for f in report.findings if f.check == "ratio_jump"]
+    assert len(jumps) == 1
+    assert "ratio 2.000" in jumps[0].detail, (
+        f"expected the last bar's 10000 paise close over 5000, got {jumps[0].detail!r}"
     )
