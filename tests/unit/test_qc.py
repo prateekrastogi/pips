@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import date, time
 
-from pips.data.breeze.ingest import NormalizedBar
+from pips.data.breeze.ingest import NormalizedBar, normalize_candles
 from pips.data.pit.corporate_actions import JumpVerdict
 from pips.data.qc.checks import (
     Finding,
@@ -24,6 +24,7 @@ from pips.data.qc.checks import (
     check_bar_sanity,
     check_decimal_shift,
     check_monotonic_labels,
+    check_raw_row_order,
     check_session_coverage,
     check_spikes,
     check_unexplained_ratio_jump,
@@ -227,3 +228,143 @@ def test_a_finding_carries_enough_to_act_on() -> None:
     finding = check_bar_sanity([bar(0, 100_00, 99_00, 98_00, 98_50)])[0]
     assert isinstance(finding, Finding)
     assert finding.check and finding.detail and finding.severity
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_low_above_the_open_is_malformed_even_when_below_the_close() -> None:
+    """The bound is `min(open, close)`, not `max`.
+
+    A bar can print a low above its open while still sitting under its close, and it is just
+    as impossible as one above both. Testing only the both-sides case leaves the check
+    satisfied by `> max(...)`, which passes every half-malformed bar.
+    """
+    findings = check_bar_sanity([bar(0, 100_00, 100_60, 100_20, 100_50)])
+    assert [f.check for f in findings] == ["bar_sanity"]
+    assert "low 10020 is above open/close" in findings[0].detail
+
+
+def test_a_failed_fetch_is_a_hole_even_on_a_day_expecting_no_minutes() -> None:
+    """The manifest is consulted before the calendar, and that order is the check.
+
+    `expected_minutes <= 0` returning early is a shortcut for "there was no session to cover".
+    Reached first, it swallows the one thing the docstring says only the manifest can tell us:
+    a fetch that never answered is a hole, not a quiet market. A day the calendar has nothing
+    to say about is exactly when a silent fetch failure would otherwise pass.
+    """
+    findings = check_session_coverage([], expected_minutes=0, fetch_succeeded=False)
+    assert [f.check for f in findings] == ["session_coverage"]
+    assert "hole, not a quiet market" in findings[0].detail
+
+
+def test_the_spike_check_survives_a_zero_previous_close() -> None:
+    """The guard is load-bearing, not decorative: without it this raises DivisionByZero.
+
+    A crash here costs more than a missed finding. The checks share one `findings` list and
+    the runner wraps none of them, so an exception discards every finding already collected
+    for the symbol-day — including the `bar_sanity` one that named the real problem.
+    """
+    bars = [bar(0, 100_00, 100_50, 99_50, 0), bar(1, 100_00, 100_50, 99_50, 100_10)]
+    assert check_spikes(bars, max_move_bps=500) == []
+
+
+def test_a_move_exactly_at_the_bound_is_not_a_spike() -> None:
+    """`beyond a plausible bound` excludes the bound itself, and the boundary is pinned here."""
+    at = [bar(0, 100_00, 100_50, 99_50, 100_00), bar(1, 105_00, 105_50, 104_50, 105_00)]
+    assert check_spikes(at, max_move_bps=500) == [], "exactly 500 bps is not beyond 500 bps"
+    beyond = [bar(0, 100_00, 100_50, 99_50, 100_00), bar(1, 105_01, 105_51, 104_51, 105_01)]
+    assert [f.check for f in check_spikes(beyond, max_move_bps=500)] == ["spike"]
+
+
+def test_a_decimal_point_lost_is_caught_as_well_as_one_gained() -> None:
+    """1309.60 -> 130.96 is exactly as likely as 1309.60 -> 13096.0.
+
+    Testing only the 10x direction leaves the check satisfied by `if shifted_up:`, which is
+    blind to every price that lost a decimal place instead of gaining one.
+    """
+    bars = [
+        bar(0, 130_960, 131_000, 130_900, 130_960),
+        bar(1, 13_096, 13_100, 13_090, 13_096),
+        bar(2, 130_960, 131_000, 130_900, 130_960),
+    ]
+    findings = check_decimal_shift(bars)
+    assert [f.check for f in findings] == ["decimal_shift"]
+    assert "13096" in findings[0].detail
+
+
+def test_a_jump_far_beyond_the_band_is_not_called_a_decimal_shift() -> None:
+    """The band has an upper bound for a reason: 50x is not a misplaced decimal point.
+
+    Naming it one is worse than missing it — the docstring says so — because a decimal shift
+    invites correcting the price where a 50x move invites deleting the bar or believing it.
+    """
+    bars = [
+        bar(0, 100_00, 100_50, 99_50, 100_00),
+        bar(1, 500_000, 500_050, 499_950, 500_000),
+        bar(2, 100_00, 100_50, 99_50, 100_00),
+    ]
+    assert check_decimal_shift(bars) == []
+
+
+def test_a_zero_price_is_reported_not_crashed_into() -> None:
+    """`current` needs the same non-positivity guard its two neighbours already have.
+
+    `shifted_down` computes `1 / up` eagerly, so a zero-priced middle bar raises
+    DivisionByZero from inside a decimal-point heuristic — an exception naming neither the
+    symbol, the day, nor the actual fault, which then discards the `bar_sanity` finding that
+    had already identified it correctly.
+    """
+    bars = [
+        bar(0, 100_00, 100_50, 99_50, 100_00),
+        bar(1, 100_00, 100_50, 99_50, 0),
+        bar(2, 100_00, 100_50, 99_50, 100_00),
+    ]
+    assert check_decimal_shift(bars) == [], "the decimal heuristic has nothing to say here"
+    assert [f.check for f in check_bar_sanity(bars)] == ["bar_sanity"], "this check does"
+
+
+def test_an_overnight_jump_in_the_other_direction_is_also_unexplained() -> None:
+    """A consolidation halves the share count and doubles the price.
+
+    `ratio` is previous_close / first_open, so a 1:2 split gives ~2 and a 2:1 consolidation
+    gives ~0.5. Both are common actions; testing one leaves the inverse half of
+    `_ACTION_RATIOS` unexercised, and an unexplained doubling walks through.
+    """
+    findings = check_unexplained_ratio_jump(100_00, 200_00, verdict=None)
+    assert [f.check for f in findings] == ["ratio_jump"]
+    assert "0.500" in findings[0].detail
+
+
+def test_the_ratio_tolerance_scales_to_the_direction_it_is_testing() -> None:
+    """2% of the ratio being matched, not 2% of the candidate.
+
+    At candidate 10 the inverse direction is 0.1 and its window is +/-0.002. Scaling by the
+    candidate instead would open that to +/-0.2 — a window a hundred times too wide, wide
+    enough to swallow the neighbouring 0.2 pattern and most of what lies between.
+    """
+    assert check_unexplained_ratio_jump(10_30, 100_00, verdict=None) == [], (
+        "0.103 is outside 0.1 +/- 0.002 and must not be read as a 1:10 action"
+    )
+    assert check_unexplained_ratio_jump(10_10, 100_00, verdict=None) != [], (
+        "0.101 is inside it and must be"
+    )
+
+
+def test_duplicate_raw_rows_outside_the_session_are_visible_only_here() -> None:
+    """The reason this check runs on raw rows rather than bars.
+
+    `check_monotonic_labels` catches duplicate labels, so for in-session rows the two checks
+    agree. They stop agreeing where the normalizer *drops* rows: an out-of-session stamp never
+    becomes a bar, so a merged response that duplicated one leaves no trace downstream at all.
+    """
+    rows: list[dict[str, object]] = [
+        {"datetime": "2026-08-28 15:45:00"},
+        {"datetime": "2026-08-28 15:45:00"},
+    ]
+    findings = check_raw_row_order(rows)
+    assert [f.check for f in findings] == ["label_order"]
+    assert "duplicate raw row" in findings[0].detail
+    assert normalize_candles({"Success": rows}, DAY, interval_minutes=1) == [], (
+        "post-normalization there is nothing left to notice"
+    )

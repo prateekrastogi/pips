@@ -99,8 +99,10 @@ def check_bar_sanity(bars: list[NormalizedBar]) -> list[Finding]:
                     label,
                 )
             )
-        elif b.low_paise > b.high_paise:
-            findings.append(Finding("bar_sanity", Severity.QUARANTINE, "low above high", label))
+        # No `low > high` branch: reaching one would need `high >= max(open, close)` and
+        # `low <= min(open, close)` to have both held, and `high >= max >= min >= low` makes
+        # `low > high` impossible. It was there, unreachable, and read as coverage that did
+        # not exist. Reordering the two clauses above would make it reachable again.
         if b.volume < 0:
             findings.append(
                 Finding("bar_sanity", Severity.QUARANTINE, f"negative volume {b.volume}", label)
@@ -195,7 +197,14 @@ def check_decimal_shift(bars: list[NormalizedBar]) -> list[Finding]:
     """
     findings: list[Finding] = []
     for previous, current, following in zip(bars, bars[1:], bars[2:], strict=False):
+        # `current` too, and not only for symmetry: `shifted_down` computes `1 / up`
+        # eagerly, so a zero here raised DivisionByZero from inside a decimal-point
+        # heuristic. The checks share one findings list and the runner wraps none of
+        # them, so that exception discarded every finding already collected for the
+        # symbol-day -- including the `bar_sanity` one that had named the real fault.
         if previous.close_paise <= 0 or following.close_paise <= 0:
+            continue
+        if current.close_paise <= 0:
             continue
         up = Decimal(current.close_paise) / Decimal(previous.close_paise)
         down = Decimal(current.close_paise) / Decimal(following.close_paise)
