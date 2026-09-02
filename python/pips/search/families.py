@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import polars as pl
@@ -36,6 +36,7 @@ import polars as pl
 from pips.alphas.dispatch import DRIVERS
 from pips.alphas.spec import load_alpha_spec
 from pips.search.funnel import (
+    bootstrap_sharpe_ci,
     gate_s4,
     pbo_for_configs,
     plateau_for_winner,
@@ -283,7 +284,7 @@ def _search_one(
     pbo = pbo_for_configs({config: series_for(config) for config in candidates})
 
     net, gross_total = float(sum(series)), float(sum(gross))
-    metrics = {
+    metrics: dict[str, Any] = {
         # NET, now that the line is applied. It was gross until this commit, in a field named
         # net_return that `[C-CERT-01]` ranks on.
         "net_return": net,
@@ -296,6 +297,13 @@ def _search_one(
     # §12.2's economics from the run the search already has. Turnover comes from the same pass
     # that priced it, so nothing is re-evaluated.
     metrics.update(report_card_economics(series, gross_turns, stamps[:returns_bars]))
+    # NOT `interval` -- that name is already the bar interval in this scope, and mypy caught
+    # the shadowing before it became a bug.
+    sharpe_ci = bootstrap_sharpe_ci(series)
+    if sharpe_ci is not None:
+        # An INTERVAL, which is why the metric channel was widened: recording the lower bound
+        # under a name that says CI asserts more than the value holds.
+        metrics["bootstrap_ci"] = list(sharpe_ci)
     if gross_total != 0:
         # Undefined against a zero gross, and NOT 1.0: a strategy that made nothing gross has no
         # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.

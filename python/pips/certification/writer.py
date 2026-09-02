@@ -48,7 +48,12 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from pips.certification.dossier import REQUIRED_FIELDS, Measurement, build_dossier
+from pips.certification.dossier import (
+    REQUIRED_FIELDS,
+    Measurement,
+    build_dossier,
+    is_hollow,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -108,6 +113,7 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     MetricSource("rotation", "economics.rotation"),
     MetricSource("orders_per_day", "economics.orders_per_day"),
     MetricSource("cvar", "economics.cvar"),
+    MetricSource("bootstrap_ci", "stability.bootstrap_ci"),
 )
 
 GATE_SOURCES: tuple[MetricSource, ...] = tuple(
@@ -133,8 +139,20 @@ class DossierDraft:
     """Required paths this draft could not derive. The finding, not an error."""
 
 
-def _usable(value: object) -> bool:
-    """A number that computed. NaN and infinity are what a failed calculation looks like."""
+def _usable(value: object, *, needs_number: bool) -> bool:
+    """Whether this value can be recorded for its field.
+
+    A source with a THRESHOLD needs a number that computed: NaN, infinity and booleans are what
+    a failed calculation looks like, and a bar cannot be applied to any of them.
+
+    A source WITHOUT one needs only to say something. `stability.bootstrap_ci` is an interval,
+    and demanding a finite number of it reported the dossier as missing a value the registry was
+    holding — the finiteness rule is about numbers, and it was being applied to everything.
+    """
+    if is_hollow(value):
+        return False
+    if not needs_number:
+        return True
     if isinstance(value, bool) or not isinstance(value, int | float):
         return False
     return math.isfinite(value)
@@ -185,11 +203,13 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
 
     for spec in METRIC_SOURCES:
         measured = candidate.metrics.get(spec.metric)
-        if not _usable(measured):
+        if not _usable(measured, needs_number=spec.threshold is not None):
             continue
-        derived: Any = float(measured)  # type: ignore[arg-type]
+        derived: Any = measured
         if spec.threshold is not None and spec.direction is not None:
-            derived = Measurement(derived, spec.threshold, spec.direction)
+            derived = Measurement(float(measured), spec.threshold, spec.direction)  # type: ignore[arg-type]
+        elif isinstance(measured, int | float):
+            derived = float(measured)
         place(spec.path, derived, f"metric:{spec.metric}")
 
     for path, value in evidence.items():

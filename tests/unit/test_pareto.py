@@ -241,3 +241,45 @@ def test_there_is_never_more_than_one_front_per_candidate() -> None:
     fronts = non_dominated_sort(population, TWO)
     assert 0 < len(fronts) <= len(population)
     assert all(front for front in fronts), "no front may be empty"
+
+
+# ------------------------------------- objectives must be numbers `[C-SEL-01]` -----
+
+
+def test_a_non_numeric_objective_is_refused_by_name() -> None:
+    """The metric channel carries more than floats now — `stability.bootstrap_ci` is an interval
+    — so an objective naming one has to fail legibly rather than as a TypeError inside a sort.
+
+    A comparison error raised from `sorted` names neither the candidate nor the metric, and the
+    reader is left bisecting a frontier to find which value was not a number.
+    """
+    bad = Candidate(id="A01", metrics={"net_return": (0.1, 0.3), "max_drawdown": 0.02})
+    other = Candidate(id="A02", metrics={"net_return": 0.05, "max_drawdown": 0.01})
+
+    with pytest.raises(TypeError, match="net_return"):
+        non_dominated_sort([bad, other], [RETURN])
+
+
+def test_a_boolean_objective_is_refused() -> None:
+    """`True` is an `int` in Python and would sort as 1.0 — the same slip that would have made a
+    flag rank as a perfect deflated Sharpe."""
+    flag = Candidate(id="A01", metrics={"net_return": True})
+    with pytest.raises(TypeError, match="net_return"):
+        non_dominated_sort([flag], [RETURN])
+
+
+def test_a_non_objective_metric_may_be_anything() -> None:
+    """Only the axes have to be numbers. An interval riding alongside them is the point."""
+    rich = Candidate(id="A01", metrics={"net_return": 0.05, "bootstrap_ci": (0.1, 0.3)})
+    fronts = non_dominated_sort([rich], [RETURN])
+    assert [c.id for c in fronts[0]] == ["A01"]
+
+
+def test_dominates_refuses_a_non_numeric_objective_too() -> None:
+    """`dominates` is public and skips `non_dominated_sort`'s validation, so it carries its own
+    check — reachable by a caller comparing two candidates directly."""
+    bad = Candidate(id="A01", metrics={"net_return": (0.1, 0.3)})
+    other = Candidate(id="A02", metrics={"net_return": 0.05})
+
+    with pytest.raises(TypeError, match="net_return"):
+        dominates(bad, other, [RETURN])

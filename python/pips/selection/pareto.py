@@ -35,6 +35,7 @@ import enum
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 __all__ = ["Candidate", "Direction", "Objective", "dominates", "non_dominated_sort"]
 
@@ -57,7 +58,9 @@ class Candidate:
     """One trial, carrying every metric it recorded. Objectives name the ones that count."""
 
     id: str
-    metrics: Mapping[str, float]
+    metrics: Mapping[str, Any]
+    """Anything JSON can carry. Only the declared OBJECTIVES have to be numbers, checked in
+    :func:`_value`; the rest ride along for the dossier, intervals included."""
 
 
 def _value(candidate: Candidate, objective: Objective) -> float:
@@ -67,6 +70,17 @@ def _value(candidate: Candidate, objective: Objective) -> float:
     free of direction logic — there is no second place for a sign to go wrong.
     """
     raw = candidate.metrics[objective.name]
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        # Named here rather than left to `sorted`. The metric channel carries more than floats
+        # now -- `stability.bootstrap_ci` is an interval -- and a comparison error raised from
+        # inside a sort names neither the candidate nor the metric, leaving the reader to bisect
+        # a frontier to find which value was not a number. `bool` is excluded because True is an
+        # int and would sort as 1.0, which is the slip that would have ranked a flag as a
+        # perfect deflated Sharpe.
+        raise TypeError(
+            f"candidate {candidate.id!r} scores {raw!r} on objective {objective.name!r}, which "
+            "is not a number. Only the AXES must be numeric; other metrics may be anything."
+        )
     return -raw if objective.direction is Direction.MINIMIZE else raw
 
 
@@ -110,6 +124,16 @@ def _validate(candidates: Sequence[Candidate], objectives: Sequence[Objective]) 
                     "available."
                 )
             value = candidate.metrics[objective.name]
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                # Before `math.isfinite`, which raises a bare "must be real number, not tuple"
+                # naming neither the candidate nor the metric. The channel carries intervals now
+                # (`stability.bootstrap_ci`), so this is reachable by ordinary data rather than
+                # only by a bug, and the reader should not have to bisect a frontier to find it.
+                raise TypeError(
+                    f"candidate {candidate.id!r} scores {value!r} on objective "
+                    f"{objective.name!r}, which is not a number. Only the AXES must be numeric; "
+                    "other metrics may be anything the dossier carries."
+                )
             if not math.isfinite(value):
                 raise ValueError(
                     f"candidate {candidate.id!r} has a non-finite {objective.name!r} "

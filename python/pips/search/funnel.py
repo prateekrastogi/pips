@@ -30,6 +30,7 @@ import numpy as np
 import polars as pl
 
 from pips.search.multiplicity import multiplicity
+from pips.validation.bootstrap import stationary_bootstrap
 from pips.validation.deflated_sharpe import deflated_sharpe_ratio
 from pips.validation.pbo import PBOResult, probability_of_backtest_overfitting
 from pips.validation.plateau import ParameterPoint, plateau_ratio
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     from pips.search.registry import Registry
 
 __all__ = [
+    "BLOCK_LENGTH",
+    "CI_LEVEL",
     "CVAR_LEVEL",
     "DSR_MIN",
     "MIN_OBSERVATIONS",
@@ -53,6 +56,7 @@ __all__ = [
     "DsrBracket",
     "S4Report",
     "SpaReport",
+    "bootstrap_sharpe_ci",
     "gate_s4",
     "pbo_for_configs",
     "plateau_for_winner",
@@ -131,7 +135,12 @@ def gate_s4(registry: Registry, *, stage: str) -> S4Report:
                 "series too short to estimate a Sharpe is not evidence of a good one"
             )
             continue
-        if float(np.std(series)) == 0.0:
+        if series.min() == series.max():
+            # NOT `np.std(...) == 0.0`. The standard deviation of a constant array is only
+            # exactly zero for some lengths -- 60 gives 0.0 and 100 gives 2.2e-19 -- so the
+            # exact comparison lets a flat series through at most lengths and divides by the
+            # noise, producing a Sharpe around 4.6e15 that clears every threshold there is.
+            # `min == max` is exact and length-independent.
             excluded.append(f"{run_id}: the return series is flat, so its Sharpe is undefined")
             continue
         sharpe, skew, kurtosis, n = _moments(series)
@@ -189,10 +198,15 @@ SPA_BOOTSTRAP = 500
 """Resamples for the stepdown. Fixed rather than a parameter: a p-value recorded in a dossier
 must not depend on how patient the caller was feeling."""
 
-SPA_BLOCK_LENGTH = 5
-"""Mean block length for the stationary bootstrap. Daily returns of an intraday strategy carry
-short-horizon dependence, and an i.i.d. resample would understate the variance and so the
-p-value — the flattering direction."""
+BLOCK_LENGTH = 5
+"""Mean block length for the stationary bootstrap, shared by the stepdown and the CI.
+
+A property of the DATA, not of the test using it: daily returns of an intraday strategy carry
+short-horizon dependence, and an i.i.d. resample understates the variance — for the p-value and
+for the interval alike, both in the flattering direction."""
+
+SPA_BLOCK_LENGTH = BLOCK_LENGTH
+"""Kept as a name for the stepdown's use of it."""
 
 SPA_SEED = 20260902
 """Fixed so two runs of one cycle produce the same evidence (rule 1).
@@ -386,3 +400,43 @@ def report_card_economics(
         tail = max(1, round(len(ordered) * (1 - CVAR_LEVEL)))
         out["cvar"] = -sum(ordered[:tail]) / tail
     return out
+
+
+CI_LEVEL = 0.95
+"""Coverage of the reported interval. A reporting choice like :data:`CVAR_LEVEL`, not a bar:
+nothing is compared against it, and a reader holding two dossiers side by side has to know they
+were measured at the same coverage."""
+
+CI_RESAMPLES = 500
+"""Fixed, so the interval a dossier records does not depend on how patient the caller was."""
+
+
+def bootstrap_sharpe_ci(series: Sequence[float]) -> tuple[float, float] | None:
+    """A percentile interval for the Sharpe, from stationary-bootstrap resamples.
+
+    Returned as an INTERVAL. Recording only the lower bound under the name `bootstrap_ci` — the
+    decision-relevant half — would be a field whose name asserts more than the value holds, in a
+    dossier built to be re-checked. Widening the metric channel to carry it was the honest route.
+
+    ``None`` where the Sharpe itself is undefined: a flat series has no deviation to divide by,
+    and an interval around a division by zero is not a measurement. `MIN_OBSERVATIONS` applies
+    for the same reason it does to the DSR.
+    """
+    if len(series) < MIN_OBSERVATIONS:
+        return None
+    values = [Decimal(str(v)) for v in series]
+    sharpes: list[float] = []
+    for resample in stationary_bootstrap(values, CI_RESAMPLES, BLOCK_LENGTH, SPA_SEED):
+        drawn = np.asarray([float(v) for v in resample])
+        if drawn.min() == drawn.max():
+            # See `gate_s4`: a constant array's standard deviation is not reliably 0.0, and
+            # dividing by 1e-19 of float noise gives a Sharpe of about 4.6e15.
+            continue
+        sharpes.append(float(np.mean(drawn)) / float(np.std(drawn)))
+    if not sharpes:
+        return None
+    sharpes.sort()
+    tail = (1.0 - CI_LEVEL) / 2.0
+    low = sharpes[max(0, min(len(sharpes) - 1, int(tail * len(sharpes))))]
+    high = sharpes[max(0, min(len(sharpes) - 1, int((1.0 - tail) * len(sharpes))))]
+    return (low, high)

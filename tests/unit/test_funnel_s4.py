@@ -257,12 +257,19 @@ def test_a_short_series_that_is_not_flat_is_still_excluded(tmp_path: Path) -> No
 def test_a_flat_series_long_enough_to_score_is_still_excluded(tmp_path: Path) -> None:
     """And the other half: long enough, but a Sharpe divided by zero is not a Sharpe."""
     registry = Registry(tmp_path / "registry.db")
-    path = registry.write_daily_returns(tmp_path / "flat.parquet", np.full(60, 0.001))
+    # ONE HUNDRED, not sixty. `np.std` of a constant array is exactly 0.0 at length 60 and
+    # 2.2e-19 at length 100, so a sixty-bar fixture passed this test while the guard it was
+    # meant to prove was written as `== 0.0` and would have let the hundred-bar case through --
+    # dividing by the noise for a Sharpe around 4.6e15.
+    path = registry.write_daily_returns(tmp_path / "flat.parquet", np.full(100, 0.001))
     registry.record(record(config_hash="a" * 64, daily_returns_ref=str(path)))
 
     report = gate_s4(registry, stage="S4")
     assert report.admitted == () and report.rejected == ()
-    assert "flat" in report.excluded[0]
+    # The WHOLE phrase. `"flat" in ...` matched the kurtosis message downstream, because
+    # "inflates" contains "flat" -- so the test passed while the guard it was written for was
+    # bypassed and something else caught the series by luck.
+    assert "the return series is flat" in report.excluded[0], report.excluded
 
 
 def test_a_viewed_trial_counts_toward_n_but_is_not_gated(tmp_path: Path) -> None:
@@ -588,3 +595,93 @@ def test_mismatched_lengths_are_refused() -> None:
 
     with pytest.raises(ValueError, match="length"):
         report_card_economics([0.01, 0.02], [1, 1, 1], STAMPS_4)
+
+
+def test_the_bootstrap_ci_is_an_interval_not_a_bound() -> None:
+    """The reason the metric channel was widened.
+
+    Recording only the lower bound under the name `bootstrap_ci` would be the `net_return`
+    mistake again: a field whose name asserts more than the value holds, in a dossier built to
+    be re-checked.
+    """
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    trending = [0.01 + 0.001 * ((t * 7) % 5 - 2) for t in range(240)]
+    interval = bootstrap_sharpe_ci(trending)
+
+    assert interval is not None
+    low, high = interval
+    assert low < high
+
+
+def test_the_ci_brackets_the_sample_sharpe() -> None:
+    """A percentile interval from resamples of the series must contain the series' own Sharpe
+    except by accident; an interval that does not is measuring something else."""
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    values = [0.01 + 0.001 * ((t * 7) % 5 - 2) for t in range(240)]
+    mean = sum(values) / len(values)
+    spread = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
+    sample = mean / spread
+
+    low, high = bootstrap_sharpe_ci(values)  # type: ignore[misc]
+    assert low <= sample <= high
+
+
+def test_a_flat_series_has_no_ci() -> None:
+    """No deviation, no Sharpe, and an interval around a division by zero is not a measurement."""
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    assert bootstrap_sharpe_ci([0.001] * 100) is None
+
+
+def test_a_series_too_short_has_no_ci() -> None:
+    """Two observations WITH variation, so the length rule is what refuses it.
+
+    A single observation is also flat, and the flat check would catch it first — the test would
+    then pass with the length guard deleted.
+    """
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    assert bootstrap_sharpe_ci([0.01, -0.02]) is None
+
+
+def test_the_interval_is_narrower_than_the_full_range() -> None:
+    """A 95% interval that spans every resample is not a 95% interval.
+
+    `tail = 0` would take the extremes, and every other assertion here still holds of the full
+    range: it is an interval, it is ordered, and it brackets the sample.
+    """
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    values = [0.01 + 0.004 * ((t * 7) % 11 - 5) for t in range(240)]
+    interval = bootstrap_sharpe_ci(values)
+    assert interval is not None
+    low, high = interval
+
+    from decimal import Decimal
+
+    import numpy as np
+
+    from pips.search.funnel import BLOCK_LENGTH, CI_RESAMPLES, SPA_SEED
+    from pips.validation.bootstrap import stationary_bootstrap
+
+    every = sorted(
+        float(np.mean(a)) / float(np.std(a))
+        for a in (
+            np.asarray([float(v) for v in r])
+            for r in stationary_bootstrap(
+                [Decimal(str(v)) for v in values], CI_RESAMPLES, BLOCK_LENGTH, SPA_SEED
+            )
+        )
+        if a.min() != a.max()
+    )
+    assert low > every[0], "the lower bound is the minimum resample, so no tail was trimmed"
+    assert high < every[-1], "the upper bound is the maximum resample"
+
+
+def test_the_ci_is_reproducible() -> None:
+    from pips.search.funnel import bootstrap_sharpe_ci
+
+    values = [0.01 + 0.001 * ((t * 7) % 5 - 2) for t in range(240)]
+    assert bootstrap_sharpe_ci(values) == bootstrap_sharpe_ci(values)

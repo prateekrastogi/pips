@@ -305,3 +305,33 @@ def test_a_plain_value_for_an_undeclared_gate_is_still_recorded() -> None:
     """
     result = draft(**{"stability.concentration": 0.28})
     assert result.dossier.sections["stability"]["concentration"] == 0.28
+
+
+def test_a_non_numeric_value_is_carried_when_no_bar_applies() -> None:
+    """`stability.bootstrap_ci` is an INTERVAL, and the writer refused it as "did not compute".
+
+    `_usable` exists to reject NaN, infinity and booleans — a metric that did not compute is not
+    a metric. But that reasoning is about NUMBERS, and it was being applied to every value: a
+    two-element interval failed the finiteness check and reached the dossier as unsupplied while
+    the registry held it.
+
+    A threshold can only be applied to a number, so a source WITH one still demands one.
+    """
+    result = draft(metrics={**metrics(), "bootstrap_ci": [-3.5, -2.0]})
+    assert result.dossier.sections["stability"]["bootstrap_ci"] == [-3.5, -2.0]
+    assert "stability.bootstrap_ci" not in result.unsupplied
+
+
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), True, None])
+def test_a_gate_still_demands_a_finite_number(broken: object) -> None:
+    """The rule narrowed, it did not go away: a bar cannot be applied to a non-number."""
+    spec = GATE_SOURCES[0]
+    result = draft(metrics={**metrics(), spec.metric: broken})
+    assert spec.path in result.unsupplied
+
+
+@pytest.mark.parametrize("hollow", [None, "", ()])
+def test_a_hollow_plain_value_is_still_unsupplied(hollow: object) -> None:
+    """Widening what counts as a value must not make emptiness count as one."""
+    result = draft(metrics={**metrics(), "bootstrap_ci": hollow})
+    assert "stability.bootstrap_ci" in result.unsupplied

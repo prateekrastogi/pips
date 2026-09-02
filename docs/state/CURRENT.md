@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 247 files · mypy --strict 247 files · 1838 pytest · clippy clean · cargo test ok
+  ruff 247 files · mypy --strict 247 files · 1857 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -190,21 +190,19 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    Six of seven produce numbers on fixtures and all six agree. Its figures appear only under
    §11.4 *Tripwires — auto-flags in every report*; the certification table gives no number.
    Setting it = a `gates.yaml` row + enforcing code + an ADR in one commit.
-2. **Backfill.** PBO 0.81, cost_1_5x -2.16, delay_1_bar -1.45: the gates now say with numbers
-   that two synthetic random walks are not a strategy. Whether they should DROP candidates
-   rather than score them wants real data first. External Breeze calls on a metered budget with
-   the owner's credentials; 100k calls/day, 32 parallel.
-3. **`stability.bootstrap_ci` needs the metric channel to carry more than floats.**
-   `Candidate.metrics` is `Mapping[str, float]` and a CI is an interval; recording the lower
-   bound under a name that says CI is the `net_return` mistake again. Widening it touches
-   `pareto`/`S5`, so it is its own change — and it is the last §12.2 field that is certification
-   code rather than another subsystem.
+2. **Backfill.** PBO 0.81, cost_1_5x -2.16, delay_1_bar -1.45, bootstrap CI (-3.51, -2.04): the
+   gates now say with numbers that two synthetic random walks are not a strategy. Whether they
+   should DROP candidates rather than score them wants real data first. External Breeze calls on
+   a metered budget with the owner's credentials; 100k calls/day, 32 parallel.
+3. **Nothing in the remaining 21 is certification code.** They are: capacity and operations (the
+   order-budget planner and session policy, neither of which exists), fill degradation and
+   outage/restart (M14's event engine), `outer_folds` and `universe_sensitivity` (the nested
+   walk-forward that nothing calls), `decision.rationale`/`outcome` (a human at certification),
+   `lockbox_result` (filled by the run itself), `parameter_plateau` where the winner sits at a
+   grid edge, `breakeven_edge`, `trade_context.horizon` and `side_product`. Each needs a
+   subsystem or a decision, not more wiring here.
 
-`certify-smoke`: **0 certified, 22 unsupplied**, ~9 minutes. What remains after (3): capacity and
-operations (order-budget planner, session policy), fill degradation and outage/restart (M14's
-event engine), `decision.rationale`/`outcome` (a human at certification), `lockbox_result`
-(filled by the run itself), `parameter_plateau` where the winner sits at a grid edge, plus
-`outer_folds` and `universe_sensitivity`, which need the nested walk-forward that nothing calls.
+`certify-smoke`: **0 certified, 21 unsupplied**, ~9 minutes.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
