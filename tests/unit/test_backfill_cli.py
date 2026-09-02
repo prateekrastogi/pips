@@ -67,3 +67,153 @@ def test_the_plan_is_reportable_before_anything_is_fetched() -> None:
     summary = plan.describe()
     assert "2 symbols" in summary and "3 trading days" in summary and "6" in summary
     assert isinstance(plan, CampaignPlan)
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+#
+# `main()` was never called by any test: the whole CLI -- `--dry-run` and every exit code --
+# was unexercised, and the exit code is what a scheduler reads to decide whether to resume.
+
+from pips.data.breeze import backfill as backfill_module  # noqa: E402
+from pips.data.breeze import campaign as campaign_module  # noqa: E402
+from pips.data.breeze import client as client_module  # noqa: E402
+from pips.data.breeze.backfill import BackfillResult  # noqa: E402
+
+ARGS = ["--symbols", "RELIND", "--from", "2026-08-24", "--to", "2026-08-28"]
+
+
+def _result(**over: object) -> BackfillResult:
+    base: dict[str, object] = {
+        "attempted": 5,
+        "fetched": 5,
+        "empty": 0,
+        "errored": 0,
+        "skipped": 0,
+        "stopped_on_budget": False,
+        "stopped_on_rate_limit": False,
+    }
+    base.update(over)
+    return BackfillResult(**base)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Stub every collaborator that costs money, and record what got called."""
+    called: list[str] = []
+
+    def no_session(*_a: object, **_k: object) -> object:
+        called.append("build_session")
+        return object()
+
+    def fetcher(*_a: object, **_k: object) -> object:
+        called.append("budgeted_fetcher")
+        return lambda _s, _d: None
+
+    monkeypatch.setattr(client_module, "build_session", no_session)
+    monkeypatch.setattr(client_module, "budgeted_fetcher", fetcher)
+    monkeypatch.setattr(
+        client_module,
+        "default_paths",
+        lambda _root=None: (
+            tmp_path / "bronze",
+            tmp_path / "state" / "manifest.json",
+            tmp_path / "state" / "budget.json",
+        ),
+    )
+
+    def recorded_backfill(*_a: object, **_k: object) -> BackfillResult:
+        called.append("run_backfill")
+        return _result()
+
+    monkeypatch.setattr(backfill_module, "run_backfill", recorded_backfill)
+    return called
+
+
+def test_a_dry_run_opens_no_session_and_fetches_nothing(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole point of `--dry-run`, and nothing checked it.
+
+    A mis-typed date range is one keystroke away and the plan exists precisely so it can be
+    costed before it is spent. A `--dry-run` that reached the fetcher would spend real quota
+    against a metered daily budget, on the command whose entire purpose is not to.
+    """
+    assert campaign_module.main([*ARGS, "--dry-run"]) == 0
+    assert cli == [], f"a dry run must call none of these: {cli}"
+    out = capsys.readouterr().out
+    assert "backfill plan:" in out
+    assert "nothing fetched" in out
+
+
+def test_a_real_run_does_reach_the_fetcher(cli: list[str]) -> None:
+    """The control. Without it, a `main` that fetched nothing at all would pass the test above."""
+    assert campaign_module.main(ARGS) == 0
+    assert "run_backfill" in cli
+    assert "build_session" in cli
+
+
+def test_a_rate_limited_stop_is_a_failure_exit(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The vendor rejected us below our own configured pace, so the pace is wrong.
+
+    Exiting 0 would tell a scheduler the campaign succeeded, and it would stop re-running —
+    leaving an archive with a hole in it that no later QC can distinguish from a quiet market.
+    """
+    monkeypatch.setattr(
+        backfill_module, "run_backfill", lambda *_a, **_k: _result(stopped_on_rate_limit=True)
+    )
+    assert campaign_module.main(ARGS) == 1
+
+
+def test_a_budget_stop_exits_zero_but_does_not_claim_completion(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Spending the day's quota is the plan working, not the plan failing — so the exit is 0.
+
+    A campaign costing three days of quota stops twice on its way to finishing, and a scheduler
+    treating each stop as a failure would page somebody about a backfill behaving exactly as
+    designed. Which means the exit code CANNOT carry the difference, and the message is the
+    only thing that does: a run that stopped with work outstanding must not print "campaign
+    complete." That is the same failure-that-looks-like-success this whole module is built
+    against, aimed at the operator instead of the archive.
+    """
+    monkeypatch.setattr(
+        backfill_module, "run_backfill", lambda *_a, **_k: _result(stopped_on_budget=True)
+    )
+    assert campaign_module.main(ARGS) == 0
+    out = capsys.readouterr().out
+    assert "daily budget spent" in out
+    assert "campaign complete" not in out, "it did not complete; it stopped"
+
+
+def test_errored_keys_are_a_failure_exit(cli: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """They were deliberately left unmarked so the next run retries them.
+
+    That only helps if something says a next run is needed — the same argument as
+    `BackfillResult.complete`, which the CLI does not use.
+    """
+    monkeypatch.setattr(
+        backfill_module, "run_backfill", lambda *_a, **_k: _result(errored=2, fetched=3)
+    )
+    assert campaign_module.main(ARGS) == 1
+
+
+def test_a_plan_that_cannot_be_costed_exits_two(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Distinct from 1: nothing was attempted, so nothing is pending and retrying is pointless."""
+    assert (
+        campaign_module.main(["--symbols", "RELIND", "--from", "2026-08-28", "--to", "2026-08-24"])
+        == 2
+    )
+    assert "is before start" in capsys.readouterr().out
+    assert cli == [], "a plan that will not cost must not open a session"
+
+
+def test_a_plan_exactly_equal_to_the_budget_does_not_exceed_it() -> None:
+    """`>`, not `>=`. A plan that fits precisely fits, and warning that it does not would
+    teach the reader to ignore the warning that matters."""
+    plan = CampaignPlan(symbols=["A"], days=[date(2026, 8, 24), date(2026, 8, 25)])
+    assert not plan.exceeds_budget(2)
+    assert plan.exceeds_budget(1)
