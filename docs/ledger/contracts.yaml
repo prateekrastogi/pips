@@ -601,6 +601,34 @@
   # eligibility gates, refresh cadence, survivorship audit, lookback -- all six of which wait
   # on a panel.
 
+- id: C-UNIV-06
+  title: "Universe snapshot: eligibility before scoring, and the buffer is not a licence"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/snapshot.py"
+  tests:
+    - "tests/unit/test_universe_snapshot.py"
+  status: building
+  owner_milestone: M7
+  # The composition carries correctness the pieces do not.
+  #
+  # ELIGIBILITY IS APPLIED BEFORE SCORING. The liquidity score is a CROSS-SECTIONAL z, so every
+  # name in the population shifts the mean and spread for every other. A suspended name that
+  # cannot be traded still moving everyone else's rank is a name influencing a selection it is
+  # barred from -- and the effect is invisible afterwards, because the ranking that comes out
+  # looks like any other ranking. Pinned as an equality: adding a barred outlier must not change
+  # any eligible name's score.
+  #
+  # AN INELIGIBLE INCUMBENT EXITS REGARDLESS OF THE BUFFER. The stable-core buffer damps SCORE
+  # churn; it was never argued for as a reason to keep trading a suspended stock. That falls out
+  # of `[C-UNIV-01]`'s own rule -- an unscored incumbent cannot be kept, and an ineligible name
+  # was never scored -- so no filter is needed here, and a mutation proved one redundant.
+  #
+  # Three kinds of exclusion stay apart: a failed gate, an undetermined gate, and statistics
+  # that could not be scored. Three different jobs to fix.
+  #
+  # `building`: nothing calls it, and its inputs do not exist. It is the join for M7's six pure
+  # pieces, and like them it waits on a panel.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

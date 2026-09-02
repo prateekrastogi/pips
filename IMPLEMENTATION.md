@@ -799,6 +799,10 @@ human.
   SESSION list, not calendar dates, so a Monday holiday moves it to Tuesday, and **membership
   is fixed for each session**: a session earlier than the first refresh has none rather than
   borrowing a later one's; stable-core hysteresis;
+  composed into a per-session snapshot `[C-UNIV-06]` — eligibility BEFORE scoring, because the
+  score is a cross-sectional z and a barred name still moves every other name's rank; and an
+  ineligible incumbent exits regardless of the buffer, which damps score churn and was never
+  a licence to trade a suspended stock;
   eligibility gates `[C-UNIV-02]` (series, suspension, MIS/short per capability snapshot,
   history, bands) — decided BEFORE the session opens, because §4.2 is explicit that *the
   completed day's volume cannot retrospectively add a stock to that day's universe*; and
