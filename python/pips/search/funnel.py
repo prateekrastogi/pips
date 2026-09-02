@@ -31,17 +31,20 @@ import polars as pl
 
 from pips.search.multiplicity import multiplicity
 from pips.validation.deflated_sharpe import deflated_sharpe_ratio
+from pips.validation.pbo import PBOResult, probability_of_backtest_overfitting
 from pips.validation.plateau import ParameterPoint, plateau_ratio
 from pips.validation.romano_wolf import romano_wolf
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from pips.search.registry import Registry
 
 __all__ = [
     "DSR_MIN",
     "MIN_OBSERVATIONS",
+    "PBO_BLOCKS",
+    "PBO_HORIZON",
     "SPA_ALPHA",
     "SPA_BLOCK_LENGTH",
     "SPA_BOOTSTRAP",
@@ -50,6 +53,7 @@ __all__ = [
     "S4Report",
     "SpaReport",
     "gate_s4",
+    "pbo_for_configs",
     "plateau_for_winner",
     "spa_adjusted_p",
 ]
@@ -292,3 +296,35 @@ def plateau_for_winner(
         if 0 <= offset < len(candidates)
     ]
     return plateau_ratio(points, centre=(index,))
+
+
+PBO_BLOCKS = 8
+"""CSCV splits S blocks into two halves of S/2, so S must be even -- an odd one loses the
+symmetry the method is named for. Eight gives C(8,4)=70 splits: enough for a stable fraction,
+cheap enough to run per family. Sixteen is the literature's usual choice and gives 12,870."""
+
+PBO_HORIZON = 1
+"""Bars purged at a CROSSING block boundary. The forecast horizon here is one bar -- enter at i,
+exit at i+1 -- so a label spans exactly one boundary, and not purging it lets the last in-sample
+observation carry information about the first out-of-sample one."""
+
+
+def pbo_for_configs(series_by_config: Mapping[str, Sequence[float]]) -> PBOResult | None:
+    """`[G-P4-PBO]`'s value: how often the in-sample winner fell below the OOS median.
+
+    The whole grid the search chose between, not the survivors: PBO asks how often selecting on
+    in-sample performance picks a config that then fails, and restricting it to the ones that
+    survived selection would ask that question of a population already filtered by the answer.
+
+    ``None``, never 0.0, when there are fewer than two configs. A PBO of zero is the strongest
+    statement this gate can make -- the in-sample winner never failed out of sample -- and a
+    single config is both the best and the median, so the statistic is undefined. Undefined must
+    not print as perfect.
+    """
+    if len(series_by_config) < 2:
+        return None
+    returns = {name: [Decimal(str(v)) for v in values] for name, values in series_by_config.items()}
+    # The whole result, not just the fraction: `observations_purged` is how a reader (and a
+    # test) can see the boundary purge actually ran. A wrapper returning only the number lets
+    # the horizon be silently dropped, which is a leak nobody can observe.
+    return probability_of_backtest_overfitting(returns, n_blocks=PBO_BLOCKS, horizon=PBO_HORIZON)

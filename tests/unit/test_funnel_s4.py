@@ -443,3 +443,66 @@ def test_the_bad_neighbour_still_counts() -> None:
     ratio = plateau_for_winner(winner="b", candidates=grid, score=scores.__getitem__)
 
     assert ratio == Decimal("0.5"), "median of 0.1 and 0.9, not 0.9 alone"
+
+
+# ---------------------------------------------------- PBO over the grid `[G-P4-PBO]` -----
+
+
+def test_pbo_needs_more_than_one_config() -> None:
+    """`None`, never 0.0.
+
+    A PBO of zero reads as "the in-sample winner never failed out of sample", which is the
+    strongest possible statement this gate can make. A single config is both the best and the
+    median, so the statistic is undefined — and undefined must not print as perfect.
+    """
+    from pips.search.funnel import pbo_for_configs
+
+    assert pbo_for_configs({"only": [0.01] * 200}) is None
+    assert pbo_for_configs({}) is None
+
+
+def test_pbo_reports_a_fraction_for_a_real_grid() -> None:
+    from pips.search.funnel import pbo_for_configs
+
+    grid = {f"c{i}": [(-1) ** ((t + i) % 3) * 0.01 * (i + 1) for t in range(240)] for i in range(4)}
+    result = pbo_for_configs(grid)
+
+    assert result is not None
+    assert 0.0 <= result.pbo <= 1.0
+    assert result.n_configs == 4
+
+
+def test_pbo_refuses_series_of_different_lengths() -> None:
+    """Delegated to the validator, pinned here: truncating would align at index 0 and compare
+    one config's first months against another's."""
+    from pips.search.funnel import pbo_for_configs
+
+    with pytest.raises(ValueError, match="length"):
+        pbo_for_configs({"a": [0.01] * 200, "b": [0.01] * 100})
+
+
+def test_pbo_purges_the_forecast_horizon() -> None:
+    """The horizon is one bar here — enter at i, exit at i+1 — so a label spans one boundary.
+
+    Not purging it lets the last observation of an in-sample block carry information about the
+    first out-of-sample one, which is the leak CSCV's boundary purge exists to close.
+    """
+    from pips.search.funnel import PBO_HORIZON, pbo_for_configs
+
+    assert PBO_HORIZON == 1
+
+    # Asserting the constant alone proves it is written down, not that it is USED — the same
+    # vacuous check that let the pre-push hook's exit code be flattened by make. This observes
+    # the purge instead.
+    grid = {f"c{i}": [(-1) ** ((t + i) % 3) * 0.01 * (i + 1) for t in range(240)] for i in range(4)}
+    result = pbo_for_configs(grid)
+    assert result is not None
+    assert result.observations_purged > 0, "the boundary purge did not run"
+
+
+def test_pbo_uses_an_even_number_of_blocks() -> None:
+    """CSCV splits S blocks into two halves of S/2; an odd S loses the symmetry it is named
+    for, and the validator refuses it."""
+    from pips.search.funnel import PBO_BLOCKS
+
+    assert PBO_BLOCKS % 2 == 0

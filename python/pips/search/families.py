@@ -35,7 +35,12 @@ import polars as pl
 
 from pips.alphas.dispatch import DRIVERS
 from pips.alphas.spec import load_alpha_spec
-from pips.search.funnel import gate_s4, plateau_for_winner, spa_adjusted_p
+from pips.search.funnel import (
+    gate_s4,
+    pbo_for_configs,
+    plateau_for_winner,
+    spa_adjusted_p,
+)
 from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_domain
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
@@ -261,6 +266,13 @@ def _search_one(
         cost_per_round_trip=ROUND_TRIP_COST,
     )
 
+    # THE WHOLE GRID, not the survivors. PBO asks how often selecting on in-sample performance
+    # picks a config that then fails; restricting it to what survived selection would ask that
+    # of a population already filtered by the answer. Every candidate has a cached full-window
+    # series because `record_halving_trials` preserved returns for every (config, budget) row,
+    # so this costs nothing beyond the arithmetic.
+    pbo = pbo_for_configs({config: series_for(config) for config in candidates})
+
     net, gross_total = float(sum(series)), float(sum(gross))
     metrics = {
         # NET, now that the line is applied. It was gross until this commit, in a field named
@@ -270,6 +282,8 @@ def _search_one(
         "rank_ic": float(score(winner, result.rounds[-1].budget)),
         "cost_1_5x": float(sum(stressed)),
     }
+    if pbo is not None:
+        metrics["pbo"] = pbo.pbo
     if gross_total != 0:
         # Undefined against a zero gross, and NOT 1.0: a strategy that made nothing gross has no
         # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.
