@@ -223,6 +223,14 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 concentration is measured but ungated; `outer_folds` has a bar `[G-P4-FOLDS]` and fails on
 absence until walk-forward runs, which needs the panel from (1).
 
+*Verified 2026-09-02, so it is not re-litigated:* `capacity.minimum_economic_ticket` needs a
+**price**, not a cost model. Every component of `config/costs/nse_equity_intraday.yaml` is
+proportional — the `+ 3.00` in its derivation is stamp duty at ₹1 lakh, and the only
+non-proportional term is the brokerage *cap*, a ceiling not a floor. So cost is a constant
+fraction at every size and no minimum economic ticket arises from it; the constraint is integer
+shares, which needs a price, which needs the panel. The size-independent form of the question is
+already `economics.breakeven_edge`.
+
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
   are live in the PIT store on arb-vm and the QC verdict seam resolves end to end. The orphaned `checkout` compose project was cleared with the
