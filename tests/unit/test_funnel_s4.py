@@ -793,3 +793,74 @@ def test_a_losing_name_does_not_take_a_negative_share() -> None:
 
     share = concentration_share({"A": (1.0, 0), "B": (-0.5, 0)}, cost_per_round_trip=0.0)
     assert share == pytest.approx(2.0), "A contributed 1.0 of a 0.5 total"
+
+
+# ------------------------------------ outer folds, measured post-seal `[G-P4-FOLDS]` -----
+
+
+def test_the_fold_count_matches_the_splitters_own_geometry() -> None:
+    """Pinned against `walk_forward` itself, not against arithmetic in a document.
+
+    147 is the first length yielding a fold and 168 the first yielding two — a walk rather than
+    a split. The inner window costs no extra days: `inner_folds` carves its blocks out of
+    `outer.train_indices`, so 168 is not 126 + 21 + 21.
+    """
+    from pips.search.funnel import outer_fold_count
+
+    assert outer_fold_count(panel_days=146, sealed_days=1) == 0
+    assert outer_fold_count(panel_days=148, sealed_days=1) == 1
+    assert outer_fold_count(panel_days=169, sealed_days=1) == 2
+    assert outer_fold_count(panel_days=379, sealed_days=1) == 12
+
+
+def test_zero_folds_is_a_number_not_an_absence() -> None:
+    """A panel too short to walk yields zero, and zero fails the bar unambiguously — it cannot
+    be misread as good, which is why it is reported rather than withheld."""
+    from pips.search.funnel import outer_fold_count
+
+    assert outer_fold_count(panel_days=100, sealed_days=10) == 0
+
+
+def test_the_count_is_measured_after_the_seal_is_subtracted() -> None:
+    """The owner's requirement, made structural: the same gross panel yields fewer folds as the
+    holdout grows, because the holdout is not available to walk over."""
+    from pips.search.funnel import outer_fold_count
+
+    small_seal = outer_fold_count(panel_days=400, sealed_days=20)
+    large_seal = outer_fold_count(panel_days=400, sealed_days=200)
+    assert large_seal < small_seal
+
+
+def test_an_unsealed_panel_is_refused() -> None:
+    """A zero seal IS the gross backfill, which is exactly what this must not be measured on.
+
+    Refused rather than accepted-and-noted: a caller who can pass zero can report folds over
+    data that includes the holdout, and the number would look like every other fold count.
+    """
+    from pips.search.funnel import outer_fold_count
+
+    with pytest.raises(ValueError, match="seal"):
+        outer_fold_count(panel_days=400, sealed_days=0)
+
+
+def test_a_seal_larger_than_the_panel_is_refused() -> None:
+    from pips.search.funnel import outer_fold_count
+
+    with pytest.raises(ValueError, match="seal"):
+        outer_fold_count(panel_days=100, sealed_days=100)
+
+
+def test_three_years_post_seal_clears_the_bar_with_margin() -> None:
+    """The decision this bar was set against: ~750 NSE sessions in three years, less a holdout,
+    yields far more than twelve. The bar binds on short panels, not on the specified backfill.
+    """
+    from pips.certification.writer import GATE_SOURCES
+    from pips.search.funnel import outer_fold_count
+
+    # The bar is read from GATE_SOURCES, which the ledger-agreement test binds to gates.yaml.
+    # Reading it from a constant beside the counter made this test self-referential: lowering
+    # the bar to 2 lowered the assertion with it and both stayed green.
+    bar = next(s.threshold for s in GATE_SOURCES if s.path == "stability.outer_folds")
+    assert bar == 12, "ADR-0015 set twelve; a change belongs in gates.yaml with an ADR"
+    assert outer_fold_count(panel_days=750, sealed_days=150) >= bar
+    assert outer_fold_count(panel_days=168, sealed_days=20) < bar

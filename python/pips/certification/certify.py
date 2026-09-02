@@ -70,6 +70,7 @@ HARD_GATES: tuple[str, ...] = (
     "stability.concentration",
     "stress.cost_1_5x",
     "stress.delay_1_bar",
+    "stability.outer_folds",
 )
 """The P4 hard gates that live as numbers in the dossier. Each must be a `Measurement`, because
 a gate is a value AND the bar it was held to; a path dropped from this tuple is a gate nothing

@@ -819,7 +819,10 @@ calibrated; multiplicity ledger populated.
   capped and costed), partials/rejects, integer shares, paise accounting, flatten scheduler.
   *Verify:* replay determinism; accounting identity `pnl_gross − costs == pnl_net`; F1 vs
   vectorized reconciliation.
-- **M15 nested walk-forward**: outer 21d / inner 21d / train 126d, purge = horizon, embargo ≥
+- **M15 nested walk-forward** `[G-P4-FOLDS]`: outer 21d / inner 21d / train 126d — the inner
+  window carves its blocks out of `outer.train_indices` and so costs no extra days, which is
+  why 147 post-seal days yields the first fold and 168 the second, not 126+21+21 (ADR-0015);
+  purge = horizon, embargo ≥
   horizon + order duration; successive halving; Optuna inner-only; plateau-centroid
   selection. *Verify:* leakage canary dies here; overlap-inflation demo.
 - **M16 stress battery**: costs ×1.5/×2, delay +1/+2 bars, fill degradation, universe
@@ -862,7 +865,8 @@ ADR-0010), positive at 1.5× cost and +1 bar delay, ≥400 test trades each.
 feasibility incl. broker capability, evidence, DSR ≥ 0.95 at N = M and sane at N = M_erank,
 PBO ≤ 0.25 `[G-P4-PBO]`, SPA p ≤ 0.10 `[G-P4-SPA]`, cost stress `[G-P4-COST15]` and delay stress
 `[G-P4-DELAY1]` (the 2× cost and +2-bar results are DISCLOSED, not gated — ADR-0014), plateau
-stability `[G-P4-PLATEAU]`, concentration (no bar declared yet — ADR-0014), lockbox; capital-tier robustness —
+stability `[G-P4-PLATEAU]`, concentration (measured, no bar declared — ADR-0014), at least twelve
+outer folds measured AFTER the seal `[G-P4-FOLDS]` (ADR-0015), lockbox; capital-tier robustness —
 cross-broker robustness is not assessable with one venue, ADR-0010);
 pairwise PnL corr ≤ 0.5.
 

@@ -35,6 +35,7 @@ from pips.validation.deflated_sharpe import deflated_sharpe_ratio
 from pips.validation.pbo import PBOResult, probability_of_backtest_overfitting
 from pips.validation.plateau import ParameterPoint, plateau_ratio
 from pips.validation.romano_wolf import romano_wolf
+from pips.validation.walk_forward import walk_forward
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -61,6 +62,7 @@ __all__ = [
     "concentration_share",
     "gate_s4",
     "holding_horizon",
+    "outer_fold_count",
     "pbo_for_configs",
     "plateau_for_winner",
     "report_card_economics",
@@ -512,3 +514,51 @@ def concentration_share(
     if total <= 0:
         return None
     return max(net.values()) / total
+
+
+# The BAR lives in `certification.writer.GATE_SOURCES` with every other threshold, where the
+# ledger-agreement test binds it to `gates.yaml`. It was briefly declared here as well, and a
+# mutation lowering it to 2 survived: two literals for one bar drift, and the copy nobody checks
+# is the one that decides. This module only COUNTS folds; ADR-0015 holds the reasoning.
+
+OUTER_TRAIN_DAYS = 126
+OUTER_TEST_DAYS = 21
+"""M15's geometry. The inner window is absent on purpose: `inner_folds` carves its blocks out of
+`outer.train_indices`, so it costs no days and 168 is NOT 126 + 21 + 21."""
+
+
+def outer_fold_count(*, panel_days: int, sealed_days: int) -> int:
+    """How many outer folds the panel supports once the holdout is removed.
+
+    Takes the seal separately rather than a pre-subtracted span, so it is structurally
+    impossible to measure folds over data that includes the holdout — the same reason
+    `[C-LBOX-01]` takes no dates from its caller. A caller who could pass the gross panel would
+    report a number that looks like every other fold count.
+
+    Zero is a real answer. A panel too short to walk yields none, and none fails the bar
+    unambiguously, so it is reported rather than withheld.
+    """
+    if sealed_days <= 0:
+        raise ValueError(
+            f"sealed_days is {sealed_days}: an unsealed panel IS the gross backfill, and folds "
+            "measured over it walk across the holdout. §3.6 requires a seal; a cycle without "
+            "one has nothing to certify against."
+        )
+    if sealed_days >= panel_days:
+        raise ValueError(
+            f"the seal ({sealed_days}) leaves nothing of a {panel_days}-day panel to walk."
+        )
+    return len(
+        walk_forward(
+            panel_days - sealed_days,
+            train_size=OUTER_TRAIN_DAYS,
+            test_size=OUTER_TEST_DAYS,
+            horizon=1,
+            embargo=1,
+            order_duration=0,
+            # Does not change the COUNT -- purging trims train_indices, not how many folds fit,
+            # so `purge=False` is an equivalent mutant here. The purge's own behaviour is
+            # `walk_forward`'s to test, and it does; passing it correctly is still right.
+            purge=True,
+        )
+    )

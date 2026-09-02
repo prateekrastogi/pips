@@ -46,6 +46,8 @@ PASSING: dict[str, Measurement] = {
     "stability.concentration": Measurement(0.30, 0.40, "at_most"),
     "stress.cost_1_5x": Measurement(0.60, 0.00, "at_least"),
     "stress.delay_1_bar": Measurement(0.55, 0.00, "at_least"),
+    # ADR-0015: twelve outer folds post-seal. Three years less a holdout yields 20-24.
+    "stability.outer_folds": Measurement(24, 12, "at_least"),
 }
 
 DISCLOSURES: dict[str, float] = {
@@ -233,6 +235,7 @@ def test_the_hard_gates_match_the_blueprints_gate_table() -> None:
         "stability.concentration",
         "stress.cost_1_5x",
         "stress.delay_1_bar",
+        "stability.outer_folds",
     }
 
 

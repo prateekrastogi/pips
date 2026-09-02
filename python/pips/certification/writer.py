@@ -98,6 +98,8 @@ METRIC_SOURCES: tuple[MetricSource, ...] = (
     MetricSource("parameter_plateau", "stability.parameter_plateau", 0.70, "at_least"),
     MetricSource("cost_1_5x", "stress.cost_1_5x", 0.0, "at_least"),
     MetricSource("delay_1_bar", "stress.delay_1_bar", 0.0, "at_least"),
+    # ADR-0015. Fails today by design: nothing wires nested walk-forward, so no folds are run.
+    MetricSource("outer_folds", "stability.outer_folds", 12, "at_least"),
     # Plain values that the factory produces today. `net_return` is DERIVED rather than supplied
     # because `[C-CERT-01]` ranks on it: a caller-supplied one is a caller-chosen ranking, which
     # is the same objection as a caller-supplied gate one step further along.

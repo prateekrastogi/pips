@@ -60,6 +60,7 @@ PASSING_GATES: dict[str, Measurement] = {
     "stability.concentration": Measurement(0.30, 0.40, "at_most"),
     "stress.cost_1_5x": Measurement(0.60, 0.00, "at_least"),
     "stress.delay_1_bar": Measurement(0.55, 0.00, "at_least"),
+    "stability.outer_folds": Measurement(24, 12, "at_least"),
 }
 
 

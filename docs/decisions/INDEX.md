@@ -16,3 +16,4 @@
 | [ADR-0012](ADR-0012-breeze-quota.md) | Breeze quota: 100k calls/day, 32 parallel fetches | accepted |
 | [ADR-0013](ADR-0013-image-provenance.md) | The verify image must prove which commit it holds | accepted |
 | [ADR-0014](ADR-0014-hard-gate-thresholds.md) | Hard-gate bars cited from the blueprint; 2x cost/delay are disclosures | accepted |
+| [ADR-0015](ADR-0015-outer-fold-minimum.md) | >= 12 outer folds, measured after the lockbox seal | accepted |

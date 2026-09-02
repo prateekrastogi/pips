@@ -198,3 +198,30 @@
   # A delayed run that never trades records NOTHING. `at_least 0.0` would pass a net return of
   # zero, and a strategy that stops trading under a one-bar delay has not survived the delay,
   # it has stopped.
+
+- id: G-P4-FOLDS
+  title: "Nested walk-forward yields >= 12 outer folds, measured after the lockbox seal"
+  spec: "IMPLEMENTATION.md#phase-p4"
+  source_refs: ["ADR-0015", "IMPLEMENTATION.md M15 geometry"]
+  threshold: {path: "stability.outer_folds", value: 12, direction: at_least}
+  enforced_by: "python/pips/certification/certify.py::certify"
+  evidence: "docs/reports/dossiers/<bundle_id>.md"
+  code: "python/pips/search/funnel.py"
+  tests: ["tests/unit/test_funnel_s4.py"]
+  status: building
+  owner_milestone: M20
+  # Set against the SPLITTER, not against arithmetic in a document. `walk_forward` at M15's
+  # geometry yields 0 folds below 147 post-seal days, 1 at 147, 2 at 168 and 12 at 378. Two
+  # folds is a split, not a walk: a mean over two numbers reported as stability.
+  #
+  # An earlier log recorded the minimum as "126 train + 21 inner + 21 outer = 168". Wrong:
+  # `inner_folds` carves its blocks out of `outer.train_indices`, so the inner window costs no
+  # days. Corrected in ADR-0015, which is where the bar's reasoning lives.
+  #
+  # MEASURED AFTER THE SEAL. `outer_fold_count` takes the panel span and the seal separately and
+  # refuses a zero seal, so folds cannot be counted over data that includes the holdout -- the
+  # same construction as `[C-LBOX-01]` taking no dates from its caller.
+  #
+  # `building`: the bar is decided and recorded, and it FAILS today because nothing wires nested
+  # walk-forward into the search. Producing the number is M15 integration that the backfill
+  # unblocks; truncating the backfill to 168 days would fail this gate by construction.

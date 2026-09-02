@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 247 files · mypy --strict 247 files · 1873 pytest · clippy clean · cargo test ok
+  ruff 247 files · mypy --strict 247 files · 1883 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -185,34 +185,29 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   Two more survived because the test never reached the guard.
 ```
 
-## Next 3 actions — both remaining items are the owner's
+## Next 3 actions — one blocker back to the owner
 
-**`certify-smoke`: 0 certified, 18 unsupplied.** Six of seven hard gates compute and all six
-agree: DSR 0.229, SPA p 0.844, PBO 0.814, plateau 0.903, delay_1_bar -1.45, cost_1_5x -2.16,
-bootstrap CI (-3.51, -2.04). The seventh, concentration, is now **measured but ungated**.
+1. **BLOCKED: the backfill needs a universe, and U300 does not exist.**
+   `python/pips/universe/` is an empty scaffold, no config lists constituents, and `Instrument`
+   carries no market cap, turnover or index membership — nothing to rank 300 names by.
+   Constructing one from today's master is **survivorship-biased by construction** (today's top
+   300 is not 2023's), and §12.2's Integrity row requires a *point-in-time universe* to pass
+   audit. Needed: a constituent list **with effective dates**, or an explicit instruction to
+   proceed with a stated approximation and record the bias.
+   **Cost, measured:** 1 call per symbol per trading day → 3y × 300 names = **234,900 calls**
+   over 783 sessions, ≈3 days of the 90,000 usable daily (100k cap less 10% headroom). The
+   campaign resumes across days. The decision's "same single day of quota" does not hold, but
+   its conclusion does: truncating to 168 days leaves <147 post-seal and yields **zero** outer
+   folds, failing `[G-P4-FOLDS]`.
+2. **Wire nested walk-forward into the search** once the panel exists. `[G-P4-FOLDS]` is
+   declared and fails today because nothing runs folds; `validation/walk_forward.py` is tested
+   and called by nothing. This is M15 integration, unblocked by (1).
+3. **Not decided, per the owner: whether the gates FILTER rather than score.** Waits until the
+   gates have real data behind them.
 
-1. **`stability.concentration` — a bar, and the numbers now exist to set one against.** The
-   measurement landed this tick: the largest single name's share of net P&L, costs charged to
-   the name that traded. It reaches `[C-CERT-01]` as a plain number and is refused as ungated,
-   which is honest and is not the same as unmeasured. The figures the blueprint gives (>40% from
-   one name, >30% of PnL from <5% of days) appear only under §11.4 *Tripwires — auto-flags in
-   every report*: a tripwire fires on a running strategy, a gate refuses one that has never
-   traded. Setting it = a `gates.yaml` row + enforcing code + an ADR, in one commit.
-2. **The backfill — and it blocks more than volume.** The panel is 5 days and 2 synthetic
-   symbols. M15's nested walk-forward needs 168 trading days, so `outer_folds` is data-blocked;
-   `universe_sensitivity` perturbs a universe that does not exist with two names; six of eight
-   winners sit at a grid **edge**, which is what an argmax does on noise and is exactly where
-   `parameter_plateau` is undefined. External Breeze calls on a metered budget with the owner's
-   credentials; 100k calls/day, 32 parallel.
-3. **Then: should the gates FILTER rather than score?** They compute and report but do not drop
-   candidates. On noise every candidate fails, so filtering would empty the ensemble — correct,
-   and it changes every downstream report. Worth deciding once the gates have real data.
-
-The remaining 18 wait on subsystems the milestone order has not reached: a fixed-cost model
-(capacity, 4), a session policy (operations, 5), M14's event engine (fill degradation,
-outage/restart), the nested walk-forward (outer_folds, universe_sensitivity), plus two fields a
-human writes at certification, one the run fills itself, `parameter_plateau` for an edge winner,
-and `side_product`, which is a broker-feasibility question rather than a property of the search.
+`certify-smoke`: **0 certified, 18 unsupplied** (outer_folds now has a bar and fails on absence,
+which is the gate working). Seven of eight hard gates compute; concentration is measured but
+ungated; outer_folds awaits (2).
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
