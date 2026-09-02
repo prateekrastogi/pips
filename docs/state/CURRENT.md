@@ -185,24 +185,32 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   Two more survived because the test never reached the guard.
 ```
 
-## Next 3 actions
-1. **`stability.concentration` — the owner's call, and the only hard gate left uncomputed.**
-   Six of seven produce numbers on fixtures and all six agree. Its figures appear only under
-   §11.4 *Tripwires — auto-flags in every report*; the certification table gives no number.
-   Setting it = a `gates.yaml` row + enforcing code + an ADR in one commit.
-2. **Backfill.** PBO 0.81, cost_1_5x -2.16, delay_1_bar -1.45, bootstrap CI (-3.51, -2.04): the
-   gates say with numbers that two synthetic random walks are not a strategy. Whether they
-   should DROP candidates rather than score them wants real data first. External Breeze calls on
-   a metered budget with the owner's credentials; 100k calls/day, 32 parallel.
-3. **The remaining 19 need a subsystem or a decision — verified field by field, not recalled.**
-   capacity (4) needs a fixed-cost model; operations (5) needs a session policy that does not
-   exist — `plan_flatten` takes its cutoff as a parameter; fill degradation and outage/restart
-   need M14's event engine; `outer_folds` and `universe_sensitivity` need the nested
-   walk-forward nothing calls; `decision.rationale`/`outcome` a human writes; `lockbox_result`
-   the certification run fills; `parameter_plateau` is undefined for an edge winner;
-   `side_product` is a broker-feasibility question, not a property of the search.
+## Next 3 actions — both remaining items are the owner's
 
-`certify-smoke`: **0 certified, 19 unsupplied**, ~9 minutes.
+**M20's certification chain is as complete as it can be without a decision.** Six of seven hard
+gates compute on fixtures and all six agree: DSR 0.229, SPA p 0.844, PBO 0.814, plateau 0.903,
+delay_1_bar -1.45, cost_1_5x -2.16, bootstrap CI (-3.51, -2.04). `certify-smoke` reports
+**0 certified, 19 unsupplied** — and none of the 19 is certification code.
+
+1. **`stability.concentration` — a threshold decision.** The last hard gate with no declared bar.
+   Its figures appear only under §11.4 *Tripwires — auto-flags in every report*; the
+   certification table gives no number. A tripwire fires on a running strategy; a gate refuses
+   one that has never traded. Setting it = a `gates.yaml` row + enforcing code + an ADR, in one
+   commit; the ledger-agreement test will hold them together.
+2. **The backfill — and it blocks more than data volume.** The fixture panel is **5 days and 2
+   synthetic symbols**. M15's nested walk-forward needs 168 trading days, so `outer_folds` is
+   data-blocked; `universe_sensitivity` perturbs a universe that does not exist with two names;
+   and six of eight winners sit at a grid **edge**, which is what an argmax does on noise and is
+   exactly where `parameter_plateau` is undefined. External Breeze calls on a metered budget
+   with the owner's credentials; 100k calls/day, 32 parallel.
+3. **Then: should the gates FILTER rather than score?** `[G-S4-DSR]` computes and reports but
+   does not drop candidates. On noise every candidate fails, so filtering would empty the
+   ensemble — correct, and it changes every downstream report. Worth deciding once the gates
+   have real data behind them.
+
+The rest of the 19 wait on subsystems the milestone order has not reached: a fixed-cost model
+(capacity), a session policy (operations), M14's event engine (fill degradation, outage/restart),
+plus fields a human writes at certification and one the run fills itself.
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
