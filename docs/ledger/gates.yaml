@@ -134,9 +134,29 @@
   evidence: "docs/reports/dossiers/<bundle_id>.md"
   code: "python/pips/certification/certify.py"
   tests: ["tests/unit/test_certify.py"]
+  code: "python/pips/validation/plateau.py"
+  tests: ["tests/unit/test_plateau.py"]
   status: building
   owner_milestone: M20
   # Cited, not chosen: "median perturbed net SR >= 70% of center" under +/-20-30% perturbation.
+  #
+  # `plateau_ratio` is the MEASUREMENT this bar compares against, and it is distinct from
+  # `plateau_centroid`, which SELECTS a configuration: a dossier storing a selection cannot be
+  # re-checked against the bar it was certified under. On an evaluated grid, one step along an
+  # axis IS the +/-20-30% perturbation.
+  #
+  # EVERY EVALUATED NEIGHBOUR COUNTS, including the bad ones. Taking the median over only the
+  # good ones would guarantee a ratio above the bar, because the bar is what "good" means -- and
+  # the perturbations that went badly are the evidence the gate asks for. MEDIAN, not mean, per
+  # the blueprint: one catastrophic perturbation must not drag the statistic.
+  #
+  # `None` rather than a number where the ratio is undefined: an unevaluated centre (dividing by
+  # a score nobody measured), a non-positive centre (against a negative one the ratio INVERTS,
+  # so a worse neighbour reads as a flatter plateau), or fewer than two perturbations.
+  #
+  # `building`: nothing persists the parameter surface the search explores, so there is nothing
+  # to measure a plateau OVER yet. Recording the surface during halving is the next step, and it
+  # is why `stability.parameter_plateau` is still unsupplied in `certify-smoke`.
 
 - id: G-P4-COST15
   title: "Net return still positive at 1.5x cost"

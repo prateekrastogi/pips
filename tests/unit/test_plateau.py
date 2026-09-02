@@ -31,7 +31,7 @@ from decimal import Decimal
 
 import pytest
 
-from pips.validation.plateau import ParameterPoint, plateau_centroid
+from pips.validation.plateau import ParameterPoint, plateau_centroid, plateau_ratio
 
 
 def surface(scores: dict[tuple[int, int], float]) -> list[ParameterPoint]:
@@ -199,3 +199,119 @@ def test_diagonal_neighbours_do_not_join_two_plateaus() -> None:
     assert (
         plateau_centroid(surface(scores), min_plateau_size=8, good_fraction=Decimal("0.6")) is None
     )
+
+
+# --------------------------------------------- the plateau MEASUREMENT `[G-P4-PLATEAU]` -----
+
+
+def point(coords: tuple[int, ...], score: str) -> ParameterPoint:
+    return ParameterPoint(coords=coords, score=Decimal(score))
+
+
+def cross(centre: str, *neighbours: str) -> list[ParameterPoint]:
+    """A centre at (1, 1) and up to four axis neighbours, in a fixed order."""
+    places = [(0, 1), (2, 1), (1, 0), (1, 2)]
+    return [point((1, 1), centre)] + [
+        point(place, value) for place, value in zip(places, neighbours, strict=False)
+    ]
+
+
+def test_the_ratio_is_the_median_neighbour_over_the_centre() -> None:
+    """`G-P4-PLATEAU`: median perturbed net SR >= 0.70 x centre. This is that number.
+
+    `plateau_centroid` SELECTS a point; the gate needs a value to record and compare, and a
+    dossier that stores a selection cannot be re-checked against the bar.
+    """
+    ratio = plateau_ratio(cross("1.00", "0.90", "0.80", "0.70", "0.60"), centre=(1, 1))
+    assert ratio == Decimal("0.75")
+
+
+def test_only_the_evaluated_neighbours_count() -> None:
+    points = cross("1.00", "0.80", "0.60")
+    assert plateau_ratio(points, centre=(1, 1)) == Decimal("0.70")
+
+
+def test_a_bad_neighbour_is_not_filtered_out() -> None:
+    """The failure that would make every plateau look wide.
+
+    Taking the median over only the GOOD neighbours guarantees a ratio above the bar, because
+    the bar is what "good" was defined by. The perturbations that went badly are the evidence.
+    """
+    generous = plateau_ratio(cross("1.00", "0.95", "0.90"), centre=(1, 1))
+    honest = plateau_ratio(cross("1.00", "0.95", "0.90", "0.10", "0.05"), centre=(1, 1))
+    assert generous is not None and honest is not None
+    assert honest < generous
+    assert honest < Decimal("0.70")
+
+
+def test_diagonals_are_not_neighbours() -> None:
+    """Same adjacency rule as the centroid: a corner touch is not a perturbation of one axis.
+
+    The diagonal is set to a value that would MOVE the median if it counted — 0.60/0.80 gives
+    0.70, and adding 1.00 gives 0.80. My first fixture had a single axis neighbour, which the
+    minimum-perturbations rule refuses outright, so it tested that rule rather than this one.
+    """
+    points = [
+        point((1, 1), "1.00"),
+        point((0, 1), "0.60"),
+        point((2, 1), "0.80"),
+        point((0, 0), "1.00"),
+        point((2, 2), "1.00"),
+    ]
+    assert plateau_ratio(points, centre=(1, 1)) == Decimal("0.70")
+
+
+def test_a_centre_with_too_few_neighbours_has_no_ratio() -> None:
+    """A median over one perturbation is not a median, and 1.0 from a lone neighbour would read
+    as a perfectly flat plateau."""
+    assert plateau_ratio([point((1, 1), "1.00"), point((0, 1), "0.90")], centre=(1, 1)) is None
+
+
+def test_a_centre_that_was_not_evaluated_has_no_ratio() -> None:
+    """Dividing by a score nobody measured is inventing the denominator.
+
+    The centre here is missing while its neighbours are present — otherwise the
+    minimum-perturbations rule refuses first and this check never runs, which is what my first
+    version of the test did (it pointed at (5, 5), where nothing at all was evaluated).
+    """
+    surrounded = [
+        point((0, 1), "0.90"),
+        point((2, 1), "0.80"),
+        point((1, 0), "0.70"),
+        point((1, 2), "0.60"),
+    ]
+    assert plateau_ratio(surrounded, centre=(1, 1)) is None
+    assert plateau_ratio(cross("1.00", "0.9", "0.8", "0.7"), centre=(5, 5)) is None
+
+
+def test_a_non_positive_centre_has_no_ratio() -> None:
+    """A ratio against a zero or negative centre is undefined, and against a negative one it
+    INVERTS: a worse neighbour divides to a larger number and reads as a flatter plateau."""
+    assert plateau_ratio(cross("0.00", "0.9", "0.8", "0.7"), centre=(1, 1)) is None
+    assert plateau_ratio(cross("-0.50", "-0.1", "-0.2", "-0.3"), centre=(1, 1)) is None
+
+
+def test_the_ratio_is_not_capped_at_one() -> None:
+    """A neighbourhood better than its centre is a real observation — it means the centre was
+    not the peak — and clamping it to 1.0 would hide that."""
+    ratio = plateau_ratio(cross("1.00", "1.50", "1.40", "1.30"), centre=(1, 1))
+    assert ratio is not None
+    assert ratio > Decimal("1")
+
+
+def test_the_ratio_is_exact_not_floating_point() -> None:
+    """The comparison against 0.70 happens at a boundary someone will argue about."""
+    ratio = plateau_ratio(cross("1.00", "0.70", "0.70", "0.70"), centre=(1, 1))
+    assert ratio == Decimal("0.7")
+    assert isinstance(ratio, Decimal)
+
+
+def test_one_catastrophic_perturbation_does_not_drag_the_statistic() -> None:
+    """Why the blueprint says MEDIAN and not mean, and the only test that separates them.
+
+    Three neighbours at 0.10, 0.80 and 0.90 have a median of 0.80 and a mean of 0.60 — one
+    result either side of the 0.70 bar. My other fixtures all had symmetric neighbours, where
+    the two agree exactly and the choice is invisible.
+    """
+    ratio = plateau_ratio(cross("1.00", "0.10", "0.80", "0.90"), centre=(1, 1))
+    assert ratio == Decimal("0.80")

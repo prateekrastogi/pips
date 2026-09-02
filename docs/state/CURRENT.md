@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 246 files · mypy --strict 246 files · 1788 pytest · clippy clean · cargo test ok
+  ruff 246 files · mypy --strict 246 files · 1798 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -186,19 +186,19 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 ```
 
 ## Next 3 actions
-1. **`stability.concentration` — the owner's call**, and one of two gates still ungated. Its
-   figures appear only under §11.4 *Tripwires — auto-flags in every report*; the certification
-   table gives no number. Setting it = a `gates.yaml` row + enforcing code + an ADR in one
-   commit.
-2. **Backfill, and the related question: should S4 filter?** DSR ≈0.14 and SPA p ≈0.84 on
+1. **Persist the parameter surface during halving.** `plateau_ratio` now exists and is tested,
+   but nothing records which grid coordinates the search evaluated, so there is nothing to
+   measure a plateau over. `record_halving_trials` writes a row per (config, budget); the
+   missing link is the config's GRID COORDINATES, which `pips.search.grid` can supply. Doing
+   that fills `stability.parameter_plateau` and closes the last gate that is mine to close.
+2. **`stability.concentration` — the owner's call.** Its figures appear only under §11.4
+   *Tripwires — auto-flags in every report*; the certification table gives no number. Setting it
+   = a `gates.yaml` row + enforcing code + an ADR in one commit.
+3. **Backfill, and the related question: should S4 filter?** DSR ≈0.14 and SPA p ≈0.84 on
    fixtures — both correct for two synthetic random walks, and both arguments for widening the
    data before deciding whether the gates should drop candidates rather than merely score them.
    External Breeze calls on a metered budget with the owner's credentials; 100k calls/day, 32
    parallel fetches.
-3. **`parameter_plateau` — a build job, not a decision.** The last ungated gate that is mine to
-   close. The bar is declared (`G-P4-PLATEAU`, median perturbed net SR ≥ 0.70 × centre) but
-   nothing persists the parameter surface the search explores, so there is nothing to measure
-   the plateau over. That means recording the surface during halving, then computing over it.
 
 `certify-smoke`: **0 certified, 32 unsupplied.** PBO needs walk-forward IS/OOS matrices; the
 stress battery belongs to M14's event engine; capacity to the order-budget planner; operations

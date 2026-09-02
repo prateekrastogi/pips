@@ -33,7 +33,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-__all__ = ["ParameterPoint", "plateau_centroid"]
+__all__ = ["MIN_PERTURBATIONS", "ParameterPoint", "plateau_centroid", "plateau_ratio"]
+
+MIN_PERTURBATIONS = 2
+"""Evaluated neighbours needed before a median means anything. A "median" over one
+perturbation is that perturbation, and a lone neighbour equal to its centre would read as
+a perfectly flat plateau."""
 
 
 @dataclass(frozen=True)
@@ -125,3 +130,48 @@ def plateau_centroid(
         )
 
     return by_coords[min(widest, key=distance_to_centre)]
+
+
+def plateau_ratio(points: list[ParameterPoint], centre: tuple[int, ...]) -> Decimal | None:
+    """Median neighbour score over the centre's score — `[G-P4-PLATEAU]`'s measurement.
+
+    The blueprint's S3 battery asks for *median perturbed net SR ≥ 70% of center* under ±20-30%
+    parameter perturbation. On an evaluated grid, one step along an axis IS that perturbation,
+    so this is the ratio the gate compares against 0.70.
+
+    Distinct from :func:`plateau_centroid`, which SELECTS a configuration. A gate needs a value:
+    a dossier storing a selection cannot be re-checked against the bar it was certified under
+    (`[C-DOSS-01]`).
+
+    **Every evaluated neighbour counts, including the bad ones.** Taking the median over only
+    the good ones would guarantee a ratio above the bar, because the bar is what "good" means —
+    and the perturbations that went badly are the evidence the gate is asking for.
+
+    ``None`` where the ratio is undefined, never a number:
+
+    * the centre was not evaluated — dividing by a score nobody measured invents the denominator;
+    * a non-positive centre — against zero it is undefined, and against a negative one it
+      INVERTS, so a worse neighbour divides to a larger number and reads as a flatter plateau;
+    * fewer than :data:`MIN_PERTURBATIONS` evaluated neighbours.
+
+    Not capped at 1. A neighbourhood better than its centre is a real observation — it says the
+    centre was not the peak — and clamping would hide it.
+    """
+    scores = {p.coords: p.score for p in points}
+    anchor = scores.get(centre)
+    if anchor is None or anchor <= 0:
+        return None
+
+    around = sorted(scores[c] for c in _neighbours(centre) if c in scores)
+    if len(around) < MIN_PERTURBATIONS:
+        return None
+
+    middle = len(around) // 2
+    median = (
+        around[middle]
+        if len(around) % 2
+        # Decimal throughout: the comparison against 0.70 happens at a boundary someone will
+        # argue about, and a float median would decide it by representation.
+        else (around[middle - 1] + around[middle]) / Decimal(2)
+    )
+    return median / anchor
