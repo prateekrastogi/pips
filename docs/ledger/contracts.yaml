@@ -425,6 +425,42 @@
   # `building`: it reports 0 certified and 38 unsupplied fields. It flips when the factory can
   # actually fill them -- which is a question about the rest of the system, not about this file.
 
+- id: C-UNIV-01
+  title: "M7 liquidity score: fixed weights, cross-sectional z, registered universe sizes"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/liquidity.py"
+  tests:
+    - "tests/unit/test_liquidity.py"
+  status: building
+  owner_milestone: M7
+  # Found while trying to run the backfill: `U300` is not a list anybody supplies, it is
+  # COMPUTED by this score -- and M7 had no ledger row and no code, only an empty package.
+  #
+  # THE WEIGHTS ARE FIXED AND THE SCORER TAKES NONE. M7 says "stress-tested, never P&L-tuned";
+  # a weight that can be passed is one somebody tunes until the universe holds the names their
+  # strategy already liked, and a universe tuned on P&L is a selection effect wearing the
+  # costume of an eligibility rule -- applied before every measurement downstream.
+  #
+  # THE Z IS CROSS-SECTIONAL, across symbols on one day. A time-series z asks "is this name
+  # liquid for itself lately", which every illiquid name passes. A single symbol scores nothing:
+  # there is no cross-section to be liquid relative to.
+  #
+  # VOLUME ENTERS AS A LOG or one mega-cap dominates the z and flattens every other name into
+  # noise. Degenerate cross-sections contribute ZERO rather than dividing by float noise --
+  # `min == max`, not `std == 0.0`, which is the trap `gate_s4` had at some lengths and not
+  # others. A symbol missing any component is EXCLUDED, never defaulted: a missing spread read
+  # as zero makes an illiquid name look tight, which is the flattering direction.
+  #
+  # N is restricted to M7's registered {50, 100, 150, 300}. An arbitrary N is a universe nobody
+  # pre-registered, and choosing one after seeing the scores is the multiplicity problem moved
+  # down a layer. N is a MAXIMUM: fewer qualify when fewer were scored.
+  #
+  # `building`: the score is the core, and the rest of M7 -- lookback windows, weekly/monthly
+  # refresh, stable-core hysteresis, and the eligibility gates (series, suspension, MIS/short
+  # per capability snapshot, history, bands) -- is not built. Nor are the daily inputs: median
+  # rupee volume, spread, Amihud and gap-rate all need bars this project does not have yet,
+  # which is the circularity the backfill runs into.
+
 - id: C-DATA-03
   title: "Sealed lockbox: the data layer refuses holdout dates below the release stage"
   spec: "IMPLEMENTATION.md#36-experiment-registry"

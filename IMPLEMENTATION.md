@@ -783,8 +783,15 @@ human.
   T2T, **broker_capability daily snapshotter**, index membership; bitemporal storage +
   Merkle snapshot manifests `[C-DATA-02]`. *Verify:* as-of reads are byte-identical
   regardless of later snapshots; survivorship audit query runs.
-- **M7 universe policies**: liquidity score `z(log median ₹vol) − 0.75·z(spread) −
-  0.50·z(Amihud) − 0.25·z(gap-rate)` with fixed (stress-tested, never P&L-tuned) weights;
+- **M7 universe policies** `[C-UNIV-01]`: liquidity score `z(log median ₹vol) − 0.75·z(spread) −
+  0.50·z(Amihud) − 0.25·z(gap-rate)` with fixed (stress-tested, never P&L-tuned) weights — so the
+  scorer takes **no** weights: one that could be passed is one somebody tunes until the universe
+  holds the names their strategy already liked, and a universe tuned on P&L is a selection
+  effect wearing the costume of an eligibility rule. The z is **cross-sectional**, across
+  symbols on a day; a time-series z asks "is this name liquid for itself lately", which every
+  illiquid name passes. Volume enters as a **log** or one mega-cap flattens the rest to noise.
+  A symbol missing a component is **excluded, never defaulted** — a missing spread read as zero
+  makes an illiquid name look tight;
   N ∈ {50,100,150,300}; lookback {20,40,60}d; weekly/monthly refresh; stable-core hysteresis;
   eligibility gates (series, suspension, MIS/short per capability snapshot, history, bands).
   *Verify:* PIT test; churn ≤ target; survivorship label logic.

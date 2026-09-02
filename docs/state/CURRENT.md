@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 247 files · mypy --strict 247 files · 1883 pytest · clippy clean · cargo test ok
+  ruff 249 files · mypy --strict 249 files · 1901 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
@@ -185,29 +185,32 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
   Two more survived because the test never reached the guard.
 ```
 
-## Next 3 actions — one blocker back to the owner
+## Next 3 actions — the backfill needs a cheaper first pass
 
-1. **BLOCKED: the backfill needs a universe, and U300 does not exist.**
-   `python/pips/universe/` is an empty scaffold, no config lists constituents, and `Instrument`
-   carries no market cap, turnover or index membership — nothing to rank 300 names by.
-   Constructing one from today's master is **survivorship-biased by construction** (today's top
-   300 is not 2023's), and §12.2's Integrity row requires a *point-in-time universe* to pass
-   audit. Needed: a constituent list **with effective dates**, or an explicit instruction to
-   proceed with a stated approximation and record the bias.
-   **Cost, measured:** 1 call per symbol per trading day → 3y × 300 names = **234,900 calls**
-   over 783 sessions, ≈3 days of the 90,000 usable daily (100k cap less 10% headroom). The
-   campaign resumes across days. The decision's "same single day of quota" does not hold, but
-   its conclusion does: truncating to 168 days leaves <147 post-seal and yields **zero** outer
-   folds, failing `[G-P4-FOLDS]`.
-2. **Wire nested walk-forward into the search** once the panel exists. `[G-P4-FOLDS]` is
-   declared and fails today because nothing runs folds; `validation/walk_forward.py` is tested
-   and called by nothing. This is M15 integration, unblocked by (1).
+**Correction to the previous entry: U300 is not a list to supply.** §6 M7 specifies it as
+`N=300` of the liquidity score `z(log median ₹vol) - 0.75·z(spread) - 0.50·z(Amihud) -
+0.25·z(gap-rate)`. The score landed this tick as `[C-UNIV-01]`; M7 had no row and no code.
+
+1. **THE OWNER'S CALL: how to seed the universe, because the score needs data the backfill
+   needs the universe for.** The P1 gate wants both *1m backfill for U300×3y* and *universe
+   snapshots exist*, and the score's inputs (median ₹volume, spread, Amihud, gap-rate) all come
+   from bars. Two ways out, and the choice is a spend decision:
+   - **Daily bars for the whole eligible list first.** ~1,800 NSE equities × 783 sessions =
+     ~1.4M calls at 1 call/symbol/day = **~16 days of quota** at 90k/day. Then compute U300 and
+     backfill 1m only for those 300 (234,900 calls, ~3 days).
+   - **Or a coarser seed** the owner names — an index membership file, a prior universe
+     snapshot, anything with effective dates — which skips the 16 days entirely.
+   Note the measured cost model: **1 call per symbol per trading day**, 90,000 usable daily
+   (100k cap less 10% headroom in `budget.py`), and the campaign resumes across days.
+2. **Finish M7 once seeded**: lookback windows {20,40,60}d, weekly/monthly refresh, stable-core
+   hysteresis, and the eligibility gates (series, suspension, MIS/short per capability snapshot,
+   history, bands). Then universe snapshots, then the 1m backfill, then walk-forward.
 3. **Not decided, per the owner: whether the gates FILTER rather than score.** Waits until the
-   gates have real data behind them.
+   gates have real data.
 
-`certify-smoke`: **0 certified, 18 unsupplied** (outer_folds now has a bar and fails on absence,
-which is the gate working). Seven of eight hard gates compute; concentration is measured but
-ungated; outer_folds awaits (2).
+`certify-smoke`: **0 certified, 18 unsupplied.** Seven of eight hard gates compute;
+concentration is measured but ungated; `outer_folds` has a bar `[G-P4-FOLDS]` and fails on
+absence until walk-forward runs, which needs the panel from (1).
 
 ## Blockers / awaiting
 - None blocking. The security-master download was approved and completed; 5,851 instruments
