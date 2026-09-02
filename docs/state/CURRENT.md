@@ -191,17 +191,56 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
 `N=300` of the liquidity score `z(log median ₹vol) - 0.75·z(spread) - 0.50·z(Amihud) -
 0.25·z(gap-rate)`. The score landed this tick as `[C-UNIV-01]`; M7 had no row and no code.
 
-1. **THE OWNER'S CALL: how to seed the universe, because the score needs data the backfill
-   needs the universe for.** The P1 gate wants both *1m backfill for U300×3y* and *universe
-   snapshots exist*, and the score's inputs (median ₹volume, spread, Amihud, gap-rate) all come
-   from bars. Two ways out, and the choice is a spend decision:
-   - **Daily bars for the whole eligible list first.** ~1,800 NSE equities × 783 sessions =
-     ~1.4M calls at 1 call/symbol/day = **~16 days of quota** at 90k/day. Then compute U300 and
-     backfill 1m only for those 300 (234,900 calls, ~3 days).
-   - **Or a coarser seed** the owner names — an index membership file, a prior universe
-     snapshot, anything with effective dates — which skips the 16 days entirely.
-   Note the measured cost model: **1 call per symbol per trading day**, 90,000 usable daily
-   (100k cap less 10% headroom in `budget.py`), and the campaign resumes across days.
+1. **THE OWNER'S CALL: how to seed the universe — and the previous framing of it was wrong
+   in both halves.** Corrected 2026-09-03; the arithmetic below is computed from the repo's own
+   calendar and config, not asserted.
+
+   **The "16 days for daily bars" figure applied the 1-MINUTE cost model to daily bars.**
+   1 call/symbol/day is the 1m rate, because a 375-candle session fits one call. Daily bars are
+   **782 candles for the whole 3 years**, inside the same ≤1,000-candles/call cap — so a daily
+   seed is **one call per symbol**:
+
+   | seed, whole eligible list (~1,800 names), 3y | calls | quota-days at 90k |
+   |---|---|---|
+   | **daily bars** | **1,800** | **0.02** |
+   | 30-minute bars | 19,800 | 0.22 |
+   | 1-minute bars *(what the old figure costed)* | 1,407,600 | 15.6 |
+
+   A daily seed is ~24 minutes of politeness-limited wall-clock, not sixteen days of quota. It
+   is not a spend decision.
+
+   **But the score's four inputs are not equally cheap, and the old framing never mentioned the
+   one that is expensive.** Daily bars give median ₹volume, Amihud and gap-rate. They cannot give
+   **spread** — OHLC has no spread at any interval — and `[C-UNIV-01]` requires it: `_usable`
+   drops any symbol missing a component, because "a missing spread read as zero makes an
+   illiquid name look tight". The blueprint (§4.4) sources spread from **1-second ranges or
+   quote captures**, and scores over the **trailing 60 sessions**:
+
+   | spread via 1-second, 60 sessions | calls | quota-days |
+   |---|---|---|
+   | all ~1,800 names | 2,484,000 | 27.6 |
+   | shortlist of 600 | 828,000 | 9.2 |
+   | shortlist of 400 | 552,000 | 6.1 |
+   | shortlist of 300 | 414,000 | 4.6 |
+
+   So the cheap seed buys a **shortlist**, and the shortlist is what makes spread affordable:
+   daily bars for everything (1,800 calls) → rank on the three daily-derivable components →
+   1-second for the top few hundred → the full four-component score → U300 → the 1m campaign
+   already authorised (234,600 calls, **2.6 quota-days**). Roughly **7–9 quota-days end to end**,
+   against the old framing's 16 just to begin.
+
+   **What is actually being decided, then, is the shortlist width** — and it is a bias question,
+   not a budget one. Acquiring spread only for the volume-top-N means the spread z is
+   cross-sectional over N, not over the eligible list, so a modest-volume name with an excellent
+   spread can never surface. Spread carries the second-largest weight (−0.75), so N wants to be
+   comfortably wider than 300. That is the owner's call, and it is now a small one.
+
+   *Unverified inputs, flagged rather than buried:* `candles_per_call: 1000` is
+   `verified: false` in `config/breeze.yaml` (a blueprint planning figure) — daily survives any
+   plausible cap since 782 < 800, but the 1-second rows scale inversely with it; the `1second`
+   interval's availability and per-symbol history depth are both on the M3 probe's outstanding
+   list; and Breeze **omits untraded bars**, so the 1-second counts are an upper bound that
+   illiquid names will come in well under.
 2. **M7's pure layer is COMPLETE and composed** — `[C-UNIV-01]` to `[C-UNIV-06]`: the liquidity
    score, the stable-core buffer, the daily eligibility gates, the refresh cadence, the
    survivorship audit (which blocks promotion outright, and blocks on *unknown* coverage too),
