@@ -24,7 +24,12 @@ from pathlib import Path
 
 import pytest
 
-from pips.data.pit.instruments import AmbiguousSymbolError, Instrument, InstrumentMaster
+from pips.data.pit.instruments import (
+    AmbiguousSymbolError,
+    Instrument,
+    InstrumentMaster,
+    validate_isin,
+)
 from pips.data.pit.store import PitStore
 
 D = date
@@ -303,3 +308,90 @@ def test_a_rename_can_be_announced_before_it_takes_effect(master: InstrumentMast
     )
     assert master.resolve_symbol("RELIANCE", on=D(2026, 6, 1), known_on=None) is not None
     assert master.resolve_symbol("RELIND", on=D(2026, 10, 1), known_on=None) is not None
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_an_empty_vendor_code_resolves_to_nothing(master: InstrumentMaster) -> None:
+    """`vendor_code` defaults to empty, so "no vendor code" is the common case, not a rare one.
+
+    `promote_bronze` derives the code as `str(request.get("symbol", ""))` — so a bronze record
+    whose request lost its symbol asks this master to resolve `""`. Without the truthiness
+    guard that matches every instrument the vendor has never named: `AmbiguousSymbolError`
+    across thousands of them, which takes the whole promotion run down, or a silent single
+    match that writes somebody else's bars under their symbol.
+    """
+    master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=date(2026, 1, 1))
+    master.upsert(instrument("INE467B01029", "TCS", token="2"), known_from=date(2026, 1, 1))
+
+    assert master.resolve_vendor_code("", date(2026, 6, 1), known_on=None) is None
+
+
+def test_a_delisting_announced_in_advance_takes_effect_on_its_own_date(
+    master: InstrumentMaster,
+) -> None:
+    """`valid_from` is passed through, and the announced-in-advance case is why it exists.
+
+    An exchange announces a delisting before it happens. Collapsing the two clocks makes the
+    security vanish from valid-time reads of the weeks it was still trading — the same
+    tombstone-dating defect `PitStore.close` was fixed for, one layer up and reachable by
+    simply not forwarding the argument.
+    """
+    master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=date(2026, 1, 1))
+    master.delist("INE002A01018", known_from=date(2026, 3, 1), valid_from=date(2026, 4, 1))
+
+    still_trading = master.as_of(date(2026, 3, 15), known_on=date(2026, 3, 15))
+    assert [i.symbol for i in still_trading] == ["RELIANCE"], (
+        "announced on 1 March, effective 1 April — on 15 March it is still listed"
+    )
+    assert master.as_of(date(2026, 4, 2), known_on=date(2026, 4, 2)) == []
+
+
+def test_a_full_knowledge_read_does_not_consult_the_wall_clock(master: InstrumentMaster) -> None:
+    """`known_on=None` means everything recorded, not everything recorded before now.
+
+    Deriving the bound from `date.today()` puts a wall-clock read inside a path whose whole
+    purpose is to return the same answer every time it is asked (rule 1). The same read would
+    then answer differently tomorrow for a master nobody touched.
+    """
+    master.upsert(instrument("INE002A01018", "RELIANCE"), known_from=date(2026, 1, 1))
+    # Future KNOWLEDGE, past validity — the only shape that isolates the knowledge clock. A
+    # future `valid_from` would be excluded by the valid-time filter whatever `known_on` said.
+    master.rename(
+        "INE002A01018", "RELIANCE2", known_from=date(2099, 1, 1), valid_from=date(2026, 1, 1)
+    )
+
+    everything = master.as_of(date(2026, 6, 1), known_on=None)
+    assert [i.symbol for i in everything] == ["RELIANCE2"], (
+        "a version stamped as known in 2099 is still a version we hold"
+    )
+    assert [i.symbol for i in master.as_of(date(2026, 6, 1), known_on=date(2026, 6, 1))] == [
+        "RELIANCE"
+    ]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "INE002A0101",  # eleven characters
+        "INE002A010188",  # thirteen
+        "INE002A01018X",  # check digit is not a digit
+        "INE002A0101X",  # check digit is not a digit, right length
+        "1NE002A01018",  # country code is not two letters
+    ],
+)
+def test_a_malformed_isin_is_refused(bad: str) -> None:
+    """The key is the identity, so a malformed one is a second identity for one security.
+
+    Length and the trailing check digit both matter and neither was pinned: `{9,}` and
+    `[A-Z0-9]` in the final position each accept strings this must not.
+    """
+    with pytest.raises(ValueError, match="is not an ISIN"):
+        validate_isin(bad)
+
+
+def test_a_well_formed_isin_is_accepted() -> None:
+    """The control. Without it a regex that rejects everything would pass the test above."""
+    assert validate_isin("INE002A01018") == "INE002A01018"
+    assert validate_isin("INE467B01029") == "INE467B01029"
