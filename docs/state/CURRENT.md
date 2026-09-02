@@ -104,7 +104,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ```
 make ci -> ci: green
   ruff 259 files · mypy --strict 259 files · 2002 pytest · clippy clean · cargo test ok
-  determinism bit-identical · ledger-check 26 rows (planned=10 building=2 enforced=14)
+  determinism bit-identical · ledger-check 59 rows (planned=8 building=27 enforced=24)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
   Merkle duplicates odd node       -> killed (test_every_index_proves_against_the_root[9])
@@ -218,10 +218,14 @@ A08 mutation run — 3 of 6 killed, 3 SURVIVED, incl. THE HEADLINE CLAIM:
    dimension except the stable-core `k`, whose column holds the rule rather than numbers.
 3. **Not decided, per the owner: whether the gates FILTER rather than score.** Waits until the
    gates have real data.
-4. **M5 has no ledger row.** `data/qc/` — 691 lines, 52 tests, cited as §6 M5 in its own
-   docstring — is covered by no contract row; `C-DATA-01` only mentions in passing that
-   "quarantine exists (qc)". Every other shipped subsystem has one. Writing it means deciding
-   a readiness status, which is a claim rather than a sweep, so it is queued rather than done.
+4. **QC is not wired into anything.** `[C-QC-01]`/`[C-QC-02]` now exist and both say why they
+   are `building`: `promote_bronze` does not consult QC, `make ci` does not run it, and no
+   compose service or Jenkins stage invokes it — the only entry point is a human typing
+   `make qc`, so **bars reach the panel with QC never having run**. Making promotion depend on
+   it is a pipeline change. Also open, and smaller: M5's prose promises "calendar gaps" where
+   the code deliberately runs a coverage *ratio* floor instead (the M3 probe: Breeze omits
+   untraded minutes, so absence is normal and a gap check flags every liquid session). Row and
+   spec have to agree before either row can go `enforced`.
 
 `certify-smoke`: **0 certified, 18 unsupplied.** Seven of eight hard gates compute;
 concentration is measured but ungated; `outer_folds` has a bar `[G-P4-FOLDS]` and fails on

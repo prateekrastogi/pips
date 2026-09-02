@@ -60,9 +60,11 @@
   # tested: valid_from/known_from, corrections as new versions, as-of reads that never move,
   # and now the instrument master on top of it (ISIN-keyed, symbol/token histories, ambiguity
   # refused rather than guessed).
-  # The ZONE half is not — bronze exists (breeze/backfill.py) and quarantine exists (qc), but
-  # nothing promotes bronze to silver or silver to gold. Marking this enforced would claim a
-  # promotion path that does not exist; the row goes to enforced when it does.
+  # The ZONE half is not — bronze exists (breeze/backfill.py), quarantine exists (qc
+  # `[C-QC-02]`) and bronze->silver now promotes (`[C-SILVER-01]`), but nothing promotes silver
+  # to gold, and the promotion that does exist does not consult QC. Marking this enforced would
+  # claim a promotion path that is neither complete nor checked; the row goes to enforced when
+  # it is both.
   status: building
   owner_milestone: M6
 
@@ -1075,3 +1077,60 @@
   #
   # `building`: nothing reads silver yet. The search still runs on generated fixtures, and one
   # symbol over three days is not a panel a cross-sectional alpha can rank.
+
+- id: C-QC-01
+  title: "Seeded corrupt bronze is caught: OHLC sanity, label order, coverage, spike, decimal shift, CA cross-check"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/qc/checks.py"
+  tests:
+    - "tests/unit/test_qc.py"
+  # M5 had NO ledger row at all until now -- 691 lines of detectors and runner, 52 tests, and
+  # the only trace in the ledger was `[C-DATA-01]`'s aside that "quarantine exists (qc)".
+  #
+  # The detectors answer M5's named list with one deliberate substitution. "Calendar gaps" is
+  # NOT implemented as gap detection: the M3 probe established that Breeze omits untraded
+  # minutes rather than zero-filling them, so absence is the normal case and a gap check would
+  # flag every liquid session in the archive. What runs instead is a coverage RATIO floor
+  # corroborated by the backfill manifest -- because inside the bars, "nothing traded" and "we
+  # never got an answer" are indistinguishable, and only the manifest separates them.
+  #
+  # The CA cross-check consumes a `JumpVerdict` and FAILS CLOSED on `None`: absence of an
+  # answer is not an answer. It replaced a bare `if known_actions: return []`, under which any
+  # action on the day cleared any jump -- a 1:2 split sitting beside a 90% collapse waved the
+  # collapse through.
+  #
+  # `building`, not enforced, for two reasons and neither is a missing test. The prose promises
+  # "calendar gaps" and the code deliberately does something else, so row and spec do not yet
+  # agree; and nothing makes QC a precondition of anything -- see `[C-QC-02]`. Enforced when
+  # the prose and the coverage check say the same thing.
+  status: building
+  owner_milestone: M5
+
+- id: C-QC-02
+  title: "Quarantine retains the evidence with its reason; bronze is never modified"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/qc/runner.py"
+  tests:
+    - "tests/unit/test_qc_runner.py"
+    - "tests/unit/test_jump_explainer.py"
+  # Three properties, each of which fails silently if it fails at all.
+  #
+  # BRONZE IS NEVER MODIFIED. It is the only unmodified copy of what the vendor actually sent
+  # (§3.4), and a QC pass that edited it would destroy the thing every later question is
+  # answered against.
+  #
+  # QUARANTINE RETAINS. The corrupt record is the evidence FOR the corruption; deleting it
+  # makes the finding unverifiable, and a QC report nobody can check is one nobody should
+  # trust. The reason travels with the record, the same rule `[C-SILVER-01]` follows.
+  #
+  # THE MANIFEST IS CONSULTED, and it is consulted BEFORE the calendar: a fetch that never
+  # answered is a hole, not a quiet market, and a day the calendar has nothing to say about is
+  # precisely when a silent fetch failure would otherwise pass.
+  #
+  # `building`, and this is the row that says why the QC subsystem is not load-bearing yet:
+  # NOTHING RUNS IT. `promote_bronze` does not consult QC -- silver.py mentions neither
+  # `Finding` nor `Severity` -- and the only entry point is a human typing `make qc`. Bars
+  # therefore reach the panel with QC never having run. Enforced when promotion depends on it,
+  # which is a pipeline change and not a test.
+  status: building
+  owner_milestone: M5

@@ -777,8 +777,10 @@ human.
   resume, not restart. 1s only for a predeclared liquid subset; **forward WS capture from day one** (ticks/quotes/depth →
   bronze with receive timestamps, reconnect + gap log). *Verify:* recorded-cassette tests; no
   live calls in CI; backfill runbook.
-- **M5 QC + quarantine**: OHLC sanity, calendar gaps, spike/decimal detection, CA cross-check,
-  explicit stale/missing states. *Verify:* seeded corrupt fixtures caught; `make qc`.
+- **M5 QC + quarantine** `[C-QC-01]`: OHLC sanity, calendar gaps, spike/decimal detection, CA
+  cross-check, explicit stale/missing states — quarantine retaining the record together with
+  its reason, and bronze never modified `[C-QC-02]`. *Verify:* seeded corrupt fixtures caught;
+  `make qc`.
 - **M6 PIT masters**: instruments (token/symbol change history), corporate actions, ASM/GSM/
   T2T, **broker_capability daily snapshotter**, index membership; bitemporal storage +
   Merkle snapshot manifests `[C-DATA-02]`. *Verify:* as-of reads are byte-identical
