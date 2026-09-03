@@ -751,7 +751,12 @@
   spec: "IMPLEMENTATION.md#315-session"
   source_refs: ["ADR-0004"]
   code: "python/pips/core/calendar.py"
-  tests: ["tests/unit/core/test_calendar.py"]
+  tests: ["tests/unit/core/test_calendar.py", "tests/unit/test_capability.py"]
+  # `session_bounds(day)` turns the stored WALL-CLOCK fields into instants in the exchange's
+  # zone. It lives on the calendar rather than at each call site because a caller that builds
+  # it with `datetime.combine` and forgets the zone gets a naive datetime, which a UTC
+  # container reads as 09:15 UTC -- 14:45 in Mumbai, most of the session already gone. See
+  # `[C-M4-07]`, which is the caller that needed it.
   status: enforced
   owner_milestone: M2
   # The load-bearing test is test_the_broker_cutoff_is_data_not_a_constant: the same instant
@@ -1387,6 +1392,53 @@
   #
   # `building`: nothing calls it yet. It is the symbol list `[C-M4-05]` subscribes and
   # `plan_campaign` costs; enforced when the capture service exists to consume it.
+  status: building
+  owner_milestone: M4
+
+- id: C-M4-07
+  title: "A capture session is decided in the exchange's timezone, and a late start states its hole"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/capture_plan.py"
+  tests:
+    - "tests/unit/test_capture_plan.py"
+  # THE SERVICE RUNS IN A DEBIAN CONTAINER, WHOSE CLOCK IS UTC. The session it captures is
+  # 09:15-15:30 IST. That six-hour gap is why this is a function with a contract rather than
+  # three lines inside a loop: a boundary comparison in the wrong zone starts capture at 14:45
+  # IST and stops at 21:00, and the resulting archive does not look broken -- it looks like a
+  # market that was quiet all morning. So the instant must be timezone-AWARE (by Python's own
+  # definition: `tzinfo is None or tzinfo.utcoffset(d) is None`, both halves reachable), and
+  # the exchange's zone decides the clock AND the trading day. 22:00 Wednesday in Los Angeles
+  # is 10:30 Thursday in Mumbai; reading the day off the caller's date consults the wrong
+  # holiday list.
+  #
+  # A NOTE ON WHY THAT IS TESTED THE WAY IT IS. Both sides of every comparison are aware, so
+  # the comparison is on absolute instants and the display zone cannot change it. The zone is
+  # read exactly once that matters -- picking the trading day -- and NSE's hours never cross a
+  # UTC date boundary, so reading the clock in UTC agrees with the exchange everywhere. It
+  # agrees BY COINCIDENCE, a property of the current calendar values rather than of the code,
+  # and a mutation to UTC survived a full sweep of the shipped hours. The distinguishing case
+  # is a session inside 00:00-05:29 IST, which is not a session NSE will run and is exactly
+  # what separates "correct" from "correct by accident".
+  #
+  # A LATE START IS ALLOWED AND STATED. Refusing an 11:00 restart throws away four good hours;
+  # accepting one silently loses the open, which is the part of the day the milestone is for.
+  # So `late_by_seconds` is reported for the caller to record, the same duty `[C-M4-04]`'s GAP
+  # record discharges between feeds -- this is the hole BEFORE the first one.
+  #
+  # THE CLOSE IS EXCLUSIVE and the open inclusive, stated because the other pairing holds the
+  # socket open past the last bar or drops the final second of trading, and both boundaries
+  # are one character apart from correct.
+  #
+  # `holidays_verified` rides on the decision because an empty day on an UNVERIFIED calendar is
+  # UNKNOWN, not quiet: the shipped list is empty (deliberately -- see the calendar's own
+  # header), so this plans a session on Diwali, the socket opens and nothing arrives. Without
+  # the flag that zero is identical to a dead feed.
+  #
+  # `building`: nothing calls it. The `breeze-reader` compose service is still the `sleep
+  # infinity` stub marked "until M4", and it stays that way -- arb-vm's deploy rail auto-builds
+  # and runs every new main SHA, so wiring capture into that CMD would START A LIVE MARKET-DATA
+  # SUBSCRIPTION with no authorisation, which the constitution forbids. Enforced when the
+  # service is written under an authorisation that exists.
   status: building
   owner_milestone: M4
 

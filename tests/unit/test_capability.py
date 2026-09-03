@@ -147,3 +147,24 @@ def test_the_capability_cutoff_drives_the_session_state(snap: CapabilitySnapshot
 def test_a_delivery_product_has_no_intraday_square_off(snap: CapabilitySnapshot) -> None:
     row = snap.resolve(date(2026, 8, 31), "FLATTRADE", "CNC", "RELIANCE", "BUY")
     assert row.square_off_time is None
+
+
+def test_the_calendar_resolves_its_own_session_bounds_in_its_own_zone() -> None:
+    """ "09:15" is a wall-clock field, not an instant, and turning it into one needs the day AND
+    the exchange's zone -- both of which the calendar owns.
+
+    It is a method rather than a caller's `datetime.combine` because every caller that builds
+    the instant itself has to remember the zone, and one that forgets gets a naive datetime
+    that a UTC container reads as 09:15 UTC: 14:45 in Mumbai, most of the session already gone.
+    """
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
+
+    cal = load_calendar(ROOT / "config" / "calendars" / "nse_equity.yaml")
+    ist = ZoneInfo("Asia/Kolkata")
+
+    opens_at, closes_at = cal.session_bounds(date(2026, 9, 3))
+
+    assert opens_at == datetime(2026, 9, 3, 9, 15, tzinfo=ist)
+    assert closes_at == datetime(2026, 9, 3, 15, 30, tzinfo=ist)
+    assert (closes_at - opens_at).total_seconds() / 60 == cal.continuous_session_minutes

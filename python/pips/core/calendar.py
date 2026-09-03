@@ -21,6 +21,7 @@ from datetime import date, datetime, time
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from pydantic import Field
 
@@ -111,6 +112,20 @@ class ExchangeCalendar(PipsConfig):
         open_t = _parse_clock(self.continuous_session.start)
         close_t = _parse_clock(self.continuous_session.end)
         return (close_t.hour * 60 + close_t.minute) - (open_t.hour * 60 + open_t.minute)
+
+    def session_bounds(self, day: date) -> tuple[datetime, datetime]:
+        """The continuous session's open and close on ``day``, as instants in the exchange zone.
+
+        The stored fields are WALL-CLOCK -- "09:15 exchange-local, every day" -- and turning
+        one into an instant needs the date and the zone together. Done here because a caller
+        that builds it with `datetime.combine` and forgets the zone gets a naive datetime, and
+        a UTC container reads that as 09:15 UTC: 14:45 in Mumbai, most of the session gone.
+        """
+        zone = ZoneInfo(self.timezone)
+        return (
+            datetime.combine(day, _parse_clock(self.continuous_session.start), tzinfo=zone),
+            datetime.combine(day, _parse_clock(self.continuous_session.end), tzinfo=zone),
+        )
 
     def require_verified_holidays(self) -> None:
         """Refuse to proceed on an unverified calendar.
