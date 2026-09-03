@@ -12,6 +12,25 @@
     - "tests/unit/core/test_ids.py"
     - "tests/unit/core/test_trial_identity.py"
     - "tests/property/test_core_properties.py"
+  # THE CACHE COULD POISON ITSELF. `put` wrote with `path.write_text` and `entry_for` read
+  # with a bare `json.loads`, so a kill mid-write left a truncated entry and every later lookup
+  # of that trial id RAISED -- permanently, until someone deleted the file by hand. The failure
+  # surfaced as the search crashing on a trial it had run before, long after the crash.
+  #
+  # A MISS IS THE RIGHT ANSWER, AND ONLY BECAUSE THIS IS A CACHE. `TrialCache`'s own docstring
+  # settles it: "Deliberately not the experiment registry `[C-REG-01]`: the registry is the
+  # append-only record of every viewed trial (rule 4), while this only avoids recomputing an
+  # identical one." A cache that cannot read an entry has missed, and a miss costs a recompute
+  # -- the same rule `Manifest.load` states for the same shape, "cost is the better failure".
+  # Silently missing would be WRONG for the registry, where an uncounted trial flatters
+  # deflation, which is why the distinction was read rather than assumed.
+  #
+  # Both halves: `atomic_write_text` so a truncated entry is not produced, and a tolerant read
+  # so one already on disk costs a recompute and is overwritten by the next store. The read
+  # also refuses valid JSON that is not an object -- `3`, `[]`, a bare string would each be
+  # RETURNED and then indexed by the caller, moving the crash one frame out. `null` alone gives
+  # the right answer without the guard, which is why a mutation removing it survived my first
+  # test: that test used `null` and nothing else.
   status: enforced
   owner_milestone: M2
   # ids.py is the canonical-encoding root; trial.py builds the §3.1 trial identity on it and

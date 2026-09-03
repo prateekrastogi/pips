@@ -28,6 +28,7 @@ from typing import Any
 
 from pydantic import Field
 
+from pips.core.atomic import atomic_write_text
 from pips.core.config import PipsConfig
 from pips.core.ids import ShortId, content_hash, short_id
 
@@ -134,8 +135,28 @@ class TrialCache:
         path = self.path_for(trial_id)
         if not path.exists():
             return None
-        loaded: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        return loaded
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # A kill mid-write leaves a truncated entry, and a bare `json.loads` would raise
+            # here on every later lookup -- permanently, until someone deleted the file by
+            # hand. The crash would surface as the search failing on a trial it has run before,
+            # long after the crash that caused it.
+            #
+            # A MISS IS THE RIGHT ANSWER BECAUSE THIS IS A CACHE. `Manifest.load` states the
+            # same rule for the same shape: "Starting from empty re-fetches, which costs
+            # budget; assuming everything is done would leave silent holes. Cost is the better
+            # failure." Silently missing would be WRONG for the registry `[C-REG-01]`, where an
+            # uncounted trial flatters deflation -- which is why this class says in its own
+            # docstring that it is deliberately not that.
+            return None
+        if not isinstance(loaded, dict):
+            # `json.loads` succeeds on `null`, `3` and `[]`. Returning one would move the crash
+            # one frame out, into whoever indexes the result -- the same `TypeError` case
+            # `CaptureWriter._last_seq_on_disk` catches beside its `ValueError`.
+            return None
+        entry: dict[str, Any] = loaded
+        return entry
 
     def get(self, trial_id: str) -> dict[str, Any] | None:
         """The cached result for ``trial_id``, or ``None`` on a miss."""
@@ -154,9 +175,12 @@ class TrialCache:
         }
         # Canonical, sorted JSON: the same result must produce the same bytes on every
         # machine, or `make determinism` would fail on the cache rather than on the maths.
-        path.write_text(
+        # Atomic, so a crash cannot leave a truncated entry at all -- reading one gracefully
+        # is the second line of defence, not the first. `core/atomic.py` exists for this and
+        # says why: "two copies of a rule are two places for it to drift".
+        atomic_write_text(
+            path,
             json.dumps(entry, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n",
-            encoding="utf-8",
         )
         return trial_id
 
