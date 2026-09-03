@@ -315,3 +315,32 @@ def test_one_catastrophic_perturbation_does_not_drag_the_statistic() -> None:
     """
     ratio = plateau_ratio(cross("1.00", "0.10", "0.80", "0.90"), centre=(1, 1))
     assert ratio == Decimal("0.80")
+
+
+def test_the_median_is_over_the_neighbours_scores_not_their_enumeration_order() -> None:
+    """`around[middle]` is a median only because the list was sorted first.
+
+    `_neighbours` enumerates axis by axis — for (1,1) that is (0,1), (2,1), (1,0), (1,2) — and
+    that order has nothing to do with the scores. Dropping the sort takes the middle *position*
+    instead of the middle *value*, which is not a median and is not stable under anything: the
+    same neighbourhood measured with its axes declared in a different order gives a different
+    plateau ratio, and the gate compares that number against a fixed 0.70.
+
+    The scores here are placed so the two answers are far apart, and deliberately not symmetric
+    — a symmetric neighbourhood cannot tell the middle position from the middle value.
+    """
+    points = [
+        point((1, 1), "1.00"),
+        point((0, 1), "0.95"),  # first in enumeration order, highest in value
+        point((2, 1), "0.20"),
+        point((1, 0), "0.30"),
+        point((1, 2), "0.90"),
+    ]
+
+    ratio = plateau_ratio(points, (1, 1))
+
+    # sorted: 0.20, 0.30, 0.90, 0.95 -> median (0.30 + 0.90) / 2 = 0.60
+    assert ratio == Decimal("0.60"), (
+        "in enumeration order the two middle entries are 0.20 and 0.30, which would read 0.25 "
+        f"and fail a gate the neighbourhood actually clears; got {ratio}"
+    )
