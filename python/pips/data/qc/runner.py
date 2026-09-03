@@ -33,6 +33,7 @@ from pips.data.qc.checks import (
     Finding,
     Severity,
     check_bar_sanity,
+    check_calendar_gaps,
     check_decimal_shift,
     check_monotonic_labels,
     check_raw_row_order,
@@ -72,13 +73,24 @@ class QcReport:
     # clean line as one that compared everything. See `_previous_trading_day`.
     ratio_checks_run: int = 0
     ratio_checks_skipped: int = 0
+    # COVERAGE OF THE CALENDAR-GAP CHECK, for the same reason. Zero means no calendar was
+    # supplied and no day was compared -- which must not print the same line as a span that
+    # was examined and found whole, because that indistinguishability is exactly how the
+    # missing check went unnoticed for a milestone.
+    calendar_days_examined: int = 0
 
     def describe(self) -> str:
+        calendar = (
+            f"calendar days examined {self.calendar_days_examined}"
+            if self.calendar_days_examined
+            else "calendar gaps not checked (no calendar supplied)"
+        )
         return (
             f"qc: checked {self.checked} record(s), quarantined {self.quarantined}, "
             f"{len(self.findings)} finding(s); "
             f"overnight-ratio comparisons made {self.ratio_checks_run}, "
-            f"skipped {self.ratio_checks_skipped}"
+            f"skipped {self.ratio_checks_skipped}; "
+            f"{calendar}"
         )
 
 
@@ -114,15 +126,17 @@ def _set_bar(row: dict[str, Any], price: float) -> None:
     row["close"] = price
 
 
-def _write_record(bronze_root: Path, day: date, rows: list[dict[str, Any]]) -> Path:
-    directory = bronze_root / _SEED_SYMBOL / day.isoformat()
+def _write_record(
+    bronze_root: Path, day: date, rows: list[dict[str, Any]], symbol: str = _SEED_SYMBOL
+) -> Path:
+    directory = bronze_root / symbol / day.isoformat()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{time.time_ns()}.json"
     path.write_text(
         json.dumps(
             {
                 "request": {
-                    "symbol": _SEED_SYMBOL,
+                    "symbol": symbol,
                     "trade_date": day.isoformat(),
                     "interval": "1minute",
                 },
@@ -144,6 +158,7 @@ def seed_two_sessions(
     second_open_paise: int,
     first_day: date = date(2026, 8, 27),
     second_day: date = _SEED_DAY,
+    symbol: str = _SEED_SYMBOL,
 ) -> None:
     """Two clean sessions whose overnight ratio is under the caller's control.
 
@@ -159,8 +174,8 @@ def seed_two_sessions(
     _set_bar(first[-1], first_close_paise / 100.0)
     second = _rows(day=second_day, base_rupees=second_open_paise / 100.0)
     _set_bar(second[0], second_open_paise / 100.0)
-    _write_record(bronze_root, first_day, first)
-    _write_record(bronze_root, second_day, second)
+    _write_record(bronze_root, first_day, first, symbol)
+    _write_record(bronze_root, second_day, second, symbol)
 
 
 def seed_corrupt_bronze(bronze_root: Path, corruption: str | None) -> Path:
@@ -229,11 +244,16 @@ def run_qc(
     # Per symbol, the last session seen and its closing price. Path order is symbol-then-date
     # (bronze/<symbol>/<date>/<ns>.json), so this walks each symbol's sessions in order.
     previous_session: dict[str, tuple[date, int]] = {}
+    # Which sessions each symbol actually has. The per-record checks cannot see a day that is
+    # absent -- there is no record to hand them -- so the set is compared to the calendar after
+    # the walk.
+    seen_days: dict[str, set[date]] = {}
     for path in sorted(bronze_root.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
         request = record["request"]
         symbol, day = request["symbol"], date.fromisoformat(request["trade_date"])
         key = f"{symbol}:{day.isoformat()}"
+        seen_days.setdefault(symbol, set()).add(day)
         report.checked += 1
 
         payload = record["payload"]
@@ -300,6 +320,22 @@ def run_qc(
             if any(f.severity is Severity.QUARANTINE for f in findings):
                 report.quarantined += 1
                 _quarantine(quarantine_root, path, record, findings)
+
+    if calendar is not None:
+        for symbol in sorted(seen_days):
+            days = seen_days[symbol]
+            first, last = min(days), max(days)
+            # THE SPAN IS WHAT THE ARCHIVE COVERS, which is a stated limitation rather than a
+            # hidden one: a hole before the first record or after the last is outside anything
+            # the archive knows, since no record carries the range that was requested. Closing
+            # that edge needs the campaign's range, which `run_qc` is not given -- so the days
+            # examined are counted and reported, and a reader can see the edge of the check
+            # instead of trusting its silence.
+            report.findings.extend(check_calendar_gaps(days, calendar, first, last))
+            report.calendar_days_examined += sum(
+                calendar.is_trading_day(first + timedelta(days=offset))
+                for offset in range((last - first).days + 1)
+            )
     return report
 
 

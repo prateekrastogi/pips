@@ -113,7 +113,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 280 source files · 2287 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 282 source files · 2303 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
   (planned=8 building=33 enforced=28)
   provenance: running on the host, not in a pips image
@@ -259,10 +259,13 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    are `building`: `promote_bronze` does not consult QC, `make ci` does not run it, and no
    compose service or Jenkins stage invokes it — the only entry point is a human typing
    `make qc`, so **bars reach the panel with QC never having run**. Making promotion depend on
-   it is a pipeline change. Also open, and smaller: M5's prose promises "calendar gaps" where
-   the code deliberately runs a coverage *ratio* floor instead (the M3 probe: Breeze omits
-   untraded minutes, so absence is normal and a gap check flags every liquid session). Row and
-   spec have to agree before either row can go `enforced`.
+   it is a pipeline change. **RESOLVED, and this entry had it backwards.** It read
+   the prose/code difference as the spec overpromising "calendar gaps", to be fixed by
+   correcting the prose. The prose was right. The ratio floor takes ONE SESSION'S BARS, and
+   `run_qc` walks the records that exist — so a trading day never fetched has no record, gets
+   no check, and the hole is invisible to the whole pass. Both checks were needed and only one
+   existed; `check_calendar_gaps` is now the other `[C-QC-01]`. What still blocks `enforced` is
+   only the first half: nothing makes QC a precondition of anything.
 
 `certify-smoke`: **0 certified, 18 unsupplied.** Seven of eight hard gates compute;
 concentration is measured but ungated; `outer_folds` has a bar `[G-P4-FOLDS]` and fails on

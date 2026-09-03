@@ -17,17 +17,25 @@ got an answer" is a hole.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
 from itertools import pairwise
+from typing import TYPE_CHECKING
 
 from pips.data.breeze.ingest import NormalizedBar
 from pips.data.pit.corporate_actions import JumpVerdict
+
+if TYPE_CHECKING:
+    from datetime import date
+
+    from pips.core.calendar import ExchangeCalendar
 
 __all__ = [
     "Finding",
     "Severity",
     "check_bar_sanity",
+    "check_calendar_gaps",
     "check_decimal_shift",
     "check_monotonic_labels",
     "check_raw_row_order",
@@ -166,6 +174,57 @@ def check_session_coverage(
             )
         ]
     return []
+
+
+def check_calendar_gaps(
+    present: set[date], calendar: ExchangeCalendar, first: date, last: date
+) -> list[Finding]:
+    """Trading days in ``first``..``last`` with nothing in the archive at all.
+
+    THE CHECK THAT COULD NOT RUN. :func:`check_session_coverage` takes one session's bars and
+    asks whether that session is complete -- rightly by ratio and not by minute count, since
+    Breeze omits untraded minutes and an exact count would flag every illiquid session. But it
+    only runs on a session that EXISTS. ``run_qc`` walks the bronze records it finds, so a
+    trading day never fetched contributes no path, no record and no check, and the hole is
+    invisible to the whole pass. Absence of untraded *minutes* is normal; absence of a whole
+    *session* is not, and only the calendar knows the difference.
+
+    WARN rather than QUARANTINE: quarantine acts on a record, and there is no record here to
+    move aside or to retain with its reason. Inventing one for a day we never saw is the single
+    thing bronze must never contain.
+
+    ``present`` is a set of days, so the findings are sorted -- two runs over one archive must
+    produce the same report (rule 1).
+
+    **An unverified holiday list makes every gap a maybe**, and the detail says so. The shipped
+    calendar lists no holidays on purpose, so on Diwali this sees a weekday with no data and
+    cannot tell a shut exchange from a hole. It reports it, because that is the safe direction:
+    a false gap costs someone a look at a calendar, a missed one costs a hole in the panel that
+    no later QC can find. The wording must not claim the certainty it lacks.
+    """
+    if last < first:
+        raise ValueError(f"last {last} is before first {first}")
+
+    caveat = (
+        ""
+        if calendar.holidays_verified
+        else " -- the holiday list is unverified, so this may be an unlisted exchange holiday "
+        "rather than a hole"
+    )
+    findings: list[Finding] = []
+    day = first
+    while day <= last:
+        if calendar.is_trading_day(day) and day not in present:
+            findings.append(
+                Finding(
+                    "calendar_gap",
+                    Severity.WARN,
+                    f"{day.isoformat()} is a trading day with no record in the archive{caveat}",
+                    day.isoformat(),
+                )
+            )
+        day += timedelta(days=1)
+    return findings
 
 
 def check_spikes(bars: list[NormalizedBar], max_move_bps: int) -> list[Finding]:
