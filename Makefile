@@ -87,6 +87,9 @@ refs-extract: ## Cache pandoc extractions of docs/reference/*.docx (needs pandoc
 qc: ## Quality-check bronze and quarantine failures (§6 M5)
 	$(PY) -m pips.cli qc $(PIPS_DATA_ROOT)
 
+promote: ## Promote bronze to silver, consulting QC's verdicts [C-SILVER-01]
+	$(PY) -m pips.cli promote $(PIPS_DATA_ROOT) --known-on $(shell date -u +%F)
+
 s1-smoke: ## Stage-1 screening smoke run on fixtures (§6 M12 Verify)
 	$(PY) -m pips.cli s1-smoke fixtures
 

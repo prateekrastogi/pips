@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import polars as pl
@@ -40,8 +41,6 @@ from pips.data.qc.checks import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from pips.data.pit.instruments import InstrumentMaster
 
 __all__ = ["PromotionReport", "Quarantined", "promote_bronze"]
@@ -283,3 +282,90 @@ def promote_bronze(
         refused_by_qc=refused_by_qc,
         promoted_without_qc=promoted_without_qc,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: ``pips promote <data_root> --known-on YYYY-MM-DD [--require-qc]``.
+
+    `promote_bronze` had no caller outside tests, which left the QC gate unreachable: `pips qc`
+    writes its verdicts and prints "pass them to promote_bronze(qc=...)", and nothing could.
+
+    **The default is loud rather than strict**, unlike `pips capture`. Promotion spends nothing
+    and touches no live path, so refusing without QC would make the fixture workflow unusable to
+    prevent a harm that only exists downstream. It follows `require_verified_holidays` instead --
+    usable without the evidence, never silent without it -- and `--require-qc` is the hard
+    refusal for anything on the path to real capital.
+    """
+    import argparse
+    import os
+    import sys
+
+    from pips.data.pit.instruments import InstrumentMaster
+    from pips.data.pit.store import PitStore
+    from pips.data.qc.checks import QcVerdicts
+
+    parser = argparse.ArgumentParser(prog="pips promote")
+    parser.add_argument("data_root", nargs="?", default=None, help="defaults to $PIPS_DATA_ROOT")
+    parser.add_argument(
+        "--known-on",
+        required=True,
+        help="the as-of knowledge date for instrument resolution; NOT defaulted, because a "
+        "bitemporal read that moves is the one thing §3.4 forbids",
+    )
+    parser.add_argument("--require-qc", action="store_true", help="refuse unchecked records")
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+
+    root = (
+        Path(args.data_root)
+        if args.data_root
+        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
+    )
+    bronze, silver = root / "bronze", root / "silver"
+    if not bronze.exists():
+        print(f"promote: no bronze at {bronze} — nothing to promote.")
+        print("    That is not a pass. Run a backfill first (ops/runbooks/backfill.md).")
+        return 0
+
+    pit = root / "pit"
+    if not pit.exists():
+        # Up front, not per record. Without a master every vendor code resolves to nothing and
+        # every record quarantines under a reason about IDENTITY -- true of each record and
+        # useless about the run, sending the operator after a data problem that is really a
+        # missing PIT store.
+        print(
+            f"promote: no instrument master at {pit}. Every vendor code would resolve to "
+            "nothing and every record would quarantine under an identity reason, which is a "
+            "true statement about each record and a misleading one about the run.",
+            file=sys.stderr,
+        )
+        return 2
+
+    verdict_path = root / "state" / "qc-verdicts.json"
+    qc = None
+    if verdict_path.exists():
+        qc = QcVerdicts.load(verdict_path, bronze_root=bronze)
+        print(f"promote: QC verdicts from {verdict_path}")
+    else:
+        print(f"promote: no QC verdicts at {verdict_path} — every record counts as unchecked.")
+        print("    Run `make qc` first; promotion does not re-derive what QC sees.")
+
+    report = promote_bronze(
+        bronze,
+        silver,
+        InstrumentMaster(PitStore(pit)),
+        known_on=date.fromisoformat(args.known_on),
+        qc=qc,
+    )
+    print(f"  {report.describe()}")
+    for entry in report.quarantined[:5]:
+        print(f"    quarantined {entry.source}: {entry.reason[:110]}")
+    if len(report.quarantined) > 5:
+        print(f"    ... and {len(report.quarantined) - 5} more")
+
+    if args.require_qc:
+        try:
+            report.require_qc_coverage()
+        except RuntimeError as refusal:
+            print(f"promote: {refusal}", file=sys.stderr)
+            return 1
+    return 0

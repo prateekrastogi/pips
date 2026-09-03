@@ -1065,6 +1065,7 @@
   code: "python/pips/data/silver.py"
   tests:
     - "tests/unit/test_silver.py"
+    - "tests/unit/test_promote_cli.py"
   status: building
   owner_milestone: M6
   # Three trading days of real RELIND minute bars sat in bronze on arb-vm with silver empty --
@@ -1133,9 +1134,28 @@
   # about the data standing next to the result is the same error as a wrong snapshot root --
   # aimed at a person, who is likelier to act on it than a ledger is.
   #
+  # THERE IS NOW A COMMAND. `promote_bronze` had no caller outside tests -- every reference in
+  # the tree was a docstring pointing at it, including `silver_panel.py`'s error message, which
+  # told the reader to write Python. That left `[C-QC-01]`'s gate unreachable: `pips qc` writes
+  # its verdicts and prints "pass them to promote_bronze(qc=...)", and nothing could. `pips
+  # promote` is the command in between, and it looks for the verdicts where `pips qc` writes
+  # them, or the two would still not meet.
+  #
+  # Its default is LOUD RATHER THAN STRICT, and deliberately unlike `pips capture`: promotion
+  # spends nothing and touches no live path, so refusing without QC would make the fixture
+  # workflow unusable to prevent a harm that only exists downstream. It follows
+  # `require_verified_holidays` -- usable without the evidence, never silent without it -- and
+  # `--require-qc` is the hard refusal for the path to real capital.
+  #
+  # An absent PIT store is refused UP FRONT rather than per record. Without a master every
+  # vendor code resolves to nothing and every record quarantines under an identity reason,
+  # which is true of each record and misleading about the run: the operator goes after a data
+  # problem that is really a missing store. `--known-on` is required and not defaulted to
+  # today, because a bitemporal read that moves is the one thing §3.4 forbids.
+  #
   # `building`: nothing reads silver in ANGER yet, because there is barely any -- one symbol
-  # over three days is not a panel a cross-sectional alpha can rank. The door is open and the
-  # archive behind it is empty until the seed runs.
+  # over three days is not a panel a cross-sectional alpha can rank. The door is open, the
+  # command exists, and the archive behind it is empty until the seed runs.
 
 - id: C-QC-01
   title: "Seeded corrupt bronze is caught: OHLC sanity, label order, coverage, spike, decimal shift, CA cross-check"

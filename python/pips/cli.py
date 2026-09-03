@@ -23,6 +23,7 @@ commands:
   backfill --symbols ...     Breeze historical campaign (§6 M4; runs on arb-vm)
   qc [data_root]             quality-check bronze, quarantine failures (§6 M5)
   capture --symbols A,B      PLAN forward capture; --live to subscribe (§6 M4)
+  promote <root> --known-on  bronze -> silver, consulting QC's verdicts (§6 M5/M6)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -87,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.data.breeze.capture_session import main as capture_main
 
         return capture_main(rest)
+    if command == "promote":
+        from pips.data.silver import main as promote_main
+
+        return promote_main(rest)
     if command == "fixtures" and rest[:1] == ["generate"]:
         from pips.fixtures.generate import main as fixtures_main
 
