@@ -283,3 +283,42 @@ def test_dominates_refuses_a_non_numeric_objective_too() -> None:
 
     with pytest.raises(TypeError, match="net_return"):
         dominates(bad, other, [RETURN])
+
+
+def test_a_boolean_objective_is_refused_rather_than_scored_as_one() -> None:
+    """`True` is an `int`, so without the explicit exclusion it orients as 1.0.
+
+    A flag arriving where a metric belongs would score a perfect 1.0 on a maximised axis and
+    dominate the frontier. This is the third place in the codebase carrying the guard —
+    `certify` ranks on `economics.net_return`, `run` ranks nominees before the holdout — and
+    the reason it is worth stating here as well as there is that `bool` passes an
+    `isinstance(..., int | float)` check, so every one of them has to exclude it explicitly.
+
+    Refused by NAME, so the reader learns which candidate and which axis rather than bisecting
+    a frontier to find the value that would not compare.
+    """
+    population = [
+        candidate("A", 0.10, 0.05),
+        Candidate("FLAGGED", {"net_return": True, "max_drawdown": 0.05}),
+    ]
+
+    with pytest.raises(TypeError, match="FLAGGED") as caught:
+        non_dominated_sort(population, [RETURN, DRAWDOWN])
+
+    assert "net_return" in str(caught.value), str(caught.value)
+    assert "not a number" in str(caught.value)
+
+
+def test_dominates_refuses_a_boolean_on_its_own() -> None:
+    """`dominates` is public and calls the orienter directly, with no validation in front.
+
+    `non_dominated_sort` screens the whole population first, so a bool never reaches `_value`
+    through it — which is why mutating `_value`'s exclusion is invisible from that direction and
+    looked equivalent. It is not: this is the entry point where that guard is the only one, and
+    a caller comparing two candidates pairwise gets no `_validate` at all.
+    """
+    good = Candidate("A", {"net_return": 0.10, "max_drawdown": 0.05})
+    flagged = Candidate("FLAGGED", {"net_return": True, "max_drawdown": 0.05})
+
+    with pytest.raises(TypeError, match="FLAGGED"):
+        dominates(flagged, good, [RETURN, DRAWDOWN])

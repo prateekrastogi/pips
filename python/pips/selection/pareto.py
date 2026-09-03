@@ -159,6 +159,11 @@ def non_dominated_sort(
     # be at most one front per candidate. The bound is what turns a broken comparator into an
     # error instead of a hang: Romano-Wolf's unbounded loop once hung a ten-minute mutation
     # batch, and a stall reports nothing at all, which is worse than reporting a failure.
+    #
+    # Its exact value is not load-bearing -- widening it to `2 * len(candidates)` is an
+    # equivalent mutation, because the loop leaves as soon as `remaining` empties and a broken
+    # comparator still falls out to the raise below, just later. `len(candidates)` is the
+    # tightest bound that is always sufficient, which is why it is the one written.
     for _ in range(len(candidates)):
         if not remaining:
             break
@@ -168,6 +173,9 @@ def non_dominated_sort(
             if not any(dominates(other, candidate, objectives) for other in remaining)
         ]
         fronts.append(front)
+        # `id()` and `candidate.id` are interchangeable here -- `_validate` has already
+        # refused duplicate candidate ids -- so mutating between them is equivalent. Object
+        # identity is used because it does not depend on that earlier guard staying in place.
         placed = {id(candidate) for candidate in front}
         remaining = [c for c in remaining if id(c) not in placed]
 
