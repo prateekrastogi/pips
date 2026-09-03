@@ -75,6 +75,31 @@ __all__ = ["PROMOTED_STAGE", "run_family_searches"]
 _NS = 1_000_000_000
 _SPECS = Path("config/search_spaces")
 ROUND_TRIP_COST = 0.0005
+"""The all-in round-trip cost the fixture PnL is netted with.
+
+A FIXTURE NUMBER, not a measurement. `[C-COST-04]`'s `cost_rt_bps` is the model that would
+produce a real one -- golden-tested at Flattrade RT 3.548 bps -- and nothing in the funnel calls
+it; the search runs under `COST_MODEL = "0" * 64`, a declared placeholder. Wiring the model in
+is M9's job, and until then this is a stand-in that says it is one.
+"""
+
+SELECTION_COST_FACTOR = 0.5
+"""How much of `ROUND_TRIP_COST` the SELECTION side is priced at, and it is not 1.
+
+This was an unexplained `CostLine(0.00025)` two hundred lines below the comment warning against
+exactly it -- "Two literals would drift, and S5 would then price a trade differently from the
+series it is selecting on." They had drifted, by a factor of two, and the drift is load-bearing:
+set it to 1 and `s5_admissible` goes false, because the synthetic edge clears 2.5 bps and not 5.
+
+So the S5 smoke demonstrates the chain composing only because selection is priced at half what
+the returns are netted at. That is a property of the FIXTURE, and naming it here is not a
+defence of it -- it is the difference between a reader seeing the assumption and not. Whether
+the edge curve should clear the honest cost instead is a modelling decision for M15, and one
+that should be taken deliberately rather than discovered.
+"""
+
+SELECTION_COST = ROUND_TRIP_COST * SELECTION_COST_FACTOR
+"""The line tau* and h* are solved against. One place to change, so the two cannot drift."""
 """The all-in cost line, per round trip and per unit notional. Named once because the search's
 PnL and S5's turnover economics must price the same trade the same way -- and because a gross
 return recorded in a field called `net_return` is a claim the number does not support."""
@@ -149,7 +174,7 @@ def _blotter_for(ids: tuple[str, ...], cost: CostLine) -> list[BlotterOrder]:
 
 def _turnover_inputs() -> TurnoverInputs:
     return TurnoverInputs(
-        cost_lines={("FLATTRADE", "2L"): CostLine(0.00025)},
+        cost_lines={("FLATTRADE", "2L"): CostLine(SELECTION_COST)},
         edge_curve=lambda tau: EdgeCurve(a=0.000274 * (1 + 0.3 * tau / 0.0005), gamma=0.5),
         trade_sigma=lambda h: 0.0005 * h,
         fitted_horizon=100_000.0,

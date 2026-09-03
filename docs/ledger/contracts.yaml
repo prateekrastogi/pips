@@ -886,6 +886,26 @@
   code: "python/pips/search/s5.py"
   tests:
     - "tests/unit/test_s5.py"
+  # THE SMOKE PRICES SELECTION AND NETTING ON TWO DIFFERENT LINES, and the module warned about
+  # exactly that at one of the two sites -- "Two literals would drift, and S5 would then price a
+  # trade differently from the series it is selecting on." They had drifted by a factor of two:
+  # `gross_cost` netted the PnL at `ROUND_TRIP_COST` (5 bps) while `_turnover_inputs` solved
+  # tau*/h* against an unexplained `CostLine(0.00025)`, and `turnover.CostLine` documents itself
+  # as the all-in cost per round trip -- the same quantity.
+  #
+  # THE GAP IS LOAD-BEARING. Set them equal and `s5_admissible` goes false: the synthetic edge
+  # clears 2.5 bps and not 5. So this row's demonstration that the chain composes end to end
+  # rests on selection being priced at half what the returns are netted at, and nothing said so.
+  #
+  # Named rather than resolved. `SELECTION_COST_FACTOR = 0.5` puts the ratio in one place with
+  # its consequence written down, and a test fails if it ever becomes 1 without someone saying
+  # why. WHICH number is right is a modelling decision for M15 -- picking one to keep the smoke
+  # green would be fitting a fixture to a desired outcome, which is the opposite of what a smoke
+  # run is for.
+  #
+  # Both literals are stand-ins regardless: `[C-COST-04]`'s `cost_rt_bps` is golden-tested at
+  # Flattrade RT 3.548 bps and is called by NOTHING, and the funnel runs under
+  # `COST_MODEL = "0" * 64`, a declared placeholder. Wiring the real model in is M9's.
   status: enforced
   owner_milestone: M19
   # `run_s5_from_registry` is the registry-backed entry point: it reads completed runs at a
