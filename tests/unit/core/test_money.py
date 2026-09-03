@@ -55,3 +55,45 @@ def test_notional_is_integer_only() -> None:
 @pytest.mark.parametrize(("paise", "text"), [(250_005, "2500.05"), (1, "0.01"), (-150, "-1.50")])
 def test_rupee_rendering_is_exact(paise: int, text: str) -> None:
     assert paise_to_rupees_str(paise) == text
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+@pytest.mark.parametrize(
+    ("rupees", "paise"),
+    [
+        ("1285.407", 128541),  # rounds up
+        ("1285.995", 128600),  # carries into the rupee
+        ("0.015", 2),  # ties to even at the smallest scale
+        ("1285.405", 128540),  # and ties down, to the even paise
+    ],
+)
+def test_a_sub_paise_amount_rounds_rather_than_truncating(rupees: str, paise: int) -> None:
+    """Every existing case is exact to the paise, so truncation looks identical to rounding.
+
+    `1285.4` converts the same either way, and so does every price in the fixtures — which is
+    why `int(amount * 100)` in place of `round_half_even` changed no test. It differs only on
+    amounts carrying sub-paise precision, and there it **always rounds toward zero**: a
+    systematic downward bias on every price the vendor sends with a third decimal. On a long
+    book that is a free basis point per fill, in the flattering direction, applied uniformly so
+    nothing downstream looks anomalous.
+
+    Half-to-EVEN, not half-up: `1285.405` goes down to the even paise and `0.015` goes up to
+    it, so the bias cancels across many conversions instead of accumulating.
+    """
+    assert rupees_to_paise(rupees) == paise
+
+
+def test_an_amount_that_is_not_a_number_is_refused_by_name() -> None:
+    """`Decimal("not-a-price")` raises `InvalidOperation`, which names neither the input nor
+    the field it came from.
+
+    This function converts strings that arrive from a vendor, so the realistic bad input is a
+    price field carrying `"-"` or `"N/A"` rather than a number. Translating it to a `ValueError`
+    that quotes the offending value is what lets the caller quarantine the record with a reason
+    instead of reporting an arithmetic fault three modules from the data.
+    """
+    for bad in ("not-a-price", "", "N/A", "1,285.40"):
+        with pytest.raises(ValueError, match="not a decimal amount"):
+            rupees_to_paise(bad)
