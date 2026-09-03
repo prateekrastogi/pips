@@ -167,7 +167,18 @@ def gate_s4(registry: Registry, *, stage: str) -> S4Report:
                 at_literal
                 if effective is None
                 else deflated_sharpe_ratio(
-                    sharpe, n, skew, kurtosis, max(1, round(effective)), variance
+                    sharpe,
+                    n,
+                    skew,
+                    kurtosis,
+                    # The floor cannot bind: `effective_rank` is >= 1 by construction, a 1x1
+                    # correlation matrix giving exactly 1.0, so `round` never reaches 0. Kept
+                    # because it is the argument's own precondition rather than a guess about
+                    # the caller -- and if it ever did bind, `deflated_sharpe_ratio` raises
+                    # "n_trials must be at least 1", which the `except ValueError` above already
+                    # turns into an exclusion with a reason.
+                    max(1, round(effective)),
+                    variance,
                 )
             )
         except ValueError as exc:
@@ -556,9 +567,12 @@ def outer_fold_count(*, panel_days: int, sealed_days: int) -> int:
             horizon=1,
             embargo=1,
             order_duration=0,
-            # Does not change the COUNT -- purging trims train_indices, not how many folds fit,
-            # so `purge=False` is an equivalent mutant here. The purge's own behaviour is
-            # `walk_forward`'s to test, and it does; passing it correctly is still right.
+            # NEITHER `horizon` NOR `purge` CHANGES THE COUNT. Both trim `train_indices`;
+            # they do not change how many windows fit, so mutating either is equivalent here.
+            # Checked rather than assumed: zero differences over every panel from 150 to 900
+            # days at three seal lengths. Their own behaviour is `walk_forward`'s to test, and
+            # it does; passing them correctly is still right, because a caller reading this for
+            # the geometry should see the geometry that was used.
             purge=True,
         )
     )
