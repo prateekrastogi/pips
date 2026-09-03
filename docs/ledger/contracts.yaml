@@ -1747,7 +1747,29 @@
   # that passed, pointed the other way: the next person plans a campaign around a number they
   # have been told to distrust. It now carries the measurement and its date.
   #
-  # `enforced`: `run_range_backfill` calls it, so the halved estimate is now the actual bill.
+  # AND NOTHING CALLED `run_range_backfill`. This row went `enforced` on the strength of the
+  # chunker being wired into that function, and the function had no caller outside tests: `pips
+  # backfill` ran `run_backfill`, the per-symbol-day path. The halved bill existed in the plan
+  # and in no code path anyone could invoke, and the seed cost was quoted from the number the
+  # CLI could not deliver. `--ranged` is the way in, and a control test holds that the default
+  # is still per-day, because a build that took the ranged path always would silently change
+  # the manifest grain of every existing campaign.
+  #
+  # `describe()` made it worse than silent: it advertised `estimated_calls_if_ranged` -- the
+  # VENDOR's allowance, needing windows that end mid-session while the bronze layout is keyed
+  # per day -- and said "this fetcher requests one day per call", which stopped being true when
+  # the chunker landed. A number no code path can reach, beside a denial of the capability that
+  # exists. It now names the achievable chunked figure and the flag that delivers it.
+  #
+  # SWITCHING GRAIN IS NOT FREE and is flagged rather than refused. Day keys are
+  # `SYMBOL:YYYY-MM-DD` and range keys `SYMBOL:INTERVAL:START:END`, so a ranged run matches
+  # none of the former and re-fetches those days at full price while the manifest still says
+  # they were done. The check counts colons and filters on the run's own symbols: matching
+  # range keys too would warn on every resume, and ignoring the symbol would warn on a
+  # 5,000-name manifest for a one-symbol campaign. A warning that fires every time is one
+  # nobody reads.
+  #
+  # `enforced`: the chunked path is reachable, so the halved estimate is now the actual bill.
   status: enforced
   owner_milestone: M4
 

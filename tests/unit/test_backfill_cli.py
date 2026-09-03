@@ -322,3 +322,145 @@ def test_an_unsupported_interval_stops_before_any_session(
     assert campaign_module.main([*ARGS, "--interval", "1min"]) == 2
     assert "unsupported interval" in capsys.readouterr().out
     assert cli == []
+
+
+# ------------------------------------------- the ranged path was unreachable ---------
+#
+# `run_range_backfill` had no caller outside tests. `[C-M4-10]` chunks a range so no reply can
+# truncate, the row is `enforced`, and `main` called `run_backfill` — the per-symbol-day path —
+# so the halved cost existed only in the plan. Worse, `describe()` said the capability did not
+# exist: "{ranged} calls would serve this range if one call could span days. This fetcher
+# requests one day per call." True when it was written, false since the chunker landed, and the
+# operator reading it would conclude the cheap shape was unavailable.
+
+
+def test_ranged_uses_the_chunked_path_and_the_default_does_not(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both halves. Asserting only that `--ranged` reaches the ranged fetcher would pass on a
+    build that reached it always, which would silently change the manifest grain of every
+    existing campaign."""
+
+    def recorded_range(*_a: object, **_k: object) -> BackfillResult:
+        cli.append("run_range_backfill")
+        return _result()
+
+    monkeypatch.setattr(backfill_module, "run_range_backfill", recorded_range)
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*ARGS, "--ranged"]) == 0
+    assert "run_range_backfill" in cli and "run_backfill" not in cli
+
+    cli.clear()
+    assert campaign_module.main(ARGS) == 0
+    assert "run_backfill" in cli and "run_range_backfill" not in cli
+
+
+def test_the_plan_names_the_cost_the_ranged_path_can_actually_deliver() -> None:
+    """`estimated_calls_if_ranged` is the VENDOR's allowance — it needs windows ending
+    mid-session, and the bronze layout is keyed per day. Advertising it as the alternative
+    points the operator at a number no code path can reach, while the achievable one
+    (`estimated_calls_if_chunked`) went unmentioned.
+    """
+    plan = plan_campaign(["A", "B"], date(2026, 6, 1), date(2026, 8, 31), CALENDAR)
+    summary = plan.describe()
+
+    assert plan.estimated_calls_if_chunked is not None
+    assert str(plan.estimated_calls_if_chunked) in summary
+    assert "--ranged" in summary, "it names the flag that delivers the cheaper number"
+    assert "one day per call" not in summary, "the fetcher can span days now"
+
+
+def test_switching_grain_mid_campaign_is_flagged(
+    cli: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A manifest holding per-symbol-day keys means those days are done at DAY grain.
+
+    A ranged run keys on `SYMBOL:INTERVAL:START:END`, so none of them match and every day is
+    re-fetched — at full price, silently, while the manifest says the work was already done.
+    Not refused, because switching shapes is a legitimate thing to want; said out loud, because
+    doing it by accident costs a second campaign.
+    """
+    manifest = tmp_path / "state" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"outcomes": {"RELIND:2026-08-24": "OK", "RELIND:2026-08-25": "OK"}}')
+
+    monkeypatch.setattr(backfill_module, "run_range_backfill", lambda *_a, **_k: _result())
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*ARGS, "--ranged"]) == 0
+
+    out = capsys.readouterr().out
+    assert "2 symbol-day" in out
+    assert "re-fetched" in out
+
+
+def test_the_ranged_run_is_handed_the_whole_span(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WHICH function was called is not the property; what it was called with is.
+
+    `run_range_backfill` takes a start and an end. Passing the first day as both would fetch
+    one session of a three-year range, mark it done, and report success — a total data loss
+    that every count in the report agrees with.
+    """
+    seen: dict[str, object] = {}
+
+    def recorded(
+        symbols: object, start: object, end: object, *_a: object, **_k: object
+    ) -> BackfillResult:
+        seen.update(symbols=symbols, start=start, end=end)
+        return _result()
+
+    monkeypatch.setattr(backfill_module, "run_range_backfill", recorded)
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*ARGS, "--ranged"]) == 0
+
+    assert seen["start"] == date(2026, 8, 24)
+    assert seen["end"] == date(2026, 8, 28), "the span ends at the plan's LAST day"
+
+
+def test_a_manifest_of_range_keys_does_not_warn_about_itself(
+    cli: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The warning is about a GRAIN SWITCH, so a resumed ranged run must not trip it.
+
+    Range keys carry three colons (`SYMBOL:INTERVAL:START:END`) and day keys one. Counting
+    "at least one" would make every resume warn that it is about to re-fetch work it is in fact
+    about to skip — and a warning that fires every time is one nobody reads.
+    """
+    manifest = tmp_path / "state" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"outcomes": {"RELIND:1minute:2026-08-24:2026-08-28": "OK"}}')
+
+    monkeypatch.setattr(backfill_module, "run_range_backfill", lambda *_a, **_k: _result())
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*ARGS, "--ranged"]) == 0
+    assert "re-fetched" not in capsys.readouterr().out
+
+
+def test_another_symbols_day_keys_do_not_warn(
+    cli: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The archive holds every symbol ever fetched. Warning on keys belonging to symbols this
+    run does not touch would fire on a 5,000-name manifest for a one-symbol campaign."""
+    manifest = tmp_path / "state" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"outcomes": {"INFY:2026-08-24": "OK", "TCS:2026-08-25": "OK"}}')
+
+    monkeypatch.setattr(backfill_module, "run_range_backfill", lambda *_a, **_k: _result())
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*ARGS, "--ranged"]) == 0
+    assert "re-fetched" not in capsys.readouterr().out

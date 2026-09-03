@@ -216,12 +216,19 @@ class CampaignPlan:
             f"= {self.estimated_calls} calls "
             f"({self.days[0]} to {self.days[-1]})"
         )
-        ranged = self.estimated_calls_if_ranged
-        if ranged < self.estimated_calls:
+        chunked = self.estimated_calls_if_chunked
+        if chunked is not None and chunked < self.estimated_calls:
+            # The ACHIEVABLE alternative, and the flag that delivers it. This used to advertise
+            # `estimated_calls_if_ranged` -- the vendor's allowance, which needs windows ending
+            # mid-session while the bronze layout is keyed per day -- and to say "this fetcher
+            # requests one day per call", which stopped being true when the chunker landed.
+            # Naming a number no code path can reach, beside a capability the note denied, is
+            # two ways of misleading whoever is deciding what to spend.
             line += (
-                f"\n  NOTE: {ranged} calls would serve this range if one call could span days."
-                f"\n        This fetcher requests one day per call, so the plan costs"
-                f" {self.estimated_calls}."
+                f"\n  NOTE: --ranged would serve this range in {chunked} calls, day-aligned"
+                f"\n        chunks that cannot truncate, against {self.estimated_calls} here."
+                f"\n        The vendor would allow {self.estimated_calls_if_ranged} with"
+                f" mid-session windows, which this layout does not use."
             )
         return line
 
@@ -288,6 +295,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--from", dest="start", required=True)
     parser.add_argument("--to", dest="end", required=True)
     parser.add_argument("--dry-run", action="store_true", help="cost the plan, fetch nothing")
+    parser.add_argument(
+        "--ranged",
+        action="store_true",
+        help="fetch day-aligned chunks spanning many sessions instead of one call per "
+        "symbol-day; far cheaper, and a DIFFERENT manifest grain",
+    )
     parser.add_argument("--calendar", default="config/calendars/nse_equity.yaml")
     parser.add_argument(
         "--interval",
@@ -325,10 +338,43 @@ def main(argv: list[str] | None = None) -> int:
         print("  --dry-run: nothing fetched.")
         return 0
 
-    from pips.data.breeze.backfill import run_backfill
+    from pips.data.breeze import backfill as backfill_module
+    from pips.data.breeze import client as client_module
 
-    fetcher = budgeted_fetcher(build_session(), budget, interval=plan.interval)
-    result = run_backfill(plan.symbols, plan.days, fetcher, bronze, manifest_path)
+    if args.ranged:
+        # SWITCHING GRAIN IS NOT FREE. Per-symbol-day keys are `SYMBOL:YYYY-MM-DD`; range keys
+        # are `SYMBOL:INTERVAL:START:END`. A ranged run matches none of the former, so days
+        # already fetched are fetched again at full price while the manifest still says they
+        # were done. Not refused -- switching shapes is a legitimate thing to want -- but doing
+        # it by accident costs a second campaign, so it is said out loud.
+        existing = backfill_module.Manifest.load(manifest_path)
+        stale = [
+            k
+            for k in existing.outcomes
+            if k.count(":") == 1 and k.split(":")[0] in set(plan.symbols)
+        ]
+        if stale:
+            print(
+                f"  NOTE: the manifest holds {len(stale)} symbol-day key(s) for these symbols."
+                f"\n        A ranged run keys on symbol:interval:start:end, so those days are"
+                f"\n        re-fetched at full price. Finish per-day, or accept the re-fetch."
+            )
+        result = backfill_module.run_range_backfill(
+            plan.symbols,
+            plan.days[0],
+            plan.days[-1],
+            plan.interval,
+            client_module.ranged_fetcher(
+                client_module.build_session(), budget, interval=plan.interval
+            ),
+            bronze,
+            manifest_path,
+        )
+    else:
+        fetcher = budgeted_fetcher(build_session(), budget, interval=plan.interval)
+        result = backfill_module.run_backfill(
+            plan.symbols, plan.days, fetcher, bronze, manifest_path
+        )
     print(
         f"  attempted={result.attempted} fetched={result.fetched} empty={result.empty} "
         f"errored={result.errored} skipped={result.skipped}"
