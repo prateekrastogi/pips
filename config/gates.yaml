@@ -1,7 +1,20 @@
-# config/gates.yaml — numeric thresholds the funnel enforces.
-# Every value here has a matching row in docs/ledger/gates.yaml. Changing a number means
-# editing this file + the enforcing code + an ADR, in one reviewable commit (§8.2).
-# Populated as each gate's milestone lands; empty values are not defaults, they are gaps.
+# config/gates.yaml — the numeric thresholds the funnel is meant to enforce, and a map of what
+# actually enforces each one.
+#
+# READ THIS FIRST: nothing loads this file at runtime. The funnel's live bars come from
+# docs/ledger/gates.yaml, which `pips.ledger.model` loads and the ledger-agreement test binds
+# the enforcing constants to. This file is the human-facing declaration and the place §8.2's
+# discipline is recorded — changing a number means editing this file + the enforcing code + an
+# ADR, in one reviewable commit.
+#
+# Being human-facing is exactly why it needs `enforced_by` below. The header used to claim
+# "every value here has a matching row in docs/ledger/gates.yaml", and four values had none and
+# were read by nothing: they were populated numbers that looked like live bars.
+#
+# Populated as each gate's milestone lands. EMPTY values are not defaults, they are gaps — and
+# the inverse is the more dangerous half, so it is now checked: A POPULATED VALUE IS NOT A GATE
+# UNLESS SOMETHING READS IT. An empty threshold is obviously missing; a filled one that nothing
+# consults looks exactly like a gate that passed.
 
 schema_version: 1
 
@@ -22,3 +35,42 @@ p3_gate:
 
 governor:
   orders_per_second_max: 5   # engine cap; exchange registration-free limit is 10/s
+
+# WHAT ENFORCES WHAT. Every threshold above appears here, and a test refuses one that does not.
+# A `G-*` id means the ledger row that carries the live value, and a test holds the two equal.
+# `null` means NOTHING enforces it yet — pre-registered intent, kept because §8.2 wants the
+# record, and named so it cannot read as live. A test also checks each `null` stays true: if
+# the key appears in `python/`, the entry is stale and must say what reads it — unless the name
+# is listed under `unread_name_collisions` below, which is the escape hatch for a key whose
+# identifier means something else entirely somewhere.
+enforced_by:
+  s4_certification.dsr_min: "G-S4-DSR"
+  s4_certification.pbo_max: "G-P4-PBO"
+  s4_certification.spa_p_max: "G-P4-SPA"
+  # No ledger row and nothing in the code. §3.6 wants a minimum test-trade count before a
+  # deflated Sharpe means anything; nothing counts trades against a floor yet.
+  s4_certification.min_test_trades: null
+  # No ledger row and nothing in the code. `[C-SEL-01]`'s clustering takes a threshold on
+  # `1 - corr` as a CALLER-supplied parameter, which is a different number reached a different
+  # way; it does not read this one.
+  s4_certification.pairwise_pnl_corr_max: null
+  # NOT the same quantity as the rows that sound like them. `G-P4-COST15` and `G-P4-DELAY1`
+  # carry a net-return FLOOR of 0.0 at one point of each grid ("still positive at 1.5x cost");
+  # the grids here are the inputs those points are drawn from, and nothing reads them. Mapping
+  # them to those rows is what my first version of this file did, and the equality test caught
+  # it: the row's value is 0.0 and the grid is a list.
+  stress.cost_multipliers: null
+  stress.delay_bars: null
+  p3_gate.net_sharpe_min_zero_cost_line: null
+  p3_gate.net_sharpe_min_high_cost_line: null
+  # ENFORCED, but not from here. `[C-OBUD-01]`'s `OrderBudget` refuses a global rate above the
+  # legal one on a sliding one-second window; both numbers are supplied by its caller, so this
+  # declaration is the policy and that dataclass is the mechanism. Recorded as a contracts row
+  # rather than a gate row, which is why the old "every value has a G- row" claim was wrong.
+  governor.orders_per_second_max: "C-OBUD-01 (caller-supplied, not read from this file)"
+
+# Keys whose bare identifier appears in `python/` for an unrelated reason, so the `null`
+# honesty check cannot use its presence as evidence that the threshold is wired up. Each entry
+# names the collision, because "trust me, it is unrelated" is what this file is trying to stop.
+unread_name_collisions:
+  delay_bars: "pips.search.s1 takes a `delay_bars` FUNCTION PARAMETER for the +1-bar stress run; it does not read this grid"

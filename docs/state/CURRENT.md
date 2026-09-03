@@ -1,6 +1,6 @@
 # CURRENT.md — active state (overwritten every session)
 
-**Updated:** 2026-09-03 · **Branch:** `main` · **Phase:** P0 · loop running (5m).
+**Updated:** 2026-09-04 · **Branch:** `main` · **Phase:** P0 · loop running (5m).
 
 > Rewritten after incremental edits left this file self-contradictory — two "action 2"s, one
 > claiming the QC seam resolved nothing immediately after saying it was done. This is the
@@ -113,7 +113,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 286 source files · 2340 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 287 source files · 2345 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
   (planned=8 building=32 enforced=29)
   provenance: running on the host, not in a pips image
