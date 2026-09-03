@@ -16,6 +16,7 @@ got an answer" is a hole.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -28,6 +29,7 @@ from pips.data.pit.corporate_actions import JumpVerdict
 
 if TYPE_CHECKING:
     from datetime import date
+    from pathlib import Path
 
     from pips.core.calendar import ExchangeCalendar
 
@@ -35,6 +37,7 @@ __all__ = [
     "Finding",
     "QcVerdicts",
     "Severity",
+    "VerdictProvenanceError",
     "check_bar_sanity",
     "check_calendar_gaps",
     "check_decimal_shift",
@@ -66,6 +69,10 @@ class Severity(StrEnum):
     QUARANTINE = "QUARANTINE"
 
 
+class VerdictProvenanceError(RuntimeError):
+    """A verdict file was written over a different archive than the one being promoted."""
+
+
 @dataclass(frozen=True)
 class QcVerdicts:
     """What a QC pass looked at, and what it rejected -- the seam promotion consults.
@@ -91,6 +98,35 @@ class QcVerdicts:
         if key in self.quarantined:
             return "QUARANTINED"
         return "PASSED" if key in self.examined else "UNEXAMINED"
+
+    @classmethod
+    def load(cls, path: Path, *, bronze_root: Path) -> QcVerdicts:
+        """Read verdicts written by a previous QC pass, refusing another archive's.
+
+        QC and promotion are separate entry points, so the verdict has to survive a process
+        boundary or the gate cannot be reached at all. What crosses that boundary is a claim
+        about specific records, and the claim is only meaningful about the archive it was made
+        over: keys are ``SYMBOL:YYYY-MM-DD`` and collide constantly between two archives of the
+        same market, so a staging verdict set would mark production's records examined and
+        passed with nothing able to tell.
+
+        A missing file RAISES. A caller with no QC passes ``qc=None`` deliberately; a caller
+        naming a file that is not there has a broken pipeline and must hear about it, not
+        receive an empty pass.
+        """
+        written = json.loads(path.read_text(encoding="utf-8"))
+        claimed = written.get("bronze_root")
+        actual = str(bronze_root.resolve())
+        if claimed != actual:
+            raise VerdictProvenanceError(
+                f"{path} holds verdicts written over {claimed!r}, but promotion is reading "
+                f"{actual!r}. Record keys collide between archives of the same market, so "
+                f"these verdicts would mark records examined that QC never saw."
+            )
+        return cls(
+            examined=frozenset(written.get("examined", ())),
+            quarantined=frozenset(written.get("quarantined", ())),
+        )
 
 
 @dataclass(frozen=True)

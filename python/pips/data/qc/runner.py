@@ -26,6 +26,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Final
 
+from pips.core.atomic import atomic_write_text
 from pips.core.calendar import ExchangeCalendar
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
 from pips.data.pit.explain import JumpExplainer, jump_explainer
@@ -89,6 +90,34 @@ class QcReport:
         """The seam `promote_bronze` consults. See :class:`QcVerdicts`."""
         return QcVerdicts(
             examined=frozenset(self.examined_keys), quarantined=frozenset(self.quarantined_keys)
+        )
+
+    def write_verdicts(self, path: Path, *, bronze_root: Path) -> None:
+        """Persist the verdicts so a later, separate promotion can consult them.
+
+        QC and promotion are separate entry points; without this the verdict never leaves the
+        process that reached it, and `promote_bronze` has nothing to pass but `qc=None`. The
+        gate existed and could not be reached.
+
+        Sorted, so re-running QC over an unchanged archive produces an identical file (rule 1)
+        and a diff shows what actually changed. Atomic, because a half-written file that parsed
+        would be a SMALLER examined set -- and a smaller examined set is a quieter one.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(
+            path,
+            json.dumps(
+                {
+                    "written_at_ns": time.time_ns(),
+                    # What these verdicts are ABOUT. See `QcVerdicts.load`.
+                    "bronze_root": str(bronze_root.resolve()),
+                    "examined": sorted(self.examined_keys),
+                    "quarantined": sorted(self.quarantined_keys),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
         )
 
     def describe(self) -> str:
@@ -441,7 +470,13 @@ def main(argv: list[str] | None = None) -> int:
             print("    compute as NON-adjacent and their overnight-ratio comparison is SKIPPED —")
             print("    a genuine jump across a holiday goes unexamined. The skip count below is")
             print("    the honest measure of this check's coverage.")
+    # WRITTEN BEFORE THE SUMMARY, so a non-zero exit does not skip it. The verdicts are what
+    # `promote_bronze` consults, and they are most needed precisely when QC found something.
+    verdict_path = root / "state" / "qc-verdicts.json"
+    report.write_verdicts(verdict_path, bronze_root=bronze)
+
     print(report.describe())
+    print(f"  verdicts written to {verdict_path} — pass them to promote_bronze(qc=...)")
     by_check: dict[str, int] = {}
     for finding in report.findings:
         by_check[finding.check] = by_check.get(finding.check, 0) + 1

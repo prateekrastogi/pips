@@ -1163,6 +1163,27 @@
   # for anything on the path to real capital, modelled on `require_verified_holidays` and for
   # the same reason -- research on fixtures needs the first, the panel needs the last.
   #
+  # THE VERDICT SURVIVES THE PROCESS THAT REACHED IT. `QcReport.write_verdicts` persists it and
+  # `QcVerdicts.load` reads it back, because QC and promotion are separate entry points: without
+  # a file the verdict never leaves the process, `promote_bronze` has nothing to pass but
+  # `qc=None`, and the gate exists but cannot be reached. `make qc` writes it to
+  # `<root>/state/qc-verdicts.json` and says so on stdout.
+  #
+  # THE FILE NAMES THE ARCHIVE IT WAS WRITTEN OVER, and a mismatch is refused. Keys are
+  # `SYMBOL:YYYY-MM-DD` and collide constantly between two archives of the same market, so a
+  # staging verdict set would mark production's records examined and passed with nothing able
+  # to tell. The comparison is on RESOLVED paths: unresolved, two different archives each
+  # called `bronze` from their own working directory compare EQUAL, which is the exact
+  # collision the check exists to prevent. A missing file raises rather than reading as an
+  # empty pass -- a caller with no QC passes `qc=None` deliberately, a caller naming a file
+  # that is not there has a broken pipeline.
+  #
+  # Keys are written SORTED so re-running QC over an unchanged archive produces an identical
+  # file (rule 1); a set's order would depend on the interpreter's hash seed, which is what the
+  # determinism gate runs two subprocesses to catch and what this file would otherwise smuggle
+  # past it. Written atomically, and written BEFORE the summary so a non-zero exit does not
+  # skip it -- the verdicts are most needed precisely when QC found something.
+  #
   # `enforced`: QC is now a precondition of promotion, and a promotion that skipped it says so.
   status: enforced
   owner_milestone: M5

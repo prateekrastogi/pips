@@ -113,7 +113,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 283 source files · 2313 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 284 source files · 2325 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
   (planned=8 building=32 enforced=29)
   provenance: running on the host, not in a pips image
@@ -261,7 +261,11 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    refusal for anything on the path to real capital. Bars can no longer reach the panel with QC
    silently never having run — but they can still reach it with QC *loudly* never having run,
    because `make ci` does not invoke QC and no compose service or Jenkins stage does either.
-   The only entry point is still a human typing `make qc`. Making promotion depend on
+   The only entry point is still a human typing `make qc` — which now at least WRITES its
+   verdicts to `<root>/state/qc-verdicts.json`, so a promotion in another process can read
+   them; before, the verdict never left the process that reached it and the gate could not be
+   reached at all. Running QC where the data lives is arb-vm work, and that rail auto-deploys
+   every main SHA, so it is the owner's to authorise exactly as `reader.Dockerfile` is. Making promotion depend on
    it is a pipeline change. **RESOLVED, and this entry had it backwards.** It read
    the prose/code difference as the spec overpromising "calendar gaps", to be fixed by
    correcting the prose. The prose was right. The ratio floor takes ONE SESSION'S BARS, and
