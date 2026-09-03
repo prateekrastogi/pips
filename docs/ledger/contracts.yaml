@@ -181,6 +181,20 @@
     - "tests/unit/test_protected_limit.py"
     - "tests/unit/test_flatten.py"
     - "tests/unit/test_reconciliation.py"
+  # F0'S COST UNDERSTATES, AND ITS DOCSTRING CALLED THAT "CONSERVATIVE". `run_screen` charges
+  # `round_trip_cost` -- statutory plus brokerage -- and nothing else: no half-spread, no
+  # impact, no latency, no adverse selection. Those omitted terms are MULTIPLES of the
+  # statutory line (measured in `test_f0_cost_direction.py`, not asserted), and
+  # `execution_friction.yaml` is explicit that conservatism runs the other way: "An understated
+  # cost makes a DEAD edge look alive, which costs capital and is the single most expensive
+  # error this project can make."
+  #
+  # So F0 errs toward KEEPING features rather than killing them. That is defensible for a
+  # triage tier, and it is the opposite of what the old wording promised -- a reader told the
+  # cost was conservative would have believed the safe direction was already covered. THIS ROW
+  # is what stops the number travelling: the tier stamp and the refusal to compare across
+  # tiers mean an F0 figure cannot be presented as a net return. The wording is corrected and
+  # a test pins what is actually charged, so the account and the code cannot drift apart again.
   status: building
   owner_milestone: M14
   # BUILDING, not enforced, and the gap is exactly F1-F3. M10 landed the F0 screen tier plus

@@ -1,9 +1,23 @@
 """Vectorized screening engine, F0 tier  (§6 M10, §3.8).
 
-F0 is deliberately crude -- "next-bar return minus conservative rough cost", permitted for
-*feature triage only*. What is exact even here is the **accounting**: every quantity is
-integer paise, and ``pnl_gross - costs == pnl_net`` holds identically rather than to a
-tolerance (§7 asserts it continuously).
+F0 is deliberately crude -- next-bar return minus a rough cost -- and permitted for *feature
+triage only*. What is exact even here is the **accounting**: every quantity is integer paise,
+and ``pnl_gross - costs == pnl_net`` holds identically rather than to a tolerance (§7 asserts
+it continuously).
+
+**THE COST HERE UNDERSTATES, and this docstring used to call it "conservative".** What is
+charged is `round_trip_cost` -- the statutory stack plus brokerage -- and nothing else: no
+half-spread, no impact, no latency, no adverse selection. Those are multiples of the statutory
+line, and `config/costs/execution_friction.yaml` is explicit that conservatism runs the other
+way: "An overstated cost kills a live edge, which costs opportunity. An understated cost makes
+a DEAD edge look alive, which costs capital and is the single most expensive error this project
+can make."
+
+So F0 errs toward KEEPING features, not killing them, which is a defensible thing for a triage
+tier to do and the opposite of what the old wording promised. `[C-FILL-01]` is what stops the
+number travelling: every result is stamped with its tier and cross-tier comparison is refused,
+so an F0 figure cannot be presented as a net return. A reader told the cost was conservative
+would have believed the safe direction was already covered.
 
 Two design choices carry weight:
 
