@@ -60,10 +60,14 @@ provenance: ## Refuse to run the ladder against code that is not the code under 
 ci: provenance lint typecheck tdd-check test rust-test determinism ledger-check ## The full ladder Jenkins runs
 	@echo "ci: green"
 
+# Dirtiness is probed with `git status --porcelain`, which reports UNTRACKED files too. The
+# image build is COPY . . and .dockerignore excludes only caches, so a module that has not been
+# added yet goes into the image -- and a probe blind to it would stamp the build clean, leaving
+# the image naming a commit it does not contain. That is the hole ops/provenance.py exists for.
 ci-container: ## The documented verify: build the image FROM the working tree, then run the ladder
 	@mkdir -p $(CURDIR)/.devdata
 	@sha=$$(git rev-parse HEAD); \
-	 dirty=$$(git diff --quiet HEAD 2>/dev/null && echo 0 || echo 1); \
+	 dirty=$$(test -z "$$(git status --porcelain)" && echo 0 || echo 1); \
 	 echo "ci-container: building $$sha (dirty=$$dirty)"; \
 	 PIPS_SHA=$$sha PIPS_DIRTY=$$dirty PIPS_EXPECTED_SHA=$$sha \
 	 PIPS_DATA_DIR=$${PIPS_DATA_DIR:-$(CURDIR)/.devdata} \

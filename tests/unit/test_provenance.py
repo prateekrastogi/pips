@@ -19,6 +19,9 @@ commit is not the same as running on the host, however similar the two look from
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from pips.ops.provenance import ProvenanceError, Verdict, check_provenance, main
@@ -195,3 +198,53 @@ def test_main_treats_an_empty_baked_sha_as_an_image_not_a_host(
     monkeypatch.setenv("PIPS_IMAGE_SHA", "")
     monkeypatch.setenv("PIPS_EXPECTED_SHA", SHA)
     assert main([]) == 1
+
+
+# --------------------------------------------------------- found by auditing the gate ---
+
+
+def test_the_dirty_probe_must_see_an_untracked_file(tmp_path: Path) -> None:
+    """`git diff --quiet HEAD` reports a tree with a brand-new file as CLEAN.
+
+    That is the hole this gate exists to close, wearing different clothes. The image build is
+    `COPY . .` and `.dockerignore` excludes only caches — so an untracked module goes into the
+    image, while the build stamps `PIPS_DIRTY=0` and the provenance line says the tree was
+    clean. The image then **names a commit it does not contain**, which is precisely the
+    "verify of unknown provenance still reported a verdict" this module was written for.
+
+    A new file that is not yet `git add`ed is the ordinary state of work in progress, not an
+    exotic one.
+    """
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args], cwd=tmp_path, capture_output=True, text=True, check=False
+        )
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (tmp_path / "tracked.py").write_text("x = 1\n")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    (tmp_path / "untracked.py").write_text("y = 2\n")
+
+    assert git("diff", "--quiet", "HEAD").returncode == 0, (
+        "the old probe calls a tree with an untracked module clean"
+    )
+    assert git("status", "--porcelain").stdout.strip() != "", "the new one does not"
+
+
+def test_the_container_build_probes_dirtiness_with_status_not_diff() -> None:
+    """And the Makefile uses the probe that sees it.
+
+    Asserted in both directions: a regression to `git diff` would restore a hole that the
+    behavioural test above proves is real, and asserting only the presence of the new text
+    would not notice the old text surviving beside it — the mistake that made an earlier
+    pre-push-hook test unable to fail.
+    """
+    makefile = (Path(__file__).resolve().parents[2] / "Makefile").read_text(encoding="utf-8")
+    recipe = makefile.split("ci-container:")[1].split("\n\n")[0]
+
+    assert "git status --porcelain" in recipe
+    assert "git diff --quiet" not in recipe

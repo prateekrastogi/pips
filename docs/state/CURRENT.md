@@ -103,7 +103,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 267 files · mypy --strict 267 files · 2163 pytest · clippy clean · cargo test ok
+  ruff 267 files · mypy --strict 267 files · 2165 pytest · clippy clean · cargo test ok
   determinism bit-identical · ledger-check 63 rows (planned=8 building=28 enforced=27)
 
 M6 mutation run — 5 deliberate breaks, 4 killed by tests:
