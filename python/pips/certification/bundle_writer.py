@@ -83,6 +83,10 @@ HASH_FIELDS: frozenset[str] = frozenset(
 them and is checked element-wise; `broker_context` and the versions are deliberately not here."""
 
 _HASH = re.compile(r"^[0-9a-f]{64}$")
+"""The anchors are redundant beside `fullmatch` and a mutation dropping them is equivalent.
+`fullmatch` is the load-bearing half: Python's `$` also matches immediately before a trailing
+newline, so an anchored `.match()` would accept a digest read with `readline()`. Kept because a
+reader of the pattern should see its shape without having to know which method applies it."""
 
 
 class IncompleteProvenanceError(ValueError):
@@ -90,6 +94,9 @@ class IncompleteProvenanceError(ValueError):
 
 
 def _hash_complaint(name: str, value: Any) -> str | None:
+    # The `isinstance` is equivalent in practice -- `fullmatch(str(value))` reaches the same
+    # verdict for every value that realistically arrives here -- and is kept because a type
+    # check belongs before a string operation, not because a case is known to need it.
     if not isinstance(value, str) or not _HASH.fullmatch(value):
         return (
             f"{name}={value!r} is not a lowercase 64-hex digest. A truncated hash, an uppercase "

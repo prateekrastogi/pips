@@ -275,3 +275,64 @@ def test_a_derived_field_and_a_typo_are_refused_for_different_reasons() -> None:
 
     with pytest.raises(IncompleteProvenanceError, match="not a bundle field"):
         write(code_has="b" * 64)
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+@pytest.mark.parametrize("field", sorted(HASH_FIELDS))
+def test_every_declared_hash_field_is_actually_checked(field: str) -> None:
+    """Parametrised over the set rather than over the ones somebody thought to test.
+
+    `HASH_FIELDS` had ten members and the suite exercised a few of them, so removing
+    `trial_registry_root` from the set changed no test — and that field is the Merkle root of
+    the trial registry, which is rule 4's evidence that every viewed trial was counted. A short
+    id or a placeholder recorded there looks like provenance and cannot be checked against a
+    store.
+
+    Written this way so a field added to the set later is covered by the fact of being added,
+    which is the same reason `REQUIRED_PROVENANCE` is enumerated from the model instead of
+    listed by hand.
+    """
+    with pytest.raises(IncompleteProvenanceError, match=field):
+        write(**{field: "not-a-digest"})
+
+
+@pytest.mark.parametrize("bad", ["A" * 64, "abc", "a" * 63, "a" * 65, ("a" * 64) + "\n", 12345])
+def test_a_digest_that_is_not_one_is_refused(bad: object) -> None:
+    """Truncated, over-long, uppercase, trailing-newline, or not a string at all.
+
+    The newline case is why the check is `fullmatch` rather than `match`: Python's `$` also
+    matches immediately before a trailing newline, so an anchored `match` would accept a digest
+    with one appended — which is exactly the shape a hash read from a file with `readline()`
+    arrives in.
+    """
+    with pytest.raises(IncompleteProvenanceError, match="code_hash"):
+        write(code_hash=bad)
+
+
+def test_the_hash_field_set_is_what_it_is_declared_to_be() -> None:
+    """Stated independently, because the test above cannot state it.
+
+    `test_every_declared_hash_field_is_actually_checked` parametrises over `HASH_FIELDS` — so
+    deleting a member deletes its own test case and the suite stays green. A test that draws
+    its expectation from the thing under test can only check consistency, never content.
+
+    This is the other half: the set written out by hand, so removing `trial_registry_root` —
+    the Merkle root of the trial registry, rule 4's evidence that every viewed trial was
+    counted — fails here even though it would silently shrink the parametrisation there. Same
+    arrangement `REQUIRED_COVERAGE` uses against §4.2's wording: two statements that must agree,
+    rather than one derived from the other.
+    """
+    assert {
+        "build_environment_hash",
+        "calendar_hash",
+        "code_hash",
+        "corporate_action_hash",
+        "cost_hash",
+        "data_snapshot_root",
+        "instrument_master_hash",
+        "risk_policy_hash",
+        "trial_registry_root",
+        "universe_hash",
+    } == HASH_FIELDS
