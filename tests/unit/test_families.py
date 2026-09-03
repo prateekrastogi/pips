@@ -349,3 +349,49 @@ def test_the_reason_never_names_an_alpha_other_than_the_one_that_failed() -> Non
     reason = flat_series_reason("A06", "A06-hold_minutes=5", window=1108, total=1108)
     assert "A06" in reason
     assert "A05" not in reason
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_the_recorded_return_is_net_of_the_cost_line(
+    searched: tuple[dict[str, object], Registry],
+) -> None:
+    """`net_return` was gross earlier this session, in the field `[C-CERT-01]` ranks on.
+
+    That was found and fixed — and **nothing was left behind to catch its return**. Making
+    `series_for` hand back the gross series changes no test in the entire suite, so the fix
+    could be reverted silently and the certification ranking would price every strategy as
+    though trading were free.
+
+    Asserted as relationships among the metrics the search already reports, rather than by
+    reaching into a closure: net is strictly below gross whenever anything traded, the share
+    of gross eaten by cost is positive, and the 1.5x stress is worse still. Together those
+    three pin the sign, the scaling and the multiplier, and no one of them alone does.
+    """
+    import json
+
+    report, reg = searched
+    priced = 0
+    for row in reg.all_runs():
+        if row["stage"] != report["promoted_stage"]:
+            continue
+        metrics = json.loads(row["metrics"])
+        # Both stress figures are recorded for every run and are robust to the sign of gross;
+        # the two RATIOS are only recorded when gross is positive, because below zero they
+        # invert. Assert what is always there, then what is there conditionally.
+        assert metrics["cost_1_5x"] < metrics["net_return"], (
+            f"{row['run_id']}: the 1.5x stress is not worse than the base line"
+        )
+        assert metrics["cost_2x"] < metrics["cost_1_5x"], f"{row['run_id']}: 2x is not worse"
+        if "cost_share" not in metrics:  # gross was not positive; the ratios are undefined
+            continue
+        priced += 1
+        where = row["run_id"]
+        # Positive, and deliberately NOT bounded above by 1: a share of 3,031 is what these
+        # fixtures actually produce, and it means the cost line ate three thousand times the
+        # gross edge. That is a real state and a useful signal, not an error to assert away.
+        assert metrics["cost_share"] > 0, f"{where}: cost took nothing from a positive gross"
+        assert metrics["gross_to_net"] < 1.0, f"{where}: net equals or exceeds gross"
+
+    assert priced > 0, "no promoted run traded, so this test proved nothing about pricing"

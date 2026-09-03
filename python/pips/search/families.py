@@ -324,9 +324,15 @@ def _search_one(
         # An INTERVAL, which is why the metric channel was widened: recording the lower bound
         # under a name that says CI asserts more than the value holds.
         metrics["bootstrap_ci"] = list(sharpe_ci)
-    if gross_total != 0:
+    if gross_total > 0:
         # Undefined against a zero gross, and NOT 1.0: a strategy that made nothing gross has no
         # ratio of net to gross, and 1.0 would read as a strategy that paid no costs.
+        #
+        # POSITIVE, not merely non-zero. Against a negative gross both ratios invert: the cost
+        # is still paid, so `gross - net` stays positive, but dividing by a negative denominator
+        # reports a cost SHARE below zero and a gross-to-net ABOVE one -- which reads as a
+        # strategy that earned more net than gross. Same trap `plateau_ratio` refuses for a
+        # non-positive centre, and the same answer: no number rather than an inverted one.
         metrics["gross_to_net"] = net / gross_total
         metrics["cost_share"] = (gross_total - net) / gross_total
     # DISCLOSED, not gated (ADR-0014): the blueprint asks for the 2x cost and +2-bar results to
