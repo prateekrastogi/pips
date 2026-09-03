@@ -14,6 +14,7 @@ not a panel with one fewer column — it is a panel every alpha reads zero price
 
 from __future__ import annotations
 
+import time
 from datetime import date
 from pathlib import Path
 
@@ -25,7 +26,12 @@ from pips.search.silver_panel import REQUIRED_COLUMNS, load_silver_panel
 
 MINUTE = 60 * 1_000_000_000
 # 2026-08-26 09:16 IST, the first close-labelled bar of the real silver file.
-OPEN = 1787967960 * 1_000_000_000
+#
+# Was 1787967960, which is 2026-08-29 07:16 IST -- a SATURDAY, outside any session. The comment
+# said one date and the constant meant another, and nothing noticed because every test here
+# either ignores the date or uses a window wide enough to contain both. A fixture that does not
+# mean what it says is one nobody can reason about when a test finally depends on it.
+OPEN = 1787715960 * 1_000_000_000
 
 
 def silver(
@@ -201,3 +207,64 @@ def test_changing_the_silver_file_changes_the_pin(tmp_path: Path) -> None:
     first = file_snapshot_root(silver(tmp_path / "a", rows=10))
     second = file_snapshot_root(silver(tmp_path / "b", rows=11))
     assert first != second
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_panel_spanning_days_is_checked_from_its_earliest_bar(tmp_path: Path) -> None:
+    """The range is [first, last+1), and `first` is the one the existing fixture could not test.
+
+    Every panel in this file spans forty minutes of one morning, so `min(stamps)` and
+    `max(stamps)` fall on the same date and taking either gives the same answer. A real panel
+    spans months. Checking from the LAST bar means a holdout sitting at the START of the panel
+    is never seen: the read is authorised, the sealed window is read, and the one place the
+    lockbox can bite did not.
+    """
+    day_two = OPEN + 24 * 60 * MINUTE
+    frame = pl.read_parquet(silver(tmp_path))
+    later = frame.with_columns(pl.col("close_ts_ns") + (day_two - OPEN))
+    path = tmp_path / "two_days.parquet"
+    pl.concat([frame, later]).write_parquet(path)
+
+    # sealed over the FIRST day only
+    # sealed over the FIRST day only, so only a check that starts there can see it
+    sealed = SealedLockbox(
+        start=date(2026, 8, 26), end=date(2026, 8, 27), release_stage="S6", cycle_id="c1"
+    )
+    with pytest.raises(LockboxSealedError):
+        load_silver_panel(path, lockbox=sealed, stage="S1")
+
+
+def test_the_lockbox_dates_do_not_depend_on_the_machines_timezone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bars are stamped in IST because the exchange is, not because the machine might be.
+
+    `datetime.fromtimestamp(ns)` without a zone uses the MACHINE's, and 09:15 IST is 23:45 the
+    previous day in New York — so the same panel would be checked against different dates
+    depending on where the process runs, and a sealed window could be read from one continent
+    and refused from another. On this laptop the two agree because the laptop is in IST, which
+    is exactly why the mutation survived; the second time this session that an environment
+    stood in for a property.
+    """
+    # ONE day wide, and it has to be. A month-wide window contains both the IST date and the
+    # date a New York clock would produce, so it raises either way and cannot tell them apart --
+    # which is how the first version of this test passed under the mutation it was written for.
+    sealed = SealedLockbox(
+        start=date(2026, 8, 26), end=date(2026, 8, 27), release_stage="S6", cycle_id="c1"
+    )
+    panel = silver(tmp_path)
+
+    # Los Angeles, not New York. The panel runs 09:16-09:56 IST, which in New York straddles
+    # midnight -- the earliest bar lands on the 25th and the latest on the 26th, so the range
+    # still touches the sealed day and raises whatever the zone. Seven hours further west puts
+    # the whole window on the 25th, which is the only arrangement that can tell the two apart.
+    for zone in ("Asia/Kolkata", "America/Los_Angeles", "UTC"):
+        monkeypatch.setenv("TZ", zone)
+        time.tzset()
+        with pytest.raises(LockboxSealedError):
+            load_silver_panel(panel, lockbox=sealed, stage="S1")
+
+    monkeypatch.delenv("TZ", raising=False)
+    time.tzset()
