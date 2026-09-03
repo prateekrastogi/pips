@@ -1221,6 +1221,44 @@
   status: enforced
   owner_milestone: M5
 
+- id: C-M4-11
+  title: "`pips capture` plans by default and cannot open a socket without being told to"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/capture_session.py"
+  tests:
+    - "tests/unit/test_capture_cli.py"
+  # Forward capture was built end to end and nothing started it, because starting it is a live
+  # market-data subscription that is the owner's to authorise. That left the decision ABSTRACT:
+  # the parts existed and there was no way to see what running them would do without running
+  # them. This is the entry point, and planning is what it does by default.
+  #
+  # IT INVERTS `backfill`'S DEFAULT, DELIBERATELY. `[C-M4-03]`'s `--dry-run` is opt-in because
+  # backfill spends quota, which is recoverable tomorrow. This opens a subscription nobody has
+  # authorised, so a bare invocation plans and `--live` is what opens anything. "Never create or
+  # enable anything on the live path" is not satisfied by a safe mode you have to remember to
+  # ask for.
+  #
+  # THE SESSION CHECK COMES BEFORE `--live` IS CONSULTED. Authorising a subscription is not
+  # authorising one at any hour: on a Saturday, `--live` still opens nothing, because a socket
+  # opened outside a session records an empty file that cannot be told from a dead feed.
+  #
+  # A CONTROL TEST asserts that `--live` DOES reach the feed factory, the same shape
+  # `[C-M4-03]` uses -- without it, a `main` that opened nothing under any flag would pass the
+  # planning test and look correct, which is a check that never runs wearing a CLI.
+  #
+  # The plan names the symbols, the window, the write path, any late start, and whether the
+  # holiday list is verified, because the point is that the authorisation decision can be made
+  # from its output rather than from reading the source.
+  #
+  # A naive `--now` is REFUSED and not repaired: attaching a timezone of this module's choosing
+  # is exactly the guess that makes a UTC container capture the wrong six hours (`[C-M4-07]`).
+  # An empty symbol list is refused too -- it would record an empty archive and report success.
+  #
+  # `building`: it starts a session when told, and nothing tells it on a schedule. The service
+  # and its authorisation are both still outstanding.
+  status: building
+  owner_milestone: M4
+
 - id: C-QC-02
   title: "Quarantine retains the evidence with its reason; bronze is never modified"
   spec: "IMPLEMENTATION.md#6-milestone-plan"
@@ -1625,9 +1663,10 @@
   # It wraps the ITERATION, never the feed. A wrapper object would have to reimplement the
   # protocol, and the supervisor would be talking to it instead of to the vendor.
   #
-  # `building`: nothing runs it. Forward capture is now complete as composable parts --
-  # shortlist, subscription, supervisor, writer, clock, deadline -- and what is missing is a
-  # service, which needs a live market-data authorisation that does not exist.
+  # `building`: nothing runs it UNATTENDED. `pips capture` (`[C-M4-11]`) can now assemble and
+  # start the whole chain, but only when told to with `--live`; a bare invocation plans. What
+  # is still missing is a service, which needs a live market-data authorisation that does not
+  # exist.
   status: building
   owner_milestone: M4
 

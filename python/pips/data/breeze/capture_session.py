@@ -26,11 +26,15 @@ stopping is not, and saying so is better than a half-built deadline that looks l
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pips.core.calendar import load_calendar
+from pips.data.breeze.capture import CaptureWriter
 from pips.data.breeze.capture_plan import plan_capture
 from pips.data.breeze.deadline import arm_timer, until_close
 from pips.data.breeze.ws_capture import run_capture
@@ -39,7 +43,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from pips.core.calendar import ExchangeCalendar
-    from pips.data.breeze.capture import CaptureWriter
     from pips.data.breeze.deadline import Cancellable, StoppableFeed
     from pips.data.breeze.ws_capture import CaptureReport
 
@@ -144,3 +147,105 @@ def run_session(
         holidays_verified=decision.holidays_verified,
         capture=capture,
     )
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    feed_factory: Callable[..., Any] | None = None,
+) -> int:
+    """CLI: ``pips capture [data_root] --symbols A,B [--now ISO] [--live]``.
+
+    **A bare invocation PLANS. `--live` is what opens a socket.** That inverts `backfill`, whose
+    `--dry-run` is opt-in, and the inversion is the point: backfill spends quota, which is
+    recoverable tomorrow, while this opens a market-data subscription nobody has authorised.
+    "Never create or enable anything on the live path" is not satisfied by a safe mode you have
+    to remember to ask for.
+
+    Planning exists so the authorisation decision can be made from something concrete: what
+    would be subscribed, over which window, writing where. It opens nothing and creates nothing.
+
+    ``feed_factory`` is injected so the tests can prove both halves -- that planning reaches no
+    socket, and that `--live` DOES reach one. Without the second, a `main` that opened nothing
+    under any flag would look correct.
+    """
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(prog="pips capture")
+    parser.add_argument("data_root", nargs="?", default=None, help="defaults to $PIPS_DATA_ROOT")
+    parser.add_argument("--symbols", required=True, help="comma-separated Breeze stock codes")
+    parser.add_argument("--now", default=None, help="ISO instant WITH a timezone; defaults to now")
+    parser.add_argument("--calendar", default="config/calendars/nse_equity.yaml")
+    parser.add_argument("--live", action="store_true", help="open the socket and capture")
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+
+    symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    if not symbols:
+        print(
+            "capture: no symbols. An empty subscription records an empty archive and reports "
+            "success, which cannot be told from a session whose feed was dead.",
+            file=sys.stderr,
+        )
+        return 2
+
+    root = (
+        Path(args.data_root)
+        if args.data_root
+        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
+    )
+    calendar = load_calendar(Path(args.calendar))
+    # A naive `--now` is refused by `plan_capture` and NOT repaired here: attaching a zone of
+    # this module's choosing is exactly the guess that makes a UTC container capture the wrong
+    # six hours.
+    now = datetime.fromisoformat(args.now) if args.now else datetime.now(UTC)
+    decision = plan_capture(calendar, now)
+
+    opens = decision.opens_at.strftime("%H:%M") if decision.opens_at else "—"
+    closes = decision.closes_at.strftime("%H:%M") if decision.closes_at else "—"
+    print(f"capture: {len(symbols)} symbol(s): {', '.join(symbols)}")
+    print(f"  session {opens}-{closes} {calendar.timezone} — {decision.reason}")
+    print(f"  would write under {root}")
+    if decision.late_by_seconds:
+        print(f"  starting {decision.late_by_seconds}s late; the missed open is recorded as a GAP")
+    if not decision.holidays_verified:
+        print("  NOTE: the holiday list is unverified, so a shut exchange and a dead feed")
+        print("        produce the same empty file. See `[C-M4-07]`.")
+
+    if not decision.should_run:
+        # Before the socket, and before `--live` is even consulted: authorising a subscription
+        # is not authorising one at any hour.
+        print("  nothing to capture now — planned only, nothing opened.")
+        return 0
+    if not args.live:
+        print("  planned only, nothing opened. Re-run with --live to subscribe.")
+        return 0
+
+    factory = feed_factory or _breeze_feeds
+    writer = CaptureWriter(root=root, session_id=f"{decision.opens_at:%Y%m%d}-capture")
+    report = run_session(
+        calendar=calendar,
+        now=now,
+        feeds=factory(symbols),
+        writer=writer,
+        symbols=symbols,
+    )
+    print(f"  {report.reason}: {report.capture.messages if report.capture else 0} message(s)")
+    return 0
+
+
+def _breeze_feeds(symbols: list[str]) -> Iterable[StoppableFeed]:
+    """The real thing: successive connections to Breeze, one per reconnect.
+
+    Imported lazily and built here rather than at module scope, so importing this module never
+    reaches the vendor SDK or the credentials it reads.
+    """
+    from breeze_connect import BreezeConnect
+
+    from pips.data.breeze.client import build_session
+    from pips.data.breeze.feed import BreezeFeed
+
+    del symbols  # each feed subscribes them itself, via `run_capture`
+    while True:
+        session: BreezeConnect = build_session()
+        yield BreezeFeed(session)

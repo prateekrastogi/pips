@@ -22,6 +22,7 @@ commands:
   certify-smoke [fixtures]   how far the factory is from certifying (§6 M20)
   backfill --symbols ...     Breeze historical campaign (§6 M4; runs on arb-vm)
   qc [data_root]             quality-check bronze, quarantine failures (§6 M5)
+  capture --symbols A,B      PLAN forward capture; --live to subscribe (§6 M4)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -82,6 +83,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.data.qc.runner import main as qc_main
 
         return qc_main(rest)
+    if command == "capture":
+        from pips.data.breeze.capture_session import main as capture_main
+
+        return capture_main(rest)
     if command == "fixtures" and rest[:1] == ["generate"]:
         from pips.fixtures.generate import main as fixtures_main
 

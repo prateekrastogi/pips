@@ -809,7 +809,10 @@ human.
   by construction `[C-M4-06]`; **forward WS capture from day one** `[C-M4-04]`, started and stopped on the
   exchange's own clock rather than the container's `[C-M4-07]`, writing the open it missed into
   the stream when it starts late and nothing when it does not `[C-M4-08]`, and stopping at the
-  bell without leaving a timer behind `[C-M4-09]`
+  bell without leaving a timer behind `[C-M4-09]`. `pips capture` `[C-M4-11]` is the entry
+  point, and it PLANS by default — a bare invocation names what it would subscribe, over which
+  window, writing where, and opens nothing; `--live` is what opens a socket, and even then not
+  outside a session
   (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log), reaching the
   vendor's callback-driven socket through the adapter at `[C-M4-05]`, which refuses a
   subscription the SDK only appeared to accept. *Verify:* recorded-cassette tests; no live
