@@ -771,6 +771,18 @@
   tests:
     - "tests/unit/test_deploy_guard.py"
     - "tests/unit/test_secrets_and_data_locality.py"
+  # THE GUARD'S OWN COVERAGE IS NOW CHECKED. "No Dockerfile copies .env" is parametrized over
+  # `docker/*.Dockerfile`, and a glob that matches nothing yields zero cases, a green suite and
+  # no guard -- the only globbed parametrize in the suite, and it sits on a security property.
+  # The realistic failure is not that every Dockerfile vanishes: it is that ONE is renamed
+  # (`Dockerfile.reader`, a move a directory down) and quietly stops being checked while the
+  # others keep the suite green. Demonstrated rather than argued -- renaming
+  # `reader.Dockerfile`, the image that takes `env_file: [.env]`, left the old guard green with
+  # two cases. The population is now pinned independently of the glob: anything under `docker/`
+  # that builds an image, by name or by a leading FROM, must be covered.
+  #
+  # The same file already made this argument for `.gitignore` and `.dockerignore` -- "the guard
+  # silently cannot run where it matters" -- and had not applied it to its own globbed case.
   status: enforced
   owner_milestone: M3.5
   # Both halves now hold. "Secrets never baked into an image" is tested; "immutable SHA-tagged

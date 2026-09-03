@@ -57,6 +57,44 @@ def test_dockerignore_still_excludes_env() -> None:
     assert "!.env.example" in lines
 
 
+def _build_files() -> list[Path]:
+    """Every file under `docker/` that builds an image, however it is spelled."""
+    return sorted(
+        path
+        for path in (ROOT / "docker").iterdir()
+        if path.is_file()
+        and (
+            "ockerfile" in path.name
+            or path.read_text(encoding="utf-8", errors="ignore").lstrip().startswith("FROM ")
+        )
+    )
+
+
+def test_the_env_guard_actually_covers_every_dockerfile() -> None:
+    """The guard below is parametrized over a GLOB, and a glob that matches nothing yields
+    zero test cases, a green suite, and no guard at all.
+
+    This file already makes that argument for `.gitignore` and `.dockerignore` -- "this file
+    must be in the docker build context, or the guard silently cannot run where it matters" --
+    and did not make it for its one globbed case. The realistic failure is not that every
+    Dockerfile disappears; it is that ONE is renamed (`reader.dockerfile`,
+    `Dockerfile.reader`, moved a directory down) and quietly stops being checked while the
+    other two keep the suite green. A token baked into that one image is exactly the risk
+    ADR-0011 did not accept.
+
+    So the population is pinned independently of the glob: anything under `docker/` that
+    builds an image must be a case below.
+    """
+    covered = {p.name for p in (ROOT / "docker").glob("*.Dockerfile")}
+    build_files = {p.name for p in _build_files()}
+
+    assert build_files, "no image build files found under docker/ — the guard covers nothing"
+    assert build_files == covered, (
+        f"{sorted(build_files - covered)} build an image and are not covered by the .env "
+        "guard: the guard globs '*.Dockerfile', so a rename drops coverage silently"
+    )
+
+
 @pytest.mark.parametrize(
     "dockerfile", sorted(p.name for p in (ROOT / "docker").glob("*.Dockerfile"))
 )
