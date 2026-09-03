@@ -65,11 +65,19 @@ def effective_rank(returns: np.ndarray) -> float:
     correlation = np.corrcoef(varying, rowvar=False)
     eigenvalues = np.linalg.eigvalsh(correlation)
     # Numerical noise can push a near-zero eigenvalue slightly negative; clip rather than let
-    # it flip the sign of a sum.
+    # it flip the sign of a sum. NOT reproducible on this platform -- 300 near-collinear
+    # correlation matrices produced a minimum eigenvalue of exactly 0.0 -- so a mutation of
+    # this line survives. Kept anyway, and the distinction from the guards this project has
+    # deleted is deliberate: those were provably unreachable, this is merely un-triggered here,
+    # and LAPACK's behaviour is not a property of our arithmetic.
     eigenvalues = np.clip(eigenvalues, 0.0, None)
 
     total = float(eigenvalues.sum())
     squared = float((eigenvalues**2).sum())
+    # Provably unreachable, unlike the clip above: a correlation matrix has a unit diagonal, so
+    # its trace -- and therefore the eigenvalue sum -- is the number of columns, which is at
+    # least 2 here. A positive sum of non-negative values has a positive sum of squares. Kept as
+    # the divisor's own precondition rather than as a claim about the data.
     if squared <= 0:
         return 1.0
     return total * total / squared
