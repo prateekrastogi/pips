@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from pips.core.authority import (
     AuthorityRecord,
@@ -193,3 +194,35 @@ def test_an_unfiled_gate_needs_no_evidence_kind() -> None:
         evidence_kind=None,
     )
     assert rec.caveats() == []
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_cleared_gate_must_say_what_the_response_was() -> None:
+    """A date, an evidence path and a status, with no record of what was actually granted.
+
+    The other three requirements were each tested; this one — the only field that carries the
+    *content* of the permission — was not. A gate cleared with `response_summary` blank says
+    somebody answered on a date and points at a file, and leaves the one question a reader has
+    unanswered: what were we told we may do? `[G-AUTH-0]` is the gate on live capital, and the
+    scope of the permission is the whole substance of it.
+    """
+    for blank in (None, ""):
+        with pytest.raises(ValidationError, match="response_summary"):
+            record(response_summary=blank)
+
+
+def test_a_blocked_gate_reports_no_caveats() -> None:
+    """Caveats qualify a permission. Without one there is nothing to qualify.
+
+    `caveats` exists to keep the weakness of a *cleared* gate visible at the point of use — so
+    on a gate that permits nothing, returning "the evidence is only a verbal attestation" reads
+    as *cleared, with a note*, which is the permissive direction to be wrong in. The blocking
+    reason is what a blocked gate has to say, and it says it separately.
+    """
+    denied = record(status="DENIED", evidence_kind="VERBAL_ATTESTATION")
+
+    assert denied.live_trading_permitted() is False
+    assert denied.caveats() == [], "a refusal is not a caveated permission"
+    assert denied.blocking_reason() is not None
