@@ -33,6 +33,7 @@ from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry
 from pips.search.trials import (
+    NO_BROKER,
     TrialContext,
     file_snapshot_root,
     fixture_snapshot_root,
@@ -605,7 +606,7 @@ def run_s1_search(
             universe_id=universe_id,
             session_mask="ALL",
             capital_tier="2L",
-            broker="NONE",
+            broker=NO_BROKER,
         ),
         returns_for=returns_for,
         returns_dir=returns_dir,

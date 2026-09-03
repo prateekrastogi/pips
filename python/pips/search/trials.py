@@ -36,7 +36,7 @@ import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from pips.core.config import config_hash
 from pips.data.pit.store import MerkleTree
@@ -54,6 +54,19 @@ __all__ = [
     "fixture_snapshot_root",
     "record_halving_trials",
 ]
+
+
+NO_BROKER: Final = "NONE"
+"""What `broker` says when a stage has no broker context at all.
+
+S1 screens before any cost model is applied -- its `cost_model` is 64 zeros -- so no broker's
+schedule has touched the numbers and naming one would be a claim the run cannot support. Every
+alpha spec declares `brokers: ["FLATTRADE"]`, so this is deliberately NOT a declared broker.
+
+Named here rather than written at the call site because a bare `"NONE"` in a registry column is
+exactly what a mistyped broker id looks like: both join to nothing. A named sentinel is a claim
+a reader can check, and a test holds it distinct from every declared broker.
+"""
 
 
 @dataclass(frozen=True)

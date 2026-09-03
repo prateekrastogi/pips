@@ -87,7 +87,16 @@ COST_MODEL = "0" * 64
 """Placeholder cost model for the fixture run. Named once so the RunRecords and the report that
 summarises them cannot disagree about which one was used."""
 BROKER = "FLATTRADE"
+"""The only broker any alpha spec declares (`cost_context.brokers`). A test binds the two."""
 CAPITAL_TIER = "2L"
+"""The tier these runs record -- ONE of the three every spec declares (`2L`, `5L`, `10L`).
+
+The other two are not run, and that is a coverage gap rather than a decision: `must_clear` says
+a candidate must clear costs net of the statutory and high-cost lines, and evidence gathered at
+a single tier cannot answer that for the other two. Recorded here so the gap is visible at the
+constant; a test holds this value inside the declared set, which catches a typo but cannot
+manufacture the missing runs.
+"""
 
 PROMOTED_STAGE = "S4"
 _PROMOTED_RANK = 5
