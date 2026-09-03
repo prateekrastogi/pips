@@ -133,3 +133,66 @@ def test_an_unknown_base_ref_fails_loudly(
     # vacuous environment — it must go red rather than skip.
     assert main(["origin/does-not-exist", str(tmp_path)]) == 1
     assert "unknown base ref" in capsys.readouterr().out.lower()
+
+
+# --------------------------------------------------------- found by auditing the gate ---
+
+
+def test_being_on_the_base_branch_is_announced_as_a_vacuum_not_a_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`[G-TDD-01]` cannot run when HEAD *is* the base, and must not print OK.
+
+    `main..HEAD` is empty on `main`, so there is no commit range and the check inspects
+    nothing — yet it reported `tdd-check OK`, which is what a reader takes as *test-first was
+    verified*. That is the NOT_RUN-reads-as-PASS failure this project keeps finding, sitting in
+    the gate for the constitution's central rule.
+
+    The module already draws this distinction for the other vacuum: with no `.git` it says
+    *"this run proves nothing"* rather than going green. The same reasoning, applied to the
+    same shape of hole.
+    """
+
+    def run(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    (tmp_path / "python" / "pips").mkdir(parents=True)
+    (tmp_path / "python" / "pips" / "thing.py").write_text("x = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "production code with no test")
+
+    assert main(["main", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "OK" not in out, out
+    assert "NOT RUN" in out
+    assert "verified nothing" in out
+
+
+def test_a_branch_with_no_commits_yet_is_a_genuine_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other side of the distinction, and why it is not simply 'refuse when empty'.
+
+    A freshly-cut `m/...` branch with nothing on it has genuinely nothing to check, and saying
+    so is a pass. What is not a pass is standing on the base itself, where the range can never
+    be non-empty however much work is done.
+    """
+
+    def run(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    (tmp_path / "README.md").write_text("base\n")
+    run("add", "-A")
+    run("commit", "-qm", "base commit")
+    run("checkout", "-q", "-b", "m/12-something")
+
+    assert main(["main", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "OK" in out
+    assert "NOT RUN" not in out

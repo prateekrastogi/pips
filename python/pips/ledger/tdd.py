@@ -130,6 +130,26 @@ def git_commits(root: Path, base: str = "main") -> list[Commit]:
     return commits
 
 
+def _head_is(root: Path, base: str) -> bool:
+    """Whether the checked-out BRANCH is the base, so the range can never be non-empty.
+
+    By name, not by commit. A freshly cut `m/<id>-<slug>` points at the same commit as its base
+    and has genuinely nothing to check *yet*; standing on the base has nothing to check *ever*.
+    The shas are identical in both cases and only the name tells them apart.
+    """
+    try:
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return bool(branch) and branch == base.removeprefix("origin/")
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: ``pips tdd check [base] [root]``."""
     args = list(argv if argv is not None else sys.argv[1:])
@@ -151,6 +171,20 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if not commits:
+        # TWO DIFFERENT EMPTIES. A freshly-cut branch with nothing on it genuinely has nothing
+        # to check, and saying so is a pass. Standing on the BASE itself is not: `main..HEAD`
+        # can never be non-empty there however much work lands, so the gate is structurally
+        # incapable of running and "OK" is what a reader takes as "test-first was verified".
+        #
+        # Same reasoning as the missing-.git branch above -- announce the vacuum rather than
+        # report a green gate. It stays exit 0 because whether to work on branches is a
+        # workflow decision, not this check's to force; the log is where it says so.
+        if _head_is(root, base):
+            print(f"tdd-check NOT RUN: HEAD is {base}, the base itself, so the range is empty.")
+            print("  [G-TDD-01] verified nothing about these commits. Work on m/<id>-<slug>")
+            print("  for the gate to have an opinion; the red output in the session log is")
+            print("  the only evidence of test-first for anything committed this way.")
+            return 0
         print(f"tdd-check OK: no commits ahead of {base}")
         return 0
 
