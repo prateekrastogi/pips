@@ -246,3 +246,42 @@ def test_the_caller_may_not_supply_the_strategy_id() -> None:
 
     with pytest.raises(ValueError, match=re.escape("identity.strategy_id")):
         call(FakeS5((candidate("A01"),)), evidence_for=evidence)
+
+
+def test_clustering_that_never_ran_says_so_rather_than_reporting_no_cluster() -> None:
+    """Two different claims, and only one of them is evidence.
+
+    *"Correlation clustering was not run"* and *"this candidate was in no reported cluster"*
+    read alike and mean opposite things: the first says the comparison never happened, the
+    second says it happened and found this candidate standing alone. §12.2 asks for the cluster
+    by name precisely so a reader can tell what the candidate was compared against, and an
+    unrun check reading as a completed one is the failure this project keeps finding — a
+    NOT_RUN that reads as a PASS.
+
+    The neighbouring branch already refuses to borrow a nearby cluster for the same reason;
+    this is that argument applied one step earlier.
+    """
+    never_clustered = call(FakeS5((candidate("A01"),), clusters=()))
+    recorded = never_clustered.nominees[0].dossier.sections["decision"]["correlation_cluster"]
+
+    assert "not run" in recorded, recorded
+    assert "no reported cluster" not in recorded, (
+        "an empty cluster list means the comparison did not happen, not that it happened and "
+        "came back empty"
+    )
+
+
+def test_a_nominee_carries_the_portfolio_ir_it_was_searched_with() -> None:
+    """The bundle is signed over both IRs, and only the alpha one is required to be non-empty.
+
+    So a dropped `portfolio_ir` signs cleanly and certifies a strategy whose portfolio
+    construction is simply absent — the plant would load it and act on the alpha alone. Nothing
+    downstream can notice, because an empty portfolio IR is a legitimate shape for a strategy
+    that genuinely has none.
+    """
+    result = call(FakeS5((candidate("A01"),)))
+
+    assert result.nominees[0].portfolio_ir == PORTFOLIO, (
+        "the nominee must carry what the search gave it, not an empty tuple"
+    )
+    assert result.nominees[0].alpha_ir == ALPHA
