@@ -1442,3 +1442,44 @@
   status: building
   owner_milestone: M4
 
+- id: C-M4-08
+  title: "A capture session records the open it missed, and never the one it did not"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/capture_session.py"
+  tests:
+    - "tests/unit/test_capture_session.py"
+  # THE JOIN, and it exists because the halves were each correct and unconnected. `[C-M4-07]`
+  # computes how late a start was; `[C-M4-04]` knows how to write a hole into the stream.
+  # Nothing called both, so `late_by_seconds` was computed and discarded -- the decision knew
+  # the archive was missing 09:15-11:00 and the archive did not. A number that nothing records
+  # is the same defect as a check that nothing runs.
+  #
+  # TWO PROPERTIES THAT PULL AGAINST EACH OTHER, the same pair the supervisor balances between
+  # feeds. A LATE start must leave a mark: an archive whose first tick is at 11:00, with
+  # nothing to say the hour before is missing rather than silent, reports a quiet open that
+  # never happened. An ON-TIME start must not: a zero-length outage at the head of every clean
+  # session fills the archive with holes that did not occur, and a reader who learns to skip
+  # gap records has lost the one signal they carry.
+  #
+  # The gap is written BEFORE the first message, so the archive reads open -> hole -> tick. An
+  # account that explains the missing hour after the fact is one nobody reads in order.
+  #
+  # A CLOSED MARKET IS DECLINED BEFORE THE SOCKET, not after. Subscribing on a holiday spends a
+  # live subscription to produce an empty file, and an empty file cannot be told from a session
+  # whose feed was dead -- so nothing is subscribed, nothing is closed, and no file is created.
+  #
+  # The supervisor's own report is carried through rather than re-derived: two accounts of one
+  # session can disagree, and the supervisor's is the one with the messages in front of it.
+  #
+  # DELIBERATELY ABSENT: STOPPING AT THE CLOSE. The supervisor blocks inside `feed.messages()`,
+  # so a deadline must arrive from outside the loop -- a timer thread or a signal -- and that
+  # mechanism has its own failure modes and deserves its own unit. Starting is decided here;
+  # stopping is not. Said plainly because a half-built deadline looks exactly like a whole one,
+  # and the failure mode is a socket held open past the close.
+  #
+  # `building`: nothing calls it. It is the last composable piece of forward capture -- what
+  # remains is the deadline, and a service to run it under an authorisation that does not yet
+  # exist. `reader.Dockerfile` stays the stub for the reason `[C-M4-07]` records.
+  status: building
+  owner_milestone: M4
+
