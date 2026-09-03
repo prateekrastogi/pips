@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Finding",
+    "QcVerdicts",
     "Severity",
     "check_bar_sanity",
     "check_calendar_gaps",
@@ -63,6 +64,33 @@ class Severity(StrEnum):
     INFO = "INFO"
     WARN = "WARN"
     QUARANTINE = "QUARANTINE"
+
+
+@dataclass(frozen=True)
+class QcVerdicts:
+    """What a QC pass looked at, and what it rejected -- the seam promotion consults.
+
+    Two sets, not one. A record in neither is not clean: it is UNEXAMINED, and the difference
+    is the whole reason this type exists. An empty ``quarantined`` set means "QC found nothing
+    wrong with what it examined", which is only a clean bill for the keys in ``examined``.
+
+    Keys are ``"SYMBOL:YYYY-MM-DD"``, the same shape the backfill manifest uses, because a
+    verdict that misses its record silently reports every record as unchecked -- and a
+    suspiciously clean count is the last number anyone questions.
+    """
+
+    examined: frozenset[str] | set[str]
+    quarantined: frozenset[str] | set[str]
+
+    def verdict_for(self, key: str) -> str:
+        """``"QUARANTINED"``, ``"PASSED"``, or ``"UNEXAMINED"`` -- never a bare boolean.
+
+        A boolean would have to fold "QC rejected this" and "QC never saw this" into one false,
+        or "passed" and "unexamined" into one true. Both foldings are the defect.
+        """
+        if key in self.quarantined:
+            return "QUARANTINED"
+        return "PASSED" if key in self.examined else "UNEXAMINED"
 
 
 @dataclass(frozen=True)

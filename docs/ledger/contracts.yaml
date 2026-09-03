@@ -1146,12 +1146,25 @@
   # action on the day cleared any jump -- a 1:2 split sitting beside a 90% collapse waved the
   # collapse through.
   #
-  # `building`, not enforced, and now for ONE reason rather than two. The prose/code
-  # disagreement is resolved: the spec was right to promise calendar gaps and the check now
-  # exists, so nothing here overpromises. What remains is that nothing makes QC a precondition
-  # of anything -- see `[C-QC-02]` -- so bars still reach the panel with QC never having run.
-  # Enforced when promotion depends on it.
-  status: building
+  # PROMOTION NOW CONSULTS THE VERDICT, which was the last blocker. `QcVerdicts` carries TWO
+  # sets -- examined and quarantined -- because a record in neither is not clean, it is
+  # UNEXAMINED, and folding those together is the defect: an empty quarantine directory and a
+  # QC pass that never ran are the same evidence. `verdict_for` returns one of three strings
+  # rather than a boolean for the same reason; a boolean has to fold "QC rejected this" into
+  # "QC never saw this", or "passed" into "unexamined".
+  #
+  # Promotion still runs only the checks needing nothing beyond the record (bar sanity, label
+  # order). The rest need the backfill manifest, the previous session and the corporate-action
+  # master, and quarantining on a guess would be worse than not checking -- what promotion
+  # could not do before was find out whether QC had run AT ALL.
+  #
+  # `qc=None` promotes everything and counts every record in `promoted_without_qc`: usable
+  # without the evidence, never silent without it. `require_qc_coverage()` is the hard refusal
+  # for anything on the path to real capital, modelled on `require_verified_holidays` and for
+  # the same reason -- research on fixtures needs the first, the panel needs the last.
+  #
+  # `enforced`: QC is now a precondition of promotion, and a promotion that skipped it says so.
+  status: enforced
   owner_milestone: M5
 
 - id: C-QC-02

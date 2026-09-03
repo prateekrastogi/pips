@@ -113,9 +113,9 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 282 source files · 2303 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 283 source files · 2313 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
-  (planned=8 building=33 enforced=28)
+  (planned=8 building=32 enforced=29)
   provenance: running on the host, not in a pips image
   tdd-check NOT RUN: HEAD is main, the base itself, so the range is empty
 ```
@@ -255,10 +255,13 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    are unverified until then: what a real tick payload holds, and whether a real drop shows up
    as `sio.connected` going false. The same nothing-runs-it problem applies to QC below.
 
-5. **QC is not wired into anything.** `[C-QC-01]`/`[C-QC-02]` now exist and both say why they
-   are `building`: `promote_bronze` does not consult QC, `make ci` does not run it, and no
-   compose service or Jenkins stage invokes it — the only entry point is a human typing
-   `make qc`, so **bars reach the panel with QC never having run**. Making promotion depend on
+5. **QC now gates promotion; nothing yet RUNS QC.** `[C-QC-01]` is `enforced`:
+   `promote_bronze` consults `QcVerdicts` and refuses a record QC quarantined, counts every
+   record promoted with no verdict behind it, and offers `require_qc_coverage()` as the hard
+   refusal for anything on the path to real capital. Bars can no longer reach the panel with QC
+   silently never having run — but they can still reach it with QC *loudly* never having run,
+   because `make ci` does not invoke QC and no compose service or Jenkins stage does either.
+   The only entry point is still a human typing `make qc`. Making promotion depend on
    it is a pipeline change. **RESOLVED, and this entry had it backwards.** It read
    the prose/code difference as the spec overpromising "calendar gaps", to be fixed by
    correcting the prose. The prose was right. The ratio floor takes ONE SESSION'S BARS, and

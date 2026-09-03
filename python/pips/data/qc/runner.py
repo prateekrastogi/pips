@@ -31,6 +31,7 @@ from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_c
 from pips.data.pit.explain import JumpExplainer, jump_explainer
 from pips.data.qc.checks import (
     Finding,
+    QcVerdicts,
     Severity,
     check_bar_sanity,
     check_calendar_gaps,
@@ -78,6 +79,17 @@ class QcReport:
     # was examined and found whole, because that indistinguishability is exactly how the
     # missing check went unnoticed for a milestone.
     calendar_days_examined: int = 0
+    # THE KEYS, not just the counts. `checked: int` cannot tell promotion WHICH records were
+    # examined, and promotion has to know per record -- a count would let it assume the two
+    # sets line up and promote an unchecked record as though QC had cleared it.
+    examined_keys: set[str] = field(default_factory=set)
+    quarantined_keys: set[str] = field(default_factory=set)
+
+    def verdicts(self) -> QcVerdicts:
+        """The seam `promote_bronze` consults. See :class:`QcVerdicts`."""
+        return QcVerdicts(
+            examined=frozenset(self.examined_keys), quarantined=frozenset(self.quarantined_keys)
+        )
 
     def describe(self) -> str:
         calendar = (
@@ -254,6 +266,7 @@ def run_qc(
         symbol, day = request["symbol"], date.fromisoformat(request["trade_date"])
         key = f"{symbol}:{day.isoformat()}"
         seen_days.setdefault(symbol, set()).add(day)
+        report.examined_keys.add(key)
         report.checked += 1
 
         payload = record["payload"]
@@ -319,6 +332,7 @@ def run_qc(
             report.findings.extend(findings)
             if any(f.severity is Severity.QUARANTINE for f in findings):
                 report.quarantined += 1
+                report.quarantined_keys.add(key)
                 _quarantine(quarantine_root, path, record, findings)
 
     if calendar is not None:

@@ -32,7 +32,12 @@ from typing import TYPE_CHECKING, Any
 import polars as pl
 
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
-from pips.data.qc.checks import Severity, check_bar_sanity, check_monotonic_labels
+from pips.data.qc.checks import (
+    QcVerdicts,
+    Severity,
+    check_bar_sanity,
+    check_monotonic_labels,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -64,6 +69,36 @@ class PromotionReport:
     bars_written: int
     rows: list[dict[str, Any]] = field(default_factory=list)
     quarantined: list[Quarantined] = field(default_factory=list)
+    refused_by_qc: int = 0
+    # COVERAGE OF THE QC GATE, counted rather than assumed. An empty quarantine and a QC pass
+    # that never ran are the same evidence, so promotion has to say how many records it
+    # promoted with no verdict behind them -- "0 quarantined" over a record nobody checked is
+    # not a clean bill, it is no bill at all.
+    promoted_without_qc: int = 0
+
+    def describe(self) -> str:
+        return (
+            f"promotion: read {self.files_read} file(s), promoted {self.files_promoted}, "
+            f"{self.bars_written} bar(s); {len(self.quarantined)} quarantined "
+            f"({self.refused_by_qc} by QC); {self.promoted_without_qc} promoted without QC"
+        )
+
+    def require_qc_coverage(self) -> None:
+        """Refuse a panel built on records QC never examined.
+
+        Follows :meth:`~pips.core.calendar.ExchangeCalendar.require_verified_holidays`, and for
+        the same reason: the archive stays usable without the evidence, so research on fixtures
+        works, and anything on the path to real capital has to ASK. A count alone would leave
+        the decision to whoever remembered to read it.
+        """
+        if self.promoted_without_qc:
+            raise RuntimeError(
+                f"{self.promoted_without_qc} record(s) were promoted to silver with no QC "
+                f"verdict behind them, out of {self.files_promoted} promoted. QC was not run "
+                f"over them, which is not the same as QC finding nothing -- run `make qc` and "
+                f"pass its verdicts to `promote_bronze`, or accept an unchecked panel "
+                f"deliberately by not calling this."
+            )
 
 
 def _row(bar: Any, symbol: str, isin: str, received_at_ns: int) -> dict[str, Any]:
@@ -89,11 +124,23 @@ def promote_bronze(
     master: InstrumentMaster,
     *,
     known_on: date,
+    qc: QcVerdicts | None = None,
 ) -> PromotionReport:
-    """Turn every bronze capture under ``bronze_root`` into silver bars."""
+    """Turn every bronze capture under ``bronze_root`` into silver bars.
+
+    ``qc`` carries what a QC pass examined and what it rejected (:class:`QcVerdicts`). It is
+    OPTIONAL and defaults to None, which promotes everything and counts every record as
+    unchecked -- the old behaviour, kept usable but never quiet. `None` is not "QC passed".
+
+    Promotion still runs the checks it can run itself, below. Those are the ones needing
+    nothing beyond the record; QC's remaining checks need the backfill manifest, the previous
+    session and the corporate-action master, and quarantining on a guess would be worse than
+    not checking. What promotion could not do before was find out whether QC had run at all.
+    """
     rows: list[dict[str, Any]] = []
     quarantined: list[Quarantined] = []
     files_read = files_promoted = 0
+    refused_by_qc = promoted_without_qc = 0
 
     # Sorted, so a rebuild produces the same file in the same order (rule 1).
     for path in sorted(bronze_root.rglob("*.json")):
@@ -120,6 +167,22 @@ def promote_bronze(
                     "may be a different capture shape, or half-written.",
                 )
             )
+            continue
+
+        # BEFORE any work on the record: a verdict QC already reached is not re-litigated here,
+        # and re-normalizing a record QC rejected only risks promoting it on a disagreement.
+        key = f"{vendor_code}:{trade_date.isoformat()}"
+        verdict = qc.verdict_for(key) if qc else "UNEXAMINED"
+        if verdict == "QUARANTINED":
+            quarantined.append(
+                Quarantined(
+                    str(path),
+                    f"QC quarantined this record ({key}). Promotion declines it rather than "
+                    "re-deriving the verdict: QC sees the backfill manifest, the previous "
+                    "session and the corporate-action master, and promotion sees none of them.",
+                )
+            )
+            refused_by_qc += 1
             continue
 
         kind = classify_response(payload)
@@ -200,6 +263,11 @@ def promote_bronze(
             continue
         rows.extend(_row(bar, instrument.symbol, instrument.isin, received) for bar in bars)
         files_promoted += 1
+        if verdict == "UNEXAMINED":
+            # Counted HERE rather than at the top, so the number means "promoted with no
+            # verdict" and not "seen with no verdict". A record QC never examined and promotion
+            # then quarantined for its own reasons is not an unchecked bar in the panel.
+            promoted_without_qc += 1
 
     rows.sort(key=lambda r: (r["close_ts_ns"], r["symbol"]))
     silver_root.mkdir(parents=True, exist_ok=True)
@@ -212,4 +280,6 @@ def promote_bronze(
         bars_written=len(rows),
         rows=rows,
         quarantined=quarantined,
+        refused_by_qc=refused_by_qc,
+        promoted_without_qc=promoted_without_qc,
     )
