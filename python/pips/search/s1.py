@@ -32,7 +32,12 @@ from pips.search.grid import assert_within_domain, bars_per_unit, grid_from_doma
 from pips.search.halving import successive_halving
 from pips.search.multiplicity import multiplicity
 from pips.search.registry import Registry
-from pips.search.trials import TrialContext, fixture_snapshot_root, record_halving_trials
+from pips.search.trials import (
+    TrialContext,
+    file_snapshot_root,
+    fixture_snapshot_root,
+    record_halving_trials,
+)
 from pips.validation.fdr import benjamini_hochberg
 from pips.validation.nulls import rank_ic, shuffled_future_control
 
@@ -490,6 +495,9 @@ def run_s1_search(
     registry: Registry,
     returns_dir: Path,
     spec_path: Path = _SPEC,
+    silver: Path | None = None,
+    lockbox: SealedLockbox | None = None,
+    stage: str | None = None,
 ) -> dict[str, object]:
     """Run successive halving over A01 variants on the fixtures and RECORD every look.
 
@@ -499,7 +507,28 @@ def run_s1_search(
     bracket beside the winner's raw score and never the raw score alone.
     """
     spec = load_alpha_spec(spec_path)
-    panel = load_panel(fixtures)
+    # Real promoted bars when `silver` is given, generated fixtures otherwise -- the same shape
+    # `run_family_searches` already uses for S5, so the funnel's first stage is not the only one
+    # that cannot read the archive.
+    #
+    # Imported HERE rather than at module scope: `silver_panel` imports `_check_lockbox` from
+    # this module, so a top-level import would close a cycle. The check is shared rather than
+    # copied for the reason stated there, and that is worth a local import.
+    if silver is not None:
+        from pips.search.silver_panel import load_silver_panel
+
+        panel = load_silver_panel(silver, lockbox=lockbox, stage=stage)
+        data_snapshot = f"silver@{silver.name}"
+        snapshot_root = file_snapshot_root(silver)
+        # NOT "FIXTURES". Every field below travels into the trial ledger, and a real-bar run
+        # recorded under a fixture universe is rule 4's ledger describing a different
+        # experiment -- reproducing it would reproduce something else while looking exact.
+        universe_id = "SILVER"
+    else:
+        panel = load_panel(fixtures, lockbox=lockbox, stage=stage)
+        data_snapshot = f"fixtures@{fixtures.name}"
+        snapshot_root = fixture_snapshot_root(fixtures)
+        universe_id = "FIXTURES"
     stamps = sorted(set(panel["close_ts_ns"].to_list()))
     closes = {
         s: dict(
@@ -568,12 +597,12 @@ def run_s1_search(
             stage="S1",
             stage_rank=1,
             family="A01",
-            data_snapshot=f"fixtures@{fixtures.name}",
-            snapshot_root=fixture_snapshot_root(fixtures),
+            data_snapshot=data_snapshot,
+            snapshot_root=snapshot_root,
             cost_model="0" * 64,
             fill_tier="F1",
             git_sha="0" * 40,
-            universe_id="FIXTURES",
+            universe_id=universe_id,
             session_mask="ALL",
             capital_tier="2L",
             broker="NONE",
@@ -584,6 +613,10 @@ def run_s1_search(
 
     counts = multiplicity(registry)
     return {
+        # What was READ, on the report and not only in the ledger: a run whose report cannot
+        # say which bars produced it is one nobody can check against the record.
+        "data_snapshot": data_snapshot,
+        "snapshot_root": snapshot_root,
         "candidates": len(candidates),
         "rounds": len(result.rounds),
         "trials_viewed": result.trials_viewed,
@@ -603,15 +636,18 @@ def run_s1_search(
 
 
 def search_main(argv: list[str] | None = None) -> int:
-    """``pips s1-search <fixtures> <registry.db> <returns-dir>`` — run and record a search."""
+    """``pips s1-search <fixtures> <registry.db> <returns-dir> [silver.parquet]``."""
     args = list(argv if argv is not None else sys.argv[1:])
     fixtures = Path(args[0]) if args else Path("fixtures")
     db = Path(args[1]) if len(args) > 1 else Path("build/s1-search/registry.db")
     returns = Path(args[2]) if len(args) > 2 else db.parent / "returns"
+    silver = Path(args[3]) if len(args) > 3 else None
     db.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        report = run_s1_search(fixtures=fixtures, registry=Registry(db), returns_dir=returns)
+        report = run_s1_search(
+            fixtures=fixtures, registry=Registry(db), returns_dir=returns, silver=silver
+        )
     except (FileNotFoundError, ValueError) as exc:
         print(f"s1-search FAILED: {exc}")
         return 1
@@ -620,11 +656,30 @@ def search_main(argv: list[str] | None = None) -> int:
     for key, value in report.items():
         if not key.startswith("_"):
             print(f"  {key}: {value}")
-    print(
-        "\n  WHAT THIS IS NOT: an edge. The fixtures are two synthetic symbols from a seeded\n"
-        "  random walk, so the winner's rank IC is noise — and a search over noise returns a\n"
-        "  flattering winner every time. That is the point: the multiplicity bracket above is\n"
-        "  computed from trials this run actually recorded, so §3.6's deflation is operating on\n"
-        "  a real ledger for the first time rather than on an empty one."
-    )
+    # The disclaimer describes THE FIXTURES. Printing it beside a run over promoted bars would
+    # be a false statement about the data, standing right next to the result -- the same class
+    # of error as a snapshot root pointing at bytes the run never read, except aimed at a
+    # person, who is likelier to act on it than a ledger is.
+    if silver is None:
+        print(
+            "\n  WHAT THIS IS NOT: an edge. The fixtures are two synthetic symbols from a"
+            " seeded\n"
+            "  random walk, so the winner's rank IC is noise — and a search over noise returns"
+            " a\n"
+            "  flattering winner every time. That is the point: the multiplicity bracket above"
+            " is\n"
+            "  computed from trials this run actually recorded, so §3.6's deflation is"
+            " operating on\n"
+            "  a real ledger for the first time rather than on an empty one."
+        )
+    else:
+        print(
+            f"\n  READ FROM SILVER: {silver}. These are promoted bars, not a seeded random"
+            " walk,\n"
+            "  so the winner's score is a measurement rather than an artefact of noise — and"
+            " the\n"
+            "  multiplicity bracket above still applies to it, because the number of looks is"
+            " what\n"
+            "  §3.6 deflates and that does not depend on where the bars came from."
+        )
     return 0

@@ -61,10 +61,10 @@
   # and now the instrument master on top of it (ISIN-keyed, symbol/token histories, ambiguity
   # refused rather than guessed).
   # The ZONE half is not — bronze exists (breeze/backfill.py), quarantine exists (qc
-  # `[C-QC-02]`) and bronze->silver now promotes (`[C-SILVER-01]`), but nothing promotes silver
-  # to gold, and the promotion that does exist does not consult QC. Marking this enforced would
-  # claim a promotion path that is neither complete nor checked; the row goes to enforced when
-  # it is both.
+  # `[C-QC-02]`) and bronze->silver now promotes (`[C-SILVER-01]`) AND consults QC
+  # (`[C-QC-01]`) -- that second clause was stale, and is the half of this blocker that is now
+  # done. What remains is that nothing promotes silver to gold. Marking this enforced would
+  # claim a promotion path that is not complete; the row goes to enforced when it is.
   status: building
   owner_milestone: M6
 
@@ -1101,8 +1101,29 @@
   # every as-of knowledge window there is. A bar we cannot date gets the same answer as a bar
   # we cannot name.
   #
-  # `building`: nothing reads silver yet. The search still runs on generated fixtures, and one
-  # symbol over three days is not a panel a cross-sectional alpha can rank.
+  # BOTH SEARCH STAGES CAN NOW READ IT. `run_family_searches` (S5) has taken a `silver` path
+  # for a while; `run_s1_search` could not, so the FIRST stage of the funnel was fixture-only
+  # and `load_silver_panel` was unreachable from it. Both now take `silver`, `lockbox` and
+  # `stage`, and both route the read through the one loader that consults the seal.
+  #
+  # WHAT THE LEDGER SAYS THE RUN WAS OVER is the part that had to change with it. S1 recorded
+  # `snapshot_root=fixture_snapshot_root(fixtures)`, `data_snapshot="fixtures@..."` and
+  # `universe_id="FIXTURES"` UNCONDITIONALLY, so a real-bar run would have stamped every trial
+  # with the root of data it never touched -- `[C-DATA-02]`'s pin at the wrong bytes, and rule
+  # 4's ledger describing a different experiment. Rule 4 counts every look and the count only
+  # means something if the rows say what was looked AT; two populations of trials that must
+  # never be pooled would have shared one label. All three now follow the data, and the tests
+  # assert them against the REGISTRY rather than the returned report, because the ledger is
+  # where the claim persists.
+  #
+  # The printed report follows too: the "two synthetic symbols from a seeded random walk"
+  # disclaimer is true of a fixture run and FALSE beside promoted bars, and a false statement
+  # about the data standing next to the result is the same error as a wrong snapshot root --
+  # aimed at a person, who is likelier to act on it than a ledger is.
+  #
+  # `building`: nothing reads silver in ANGER yet, because there is barely any -- one symbol
+  # over three days is not a panel a cross-sectional alpha can rank. The door is open and the
+  # archive behind it is empty until the seed runs.
 
 - id: C-QC-01
   title: "Seeded corrupt bronze is caught: OHLC sanity, label order, coverage, spike, decimal shift, CA cross-check"
