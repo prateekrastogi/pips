@@ -32,10 +32,21 @@ SUPPORTED_INTERVALS: Final = ("1second", "1minute", "5minute", "30minute", "1day
 _INTERVAL_SECONDS: Final = {"1second": 1, "1minute": 60, "5minute": 300, "30minute": 1800}
 
 CANDLES_PER_CALL: Final = 1000
-"""``config/breeze.yaml``\'s ``fetch.candles_per_call``, still ``verified: false``.
+"""The vendor's per-call ceiling, and it truncates rather than erroring at it.
 
-A blueprint planning figure. Every cost below scales inversely with it, so it is named here
-rather than inlined -- when the M3 probe measures it, one constant moves.
+MEASURED 2026-09-03, one authorised call: asked for three days of 1-minute bars from 09:15 and
+got exactly 1,000 candles beginning at 11:07 the same morning -- 1,125 requested, and the OLDEST
+125 simply absent, under Status 200 with no Error. The same failure shape as the UTC window
+`ist_window` exists for: missing bars rather than a failure.
+
+Three years of DAILY bars came back whole in one call (742 candles), which is what makes a
+universe seed one call per symbol.
+
+**Defined once, here, and imported by `backfill`.** It was defined in both, at the same value,
+which is a drift waiting to happen: this module splits ranges so no reply can reach the cap and
+that one refuses a reply that does. Move one and the planner builds chunks the fetcher rejects,
+or -- worse -- chunks that truncate and the fetcher accepts, which is silent. The probe measured
+this number once, so one definition carries it.
 """
 
 

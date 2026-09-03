@@ -6,18 +6,24 @@ toll is paid whatever the interval, so three years of DAILY bars costs 782 calls
 returns one candle for each. The vendor allows <=1,000 candles over an arbitrary range, which
 makes the same three years **one call**. That gap is the entire cost of a universe seed.
 
-**Unverified against the live API, deliberately and on the record.** `ist_window` exists because
-SAL-0002 found that Breeze reads these timestamps as IST and *silently clips* a UTC window rather
-than erroring — the mistake shows up as missing bars, not as a failure. A multi-day window has
-never been tried, so it may clip too, or cap below 1,000 candles. These tests fix the SHAPE of
-the request and the accounting around it; only a live probe can confirm the vendor honours it,
-and the manifest is what makes that probe cheap to repeat.
+**Measured against the live API on 2026-09-03**, under a one-call-per-symbol authorisation.
+`ist_window` exists because SAL-0002 found that Breeze reads these timestamps as IST and
+*silently clips* a UTC window rather than erroring — the mistake shows up as missing bars, not
+as a failure — so a multi-day window might have clipped the same way. It does not: three years
+of daily bars came back whole, 742 candles in one call.
+
+The probe found a different limit instead, and the same shape of failure. A reply is capped at
+1,000 candles and the OLDEST bars are dropped to fit, under Status 200 with no Error. So a range
+is SPLIT before it is fetched (`chunk_range`), a reply that still arrives at the cap is refused
+rather than stored, and an interval whose single session exceeds a call is refused before
+anything is spent. The manifest is what makes a 391-call seed resumable.
 """
 
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -29,6 +35,7 @@ from pips.data.breeze.backfill import (
     run_range_backfill,
 )
 from pips.data.breeze.budget import DailyBudgetExceededError
+from pips.data.breeze.campaign import RangeTooFineError
 from pips.data.breeze.probe import ist_range
 
 START, END = date(2023, 9, 1), date(2026, 8, 31)
@@ -112,21 +119,25 @@ def test_a_finished_range_costs_no_calls_on_a_rerun(tmp_path: Path) -> None:
 
 
 def test_a_different_interval_or_range_is_a_different_key(tmp_path: Path) -> None:
-    """Otherwise a daily seed would mark a 1-second seed done, and the archive would hold
-    neither while the manifest claimed both."""
+    """Otherwise a daily seed would mark a 30-minute seed done, and the archive would hold
+    neither while the manifest claimed both.
+
+    The second interval was `1second` until chunking made it an invalid input to this function
+    (22,500 candles a session fits no range of whole days -- see the refusal test below). The
+    property under test is that the interval is part of the key, which `30minute` shows exactly
+    as well; a SHORT range keeps every run to one chunk so the call count still reads as one
+    call per distinct key.
+    """
     fetcher = FakeRangeFetcher()
-    args = (["RELIND"], START, END)
-    run_range_backfill(*args, "1day", fetcher, tmp_path / "bronze", tmp_path / "m.json")
-    run_range_backfill(*args, "1second", fetcher, tmp_path / "bronze", tmp_path / "m.json")
+    bronze, manifest = tmp_path / "bronze", tmp_path / "m.json"
+    short_start, short_end = date(2026, 8, 28), date(2026, 8, 31)
+
+    run_range_backfill(["RELIND"], short_start, short_end, "1day", fetcher, bronze, manifest)
+    run_range_backfill(["RELIND"], short_start, short_end, "30minute", fetcher, bronze, manifest)
     run_range_backfill(
-        ["RELIND"],
-        START,
-        date(2026, 8, 30),
-        "1day",
-        fetcher,
-        tmp_path / "bronze",
-        tmp_path / "m.json",
+        ["RELIND"], short_start, date(2026, 8, 30), "1day", fetcher, bronze, manifest
     )
+
     assert len(fetcher.calls) == 3
     assert len(Manifest.load(tmp_path / "m.json").outcomes) == 3
 
@@ -312,3 +323,138 @@ def test_a_reply_below_the_cap_is_a_complete_range(tmp_path: Path) -> None:
 
     assert result.fetched == 1
     assert Manifest.load(tmp_path / "m.json").is_done_range("RELIND", "1day", START, END)
+
+
+def test_a_range_too_long_for_one_call_is_split_and_covered_exactly(tmp_path: Path) -> None:
+    """The wiring, and the whole reason for it: 1-minute over three years used to be refused on
+    the first call, and now costs 391 chunks per symbol instead of 782 symbol-days.
+
+    Coverage is asserted, not the count alone. A chunker that dropped a chunk would still
+    return a plausible number of calls, and the missing days would be days the manifest marked
+    complete.
+    """
+    fetcher = FakeRangeFetcher()
+    run_range_backfill(
+        ["RELIND"], START, END, "1minute", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+    )
+
+    windows = [(s, e) for _symbol, s, e in fetcher.calls]
+    assert len(windows) == 391
+    assert windows[0][0] == START
+    assert windows[-1][1] == END
+    for (_, previous_end), (next_start, _) in pairwise(windows):
+        assert next_start == previous_end + timedelta(days=1)
+
+
+def test_a_range_that_fits_one_call_still_costs_exactly_one(tmp_path: Path) -> None:
+    """Three years of daily bars is 782 weekdays and one call -- what the probe measured.
+    Chunking must not split what already fits, or the daily seed doubles in price."""
+    fetcher = FakeRangeFetcher()
+    run_range_backfill(
+        SYMBOLS, START, END, "1day", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+    )
+
+    assert fetcher.calls == [(symbol, START, END) for symbol in SYMBOLS]
+
+
+def test_a_run_that_stops_mid_range_resumes_at_the_chunk_it_reached(tmp_path: Path) -> None:
+    """The granular resume chunking buys, and the reason it matters at this scale.
+
+    A three-year 1-minute seed is 391 calls per symbol. Before chunking a resume meant redoing
+    the whole range -- and since the whole range could not be fetched at all, there was nothing
+    to resume. Now a run that dies on call 200 costs 200 calls, not 391, and a rerun re-fetches
+    only what has no answer yet.
+    """
+    bronze, manifest = tmp_path / "bronze", tmp_path / "m.json"
+    first = FakeRangeFetcher(default=RATE)
+    run_range_backfill(["RELIND"], START, END, "1minute", first, bronze, manifest)
+
+    assert len(first.calls) == 1, "a rate-limited reply stops the run rather than grinding"
+
+    second = FakeRangeFetcher()
+    run_range_backfill(["RELIND"], START, END, "1minute", second, bronze, manifest)
+    third = FakeRangeFetcher()
+    result = run_range_backfill(["RELIND"], START, END, "1minute", third, bronze, manifest)
+
+    assert len(second.calls) == 391, "nothing was marked done, so everything is retried"
+    assert third.calls == [], "the second run finished the range"
+    assert result.skipped == 391
+
+
+def test_an_interval_with_no_ranged_shape_is_refused_and_names_the_alternative(
+    tmp_path: Path,
+) -> None:
+    """One second yields 22,500 candles a session: no arrangement of whole days fits a call.
+
+    Refused rather than attempted, because the attempt would come back at the cap and lose the
+    morning. The message names the per-symbol-day campaign, which is the shape that serves this
+    interval -- a refusal that does not say what to do instead is a dead end.
+    """
+    fetcher = FakeRangeFetcher()
+    with pytest.raises(RangeTooFineError, match="per-symbol-day"):
+        run_range_backfill(
+            ["RELIND"], START, END, "1second", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+        )
+
+    assert fetcher.calls == [], "refused before spending a call"
+
+
+def test_the_cap_is_one_constant_shared_by_the_planner_and_the_fetcher() -> None:
+    """It was defined twice, at the same value, in the two modules that must agree on it.
+
+    The planner splits ranges so no reply can reach the cap; the fetcher refuses a reply that
+    does. Two constants drift: move one and the planner builds chunks the fetcher rejects, or
+    -- worse -- chunks that truncate and the fetcher accepts, which is silent. The probe
+    measured this number once, so exactly one definition should carry it.
+    """
+    from pips.data.breeze import backfill, campaign
+
+    assert backfill.CANDLES_PER_CALL is campaign.CANDLES_PER_CALL
+
+
+def test_a_budget_stop_inside_a_range_ends_the_whole_run(tmp_path: Path) -> None:
+    """The loop is nested now -- symbols outside, chunks inside -- and a budget stop has to
+    leave both. Continuing to the next symbol would spend calls the budget has already
+    refused, one per symbol, and report them as errors rather than as a stop."""
+
+    class Exhausted(FakeRangeFetcher):
+        def __call__(self, symbol: str, start: date, end: date) -> object:
+            self.calls.append((symbol, start, end))
+            if len(self.calls) > 2:
+                raise DailyBudgetExceededError("spent")
+            return OK
+
+    fetcher = Exhausted()
+    result = run_range_backfill(
+        SYMBOLS, START, END, "1minute", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+    )
+
+    assert result.stopped_on_budget is True
+    assert len(fetcher.calls) == 3, "the refused call is the last one attempted"
+    assert {c[0] for c in fetcher.calls} == {"RELIND"}, "it did not move on to the next symbol"
+
+
+def test_each_chunk_records_the_range_it_actually_covers(tmp_path: Path) -> None:
+    """The record must state ITS window, not the one the caller asked for.
+
+    The test above cannot show this: it fetches `1day`, where the chunk and the request are the
+    same range, so a record stamped with either looks identical. Chunked, they differ -- and a
+    record claiming three years while holding four days is a provenance lie in an append-only
+    archive (rule 3). Silver would read it as a three-year payload, QC would see a coverage
+    ratio near zero for a window that was never requested, and the payload itself is the only
+    thing that could contradict it.
+    """
+    fetcher = FakeRangeFetcher()
+    run_range_backfill(
+        ["RELIND"], START, END, "1minute", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+    )
+
+    records = [
+        json.loads(path.read_text()) for path in sorted((tmp_path / "bronze").rglob("*.json"))
+    ]
+    stamped = {(r["request"]["from"], r["request"]["to"]) for r in records}
+    asked = {(s.isoformat(), e.isoformat()) for _symbol, s, e in fetcher.calls}
+
+    assert len(records) == 391
+    assert stamped == asked, "every record states the window its own call requested"
+    assert (START.isoformat(), END.isoformat()) not in stamped, "none claims the whole range"

@@ -34,11 +34,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from pips.core.atomic import atomic_write_text
 from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.budget import DailyBudgetExceededError
+from pips.data.breeze.campaign import CANDLES_PER_CALL, chunk_range
 from pips.data.breeze.ingest import ResponseKind, classify_response
 
 __all__ = [
@@ -52,19 +53,6 @@ __all__ = [
 
 Fetcher = Callable[[str, date], Any]
 RangeFetcher = Callable[[str, date, date], Any]
-
-
-CANDLES_PER_CALL: Final = 1000
-"""The vendor's per-call ceiling, and it truncates rather than erroring at it.
-
-MEASURED 2026-09-03, one authorised call: asked for three days of 1-minute bars from 09:15 and
-got exactly 1,000 candles beginning at 11:07 the same morning -- 1,125 requested, and the OLDEST
-125 simply absent, under Status 200 with no Error. The same failure shape as the UTC window
-`ist_window` exists for: missing bars rather than a failure.
-
-Three years of DAILY bars came back whole in one call (742 candles), which is what makes a
-universe seed one call per symbol.
-"""
 
 
 class RangeTruncatedError(RuntimeError):
@@ -328,16 +316,21 @@ def run_range_backfill(
     bronze_root: Path,
     manifest_path: Path,
 ) -> BackfillResult:
-    """One call per symbol covering the whole range -- the shape a universe seed needs.
+    """As few calls per symbol as the cap allows, over a range split so none can truncate.
 
-    The per-symbol-day campaign is right for 1-minute data: 375 candles fill a call, and a
-    manifest keyed per symbol-day makes a resume granular. It is wrong for anything coarser,
-    where the per-day toll is paid whatever the interval -- three years of daily bars costs 782
-    calls per symbol and returns one candle for each. The vendor allows <=1,000 candles over an
-    arbitrary range, which makes the same three years ONE call.
+    The per-symbol-day campaign pays the per-day toll whatever the interval -- three years of
+    daily bars costs 782 calls per symbol and returns one candle for each. The vendor allows
+    <=:data:`CANDLES_PER_CALL` candles over an arbitrary range, which makes the same three
+    years ONE call, and 1-minute over three years 391 rather than 782.
 
-    Resume is per symbol-range rather than per symbol-day, which is the right grain here: a
-    range IS one call, so there is nothing finer to resume to.
+    :func:`~pips.data.breeze.campaign.chunk_range` decides the split, and an interval with no
+    ranged shape at all (1-second yields 22,500 candles a session) is REFUSED before a call is
+    spent, naming the per-symbol-day campaign instead.
+
+    **Resume is per symbol-CHUNK**, which is what the split buys. A three-year 1-minute seed is
+    391 calls per symbol; before chunking there was nothing to resume, because the whole range
+    could not be fetched at all. Now a run that dies on call 200 costs 200, and a rerun
+    re-fetches only what has no answer yet.
 
     **The multi-day window was measured on 2026-09-03** under a one-call-per-symbol
     authorisation: a three-year daily request returned 742 candles in one call, so the vendor
@@ -350,47 +343,60 @@ def run_range_backfill(
     refuse_repo_paths(bronze_root, what="bronze")
     if end < start:
         raise ValueError(f"end {end} is before start {start}")
+    # Before the manifest and before any call: an interval with no ranged shape is refused
+    # rather than attempted, because the attempt would come back at the cap and lose the
+    # morning. The chunks do not depend on the symbol, so they are computed once.
+    chunks = chunk_range(start, end, interval)
     manifest = Manifest.load(manifest_path)
 
     attempted = fetched = empty = errored = skipped = 0
     stopped_budget = stopped_rate = False
 
     for symbol in symbols:
-        if manifest.is_done_range(symbol, interval, start, end):
-            skipped += 1
-            continue
-        try:
-            payload = fetcher(symbol, start, end)
-        except DailyBudgetExceededError:
-            stopped_budget = True
-            break
+        for chunk_start, chunk_end in chunks:
+            if manifest.is_done_range(symbol, interval, chunk_start, chunk_end):
+                skipped += 1
+                continue
+            try:
+                payload = fetcher(symbol, chunk_start, chunk_end)
+            except DailyBudgetExceededError:
+                stopped_budget = True
+                break
 
-        attempted += 1
-        kind = classify_response(payload)
-        # `kind is OK` is equivalent in practice -- a rate-limited or errored reply carries
-        # `Success: None`, so the row count is never at the cap -- and is kept because a row
-        # count only means anything on a reply that carried rows.
-        if kind is ResponseKind.OK and _at_the_cap(payload):
-            raise RangeTruncatedError(
-                f"{symbol} {interval} {start}..{end} returned exactly {CANDLES_PER_CALL} "
-                "candles, which is the vendor's cap -- the oldest bars in the window are "
-                "probably missing, and the reply says Status 200 with no Error. Narrow the "
-                "range for this interval; retrying it will truncate identically."
-            )
-        decision = _decide(kind)
-        if decision is _Decision.STOP:
-            stopped_rate = True
-            break
-        if decision is _Decision.RETRY:
-            errored += 1
-            continue
+            attempted += 1
+            kind = classify_response(payload)
+            # `kind is OK` is equivalent in practice -- a rate-limited or errored reply carries
+            # `Success: None`, so the row count is never at the cap -- and is kept because a
+            # row count only means anything on a reply that carried rows.
+            if kind is ResponseKind.OK and _at_the_cap(payload):
+                raise RangeTruncatedError(
+                    f"{symbol} {interval} {chunk_start}..{chunk_end} returned exactly "
+                    f"{CANDLES_PER_CALL} candles, the vendor's cap, so the oldest bars in the "
+                    "window are probably missing -- under Status 200 with no Error. This range "
+                    "was CHUNKED to stay below the cap, so reaching it means the split is "
+                    "wrong, not the request: the session length or the cap itself has moved "
+                    "from what `chunk_range` assumes. Retrying will truncate identically."
+                )
+            decision = _decide(kind)
+            if decision is _Decision.STOP:
+                stopped_rate = True
+                break
+            if decision is _Decision.RETRY:
+                errored += 1
+                continue
 
-        _write_range_bronze(bronze_root, symbol, interval, start, end, payload)
-        if kind is ResponseKind.OK:
-            fetched += 1
-        else:
-            empty += 1
-        manifest.mark_range(symbol, interval, start, end, kind)
+            _write_range_bronze(bronze_root, symbol, interval, chunk_start, chunk_end, payload)
+            if kind is ResponseKind.OK:
+                fetched += 1
+            else:
+                empty += 1
+            manifest.mark_range(symbol, interval, chunk_start, chunk_end, kind)
+
+        if stopped_budget or stopped_rate:
+            # Both loops. Continuing to the next symbol would spend calls the budget has
+            # already refused -- one per symbol -- and report them as errors rather than as
+            # the stop they are.
+            break
 
     return BackfillResult(
         attempted=attempted,
