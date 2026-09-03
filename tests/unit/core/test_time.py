@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from datetime import UTC, datetime
+
 import pytest
 
 from pips.core.time import NS_PER_MINUTE, bar_label_ns, is_usable_at, to_ist, ts_from_iso
@@ -44,3 +47,46 @@ def test_a_bar_is_not_usable_before_its_label() -> None:
 
 def test_ist_rendering() -> None:
     assert to_ist(OPEN).strftime("%Y-%m-%d %H:%M") == "2026-06-01 09:15"
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_naive_timestamp_means_ist_on_any_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The docstring's claim — *the same string means the same instant on every machine* — is
+    the one thing this suite could not check, because the machine it runs on is in IST.
+
+    Deleting `replace(tzinfo=IST)` makes `astimezone` fall back to the **machine's** zone, and
+    on a developer's laptop in India that is the same answer. The property is real and the test
+    was accidental: it passed because of where it ran. Jenkins runs containerised, so the two
+    would disagree there and nowhere else — a failure that appears only in CI and only for
+    whoever next touches this line.
+
+    Forcing the process zone is what makes it machine-independent. Anything that reads a
+    session start out of a config string depends on this: the exchange clock is IST, and a
+    boundary read in the wrong zone shifts every bar label by hours.
+    """
+    expected = int(datetime(2026, 6, 1, 3, 45, tzinfo=UTC).timestamp()) * 1_000_000_000  # 09:15 IST
+
+    for zone in ("UTC", "America/New_York", "Asia/Kolkata"):
+        monkeypatch.setenv("TZ", zone)
+        time.tzset()
+        assert ts_from_iso("2026-06-01T09:15:00") == expected, zone
+
+    monkeypatch.delenv("TZ", raising=False)
+    time.tzset()
+
+
+def test_sub_second_precision_survives_the_parse() -> None:
+    """Nanoseconds are the unit, and nothing tested below a whole second.
+
+    `received_at_ns` and every bar label are nanosecond quantities; dropping the microsecond
+    term truncates each to its second, and scaling it wrongly is off by a thousand. Both leave
+    a plausible timestamp — ordered correctly, in the right era — which is why neither would be
+    noticed downstream.
+    """
+    base = ts_from_iso("2026-06-01T09:15:00")
+
+    assert ts_from_iso("2026-06-01T09:15:00.000001") == base + 1_000
+    assert ts_from_iso("2026-06-01T09:15:00.5") == base + 500_000_000
+    assert ts_from_iso("2026-06-01T09:15:00.999999") == base + 999_999_000
