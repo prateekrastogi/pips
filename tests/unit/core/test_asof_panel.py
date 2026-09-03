@@ -141,3 +141,38 @@ def test_the_audit_reports_every_field_touched_and_the_latest_source() -> None:
     assert audit["accessed_fields"] == ["close_paise"]
     assert audit["max_source_ts"] == 30 * NS
     assert audit["decision_ts"] == 30 * NS
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_full_day_suffix_is_refused_like_a_day_prefix() -> None:
+    """Two spellings of one rule, and only the prefix was tested.
+
+    `day_vwap` and `vwap_full_day` are the same unknowable quantity written the other way
+    round, and §3.5's ban names both. Dropping `_full_day` from the suffix table changed no
+    test, so the half of the rule that catches the more natural English column name was
+    unguarded — and a full-day aggregate read intraday is not a subtle leak, it is tomorrow's
+    answer in today's feature.
+    """
+    frame = pl.DataFrame({"ts": [10, 20], "close": [1.0, 2.0], "vwap_full_day": [5.0, 5.0]})
+    guarded = AsOfPanelView(frame=frame, decision_ts=30, ts_col="ts")
+
+    assert "vwap_full_day" not in guarded.visible().columns
+    with pytest.raises(CausalityViolationError, match="full-day"):
+        guarded.column("vwap_full_day")
+
+
+def test_a_name_that_merely_contains_a_banned_prefix_is_readable() -> None:
+    """`intraday_return` contains `day_`, and is exactly what this project computes.
+
+    The ban is on the PREFIX. Matching anywhere in the name would refuse the most ordinary
+    column in an intraday codebase — and an over-strict guard is not a safe failure here: it
+    trains people to route around the view, which is the one thing that must never become
+    habitual. `startswith` and `in` differ on precisely the names this project uses most.
+    """
+    frame = pl.DataFrame({"ts": [10, 20], "intraday_return": [0.1, 0.2], "midday_vol": [1.0, 2.0]})
+    guarded = AsOfPanelView(frame=frame, decision_ts=30, ts_col="ts")
+
+    assert set(guarded.visible().columns) == {"ts", "intraday_return", "midday_vol"}
+    assert guarded.column("intraday_return").to_list() == [0.1, 0.2]
