@@ -785,13 +785,21 @@ human.
   | per range (`run_range_backfill`, `[C-M4-02]`) | 88,200 | 0.98 |
 
   So "inside a single day's budget" holds **only for a range fetch**, which exists as of
-  2026-09-03 and whose multi-day window is **unverified against the live API** — `ist_window`
-  exists because Breeze silently CLIPS a UTC window rather than erroring. Either way the
-  budgeter is required, because a fetch interrupted at call 60,000 must resume, not restart.
+  2026-09-03 and whose multi-day window was **measured against the live API that day** under a
+  one-call-per-symbol authorisation: a three-year daily request returned 742 candles in one
+  call, so the window is honoured and the cheap seed is real. The same probe found the limit
+  that matters — the vendor caps a reply at **1,000 candles and truncates the OLDEST bars
+  silently**, under Status 200 with no Error, so a 1m range spanning more than ~2 sessions
+  returns recent data and quietly omits the start of the period it was asked for. A reply at
+  the cap is therefore refused rather than stored (`RangeTruncatedError`), which is why 1m
+  acquisition stays per-symbol-day until it chunks. Either way the budgeter is required,
+  because a fetch interrupted at call 60,000 must resume, not restart.
 
   1s only for a predeclared liquid subset; **forward WS capture from day one** `[C-M4-04]`
-  (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log). *Verify:*
-  recorded-cassette tests; no live calls in CI; backfill runbook.
+  (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log), reaching the
+  vendor's callback-driven socket through the adapter at `[C-M4-05]`, which refuses a
+  subscription the SDK only appeared to accept. *Verify:* recorded-cassette tests; no live
+  calls in CI; backfill runbook.
 - **M5 QC + quarantine** `[C-QC-01]`: OHLC sanity, calendar gaps, spike/decimal detection, CA
   cross-check, explicit stale/missing states — quarantine retaining the record together with
   its reason, and bronze never modified `[C-QC-02]`. *Verify:* seeded corrupt fixtures caught;

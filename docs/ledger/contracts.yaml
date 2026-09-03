@@ -1284,11 +1284,59 @@
   # direction that flatters the archive, and a reason from the last retry describes why the
   # outage persisted rather than what caused it.
   #
-  # `building`: NOTHING RUNS IT YET. The supervisor is tested against a fake feed; what is
-  # missing is the vendor adapter -- Breeze's SDK is callback-driven and cannot be exercised
-  # without a live socket -- and a service to run it under. "Forward capture from day one" is
-  # the milestone's phrase and day one has not started, so every session that passes is spread
-  # and depth that cannot be recovered later. Enforced when something runs it.
+  # `building`: NOTHING RUNS IT YET. The vendor adapter now exists (`[C-M4-05]`) and the two
+  # halves are tested together across a drop, but no service runs them. "Forward capture from
+  # day one" is the milestone's phrase and day one has not started, so every session that
+  # passes is spread and depth that cannot be recovered later. Enforced when something runs it.
+  status: building
+  owner_milestone: M4
+
+- id: C-M4-05
+  title: "The Breeze stream adapter refuses a subscription the vendor only appeared to accept"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/feed.py"
+  tests:
+    - "tests/unit/test_breeze_feed.py"
+  # From scratch under SAL-0025 (NONE_FOUND): no capture or stream code exists in ../past.
+  #
+  # THE SEAM. `[C-M4-04]`'s supervisor is an iterator loop because it owns the reconnect; the
+  # vendor is the other shape -- `breeze.on_ticks = fn` invoked from a socketio thread, a
+  # disconnect visible only as an attribute, nothing ever returned to a caller. This adapter is
+  # the bridge and is the only place in the tree that knows the vendor stream exists.
+  #
+  # THE FAILURE THIS PREVENTS IS AN EMPTY ARCHIVE NOBODY NOTICED. The SDK's `subscribe_feeds`
+  # wraps its entire body in `except Exception as e: return f"Exception while subscribing to
+  # feeds {e}"`, and falls off the end returning None when the socket was never connected. Both
+  # look exactly like a call that worked. Ignoring the response would leave the loop waiting on
+  # a subscription that does not exist -- no ticks, no error, a report saying the feed simply
+  # ended, and a day of spread and depth that cannot be backfilled. Every symbol is checked,
+  # not just the first: a shortlist that subscribes 499 of 500 is not a working capture.
+  #
+  # LIVENESS IS READ OUT OF THE SDK'S INTERNALS because it exposes no public equivalent:
+  # `sio_rate_refresh_handler.sio.connected` is the SDK's own disconnect test. If a vendor
+  # upgrade moves it the probe REFUSES rather than defaulting. Defaulting to connected would
+  # make every outage invisible and the archive would show a quiet market; defaulting to
+  # disconnected would invent a drop nobody had. Neither is a measurement. A handler that is
+  # None is a measurement -- `ws_disconnect` sets it -- and reads as a drop.
+  #
+  # RULE 7 AT THE CALL SITE: `get_order_notification` is passed False explicitly, because
+  # setting it makes the SDK connect the ORDER socket from a process holding data-plane
+  # credentials, which is the separation the rule exists to keep. `interval` is passed empty
+  # for the same class of reason: a non-empty interval silently switches the SDK to the OHLC
+  # candle socket, and candles are not what forward capture is for.
+  #
+  # THE STOP REASON IS THE FIRST ONE, not the last. `close()` records its own stop and the
+  # supervisor closes every feed in a `finally`, so keeping the later reason would make every
+  # report say "closed" -- an account of the tidying up rather than of what ended the capture.
+  # Same defect the gap record avoids by stamping the first drop rather than the last retry.
+  #
+  # `building`: THE WIRE IS UNVERIFIED. What a live tick actually contains, and whether a real
+  # drop shows up as `sio.connected` going false, are settled only by a live session, which is
+  # a market-data subscription not yet authorised. Message kinds are grounded in the SDK's own
+  # `parse_data` (depth arrives under a "depth" key) but an unrecognised shape is recorded as
+  # TICK rather than refused: the payload is written verbatim either way, so a mislabelling
+  # stays recoverable from the record where a refusal would discard the only evidence of what
+  # the vendor sent. Enforced after a live session confirms the payload shape.
   status: building
   owner_milestone: M4
 

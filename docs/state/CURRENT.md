@@ -111,9 +111,9 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 269 files · mypy --strict 269 files · 2192 pytest · clippy clean · cargo test ok
-  determinism bit-identical ACROSS PROCESSES · ledger-check 63 rows
-  (planned=8 building=28 enforced=27)
+  ruff clean · mypy --strict 271 source files · 2208 pytest · clippy clean · cargo test ok
+  determinism bit-identical ACROSS PROCESSES · ledger-check 64 rows
+  (planned=8 building=29 enforced=27)
   provenance: running on the host, not in a pips image
   tdd-check NOT RUN: HEAD is main, the base itself, so the range is empty
 ```
@@ -235,15 +235,21 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    dimension except the stable-core `k`, whose column holds the rule rather than numbers.
 3. **Not decided, per the owner: whether the gates FILTER rather than score.** Waits until the
    gates have real data.
-4. **Two subsystems are built and nothing runs them.** `[C-M4-04]`: the capture writer now has
-   a supervisor (`ws_capture.py`, tested against a fake feed) that records a hole on every
-   disconnect and none on a clean stop. What is still missing is the **vendor adapter** —
-   Breeze's WS SDK is callback-driven and cannot be exercised without a live socket — and a
-   service to run it under. "Forward capture from day one" is the milestone's own phrase, and
-   every session that passes is spread and depth that cannot be recovered later, which makes
-   this the one open item where delay costs something permanent. Running it is a live
-   market-data subscription and therefore the owner's to authorise. The same
-   nothing-runs-it problem applies to QC below.
+4. **Forward capture is built end to end and nothing starts it.** `[C-M4-04]` + `[C-M4-05]`:
+   the writer, the supervisor that records a hole on every disconnect and none on a clean stop,
+   and now the **vendor adapter** — the two halves tested together across a simulated drop,
+   producing a `GAP` record on disk between the ticks either side of it. Reading the SDK found
+   the failure worth guarding: `subscribe_feeds` swallows every exception and returns it as a
+   *string*, and returns `None` when the socket was never connected, so a subscription that
+   failed completely looks exactly like one that worked. That is now refused, per symbol.
+
+   **What is missing is a service that starts it at 09:15.** "Forward capture from day one" is
+   the milestone's own phrase, and every session that passes is spread and depth that cannot be
+   recovered later, which makes this the one open item where delay costs something permanent.
+   Running it is a live market-data subscription and therefore the owner's to authorise — the
+   standing authorisation covered one historical call per symbol, not a live feed. Two things
+   are unverified until then: what a real tick payload holds, and whether a real drop shows up
+   as `sio.connected` going false. The same nothing-runs-it problem applies to QC below.
 
 5. **QC is not wired into anything.** `[C-QC-01]`/`[C-QC-02]` now exist and both say why they
    are `building`: `promote_bronze` does not consult QC, `make ci` does not run it, and no
