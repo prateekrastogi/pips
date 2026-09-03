@@ -14,7 +14,11 @@ commands:
   salvage verify [past]      resolve every donor SHA in ../past (§1.2)
   authority check [record]   report GATE-0 data-use authority [G-AUTH-0]
   deploy guard <service>     may the rail restart this service now? (§2.2)
+  provenance                 does this image match the tree it claims? (§2.2)
   s1-smoke [fixtures]        run the S1 funnel end to end on fixtures (§6 M12)
+  s1-search <fx> <db> [ret] [silver]
+                             successive halving over A01, recording every look (§6 M12)
+  s5-smoke [fixtures]        search every family and run S5 across the winners (§6 M15)
   certify-smoke [fixtures]   how far the factory is from certifying (§6 M20)
   backfill --symbols ...     Breeze historical campaign (§6 M4; runs on arb-vm)
   qc [data_root]             quality-check bronze, quarantine failures (§6 M5)
