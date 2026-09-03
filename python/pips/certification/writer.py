@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pips.certification.dossier import (
+    _DIRECTIONS,
     REQUIRED_FIELDS,
     Measurement,
     build_dossier,
@@ -86,6 +87,31 @@ class MetricSource:
     path: str
     threshold: float | None = None
     direction: str | None = None
+
+    def __post_init__(self) -> None:
+        """A bar and its sense arrive together or not at all.
+
+        `Measurement` already refuses a direction it does not recognise, and says why: a silent
+        default would read every `at_most` gate as `at_least`, turning the worst PBO in the run
+        into a pass. Nothing said the same at the DECLARATION end, so a threshold with no
+        direction was constructible -- and `draft_dossier` handled it by quietly skipping the
+        Measurement, which puts the field in the dossier as a bare number and gets it rejected
+        downstream as *ungated*. A gate that silently becomes no gate is the failure this layer
+        is arranged against, so the half-declaration is refused where it is written.
+        """
+        if (self.threshold is None) != (self.direction is None):
+            raise ValueError(
+                f"{self.path}: threshold={self.threshold!r} direction={self.direction!r} -- a "
+                "bar and its sense are one declaration. A threshold alone is a bar nothing can "
+                "be held to; a direction alone holds nothing to it."
+            )
+        if self.direction is not None and self.direction not in _DIRECTIONS:
+            raise ValueError(
+                f"{self.path}: direction {self.direction!r} is not one of "
+                f"{sorted(_DIRECTIONS)}. Caught at the declaration, where the error names the "
+                "source, rather than at use, where it names a Measurement built three calls "
+                "away from the table that described it wrongly."
+            )
 
 
 METRIC_SOURCES: tuple[MetricSource, ...] = (
@@ -214,6 +240,10 @@ def draft_dossier(*, candidate: Candidate, evidence: Mapping[str, Any]) -> Dossi
         if not _usable(measured, needs_number=spec.threshold is not None):
             continue
         derived: Any = measured
+        # `and spec.direction is not None` is redundant since `MetricSource.__post_init__`
+        # refuses a half-declaration -- a threshold now implies a direction. Kept because it is
+        # what narrows `str | None` to `str` for the constructor, the same species of equivalent
+        # mutant as `or score is None` in `certify`.
         if spec.threshold is not None and spec.direction is not None:
             derived = Measurement(float(measured), spec.threshold, spec.direction)  # type: ignore[arg-type]
         elif isinstance(measured, int | float):

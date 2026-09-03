@@ -340,3 +340,46 @@ def test_a_hollow_plain_value_is_still_unsupplied(hollow: object) -> None:
     """Widening what counts as a value must not make emptiness count as one."""
     result = draft(metrics={**metrics(), "bootstrap_ci": hollow})
     assert "stability.bootstrap_ci" in result.unsupplied
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_threshold_without_a_direction_is_refused() -> None:
+    """A bar with no sense is not a declaration, and `Measurement` already refuses one.
+
+    `Measurement.__post_init__` states the cost: a silent default would read every `at_most`
+    gate as `at_least`, turning the worst PBO in the run into a pass. The declaration end had
+    no such rule, so a half-declared `MetricSource` was constructible — and `draft_dossier`
+    handled it by quietly skipping the Measurement, which lands the field in the dossier as a
+    bare number and gets it rejected downstream as *ungated*. A gate that silently becomes no
+    gate is the failure this whole layer is arranged against.
+    """
+    with pytest.raises(ValueError, match="direction"):
+        MetricSource("dsr", "economics.dsr", threshold=0.95)
+
+
+def test_a_direction_without_a_threshold_is_refused() -> None:
+    """The other half. A sense with no bar cannot hold anything to anything."""
+    with pytest.raises(ValueError, match="threshold"):
+        MetricSource("dsr", "economics.dsr", direction="at_least")
+
+
+def test_a_declared_direction_must_be_one_the_gate_understands() -> None:
+    """Same set as `Measurement`, checked at the point of declaration rather than at use.
+
+    Caught here, the error names the source; caught at use, it names a Measurement built three
+    calls away from the table that described it wrongly.
+    """
+    with pytest.raises(ValueError, match="at_least"):
+        MetricSource("dsr", "economics.dsr", threshold=0.95, direction="higher_is_better")
+
+
+def test_every_shipped_source_declares_a_bar_completely_or_not_at_all() -> None:
+    """The table itself, checked rather than assumed.
+
+    `threshold is None` means "a plain recorded value"; anything else means a gate. There is no
+    third state, and this is what stops one arriving by a typo in a tuple of twenty entries.
+    """
+    for source in METRIC_SOURCES:
+        assert (source.threshold is None) == (source.direction is None), source
