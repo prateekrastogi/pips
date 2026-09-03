@@ -22,7 +22,12 @@ from pathlib import Path
 
 import pytest
 
-from pips.data.breeze.backfill import Manifest, run_range_backfill
+from pips.data.breeze.backfill import (
+    CANDLES_PER_CALL,
+    Manifest,
+    RangeTruncatedError,
+    run_range_backfill,
+)
 from pips.data.breeze.budget import DailyBudgetExceededError
 from pips.data.breeze.probe import ist_range
 
@@ -254,3 +259,56 @@ def test_the_ranged_fetcher_stops_when_the_budget_is_spent(tmp_path: Path) -> No
     fetch = ranged_fetcher(FakeClient(), budget, interval="1day")
     with pytest.raises(DailyBudgetExceededError):
         fetch("RELIND", START, END)
+
+
+# ------------------------------------------------- found by the live probe (2026-09-03) ---
+
+
+def test_a_reply_at_the_candle_cap_is_refused_as_probably_truncated(tmp_path: Path) -> None:
+    """The vendor drops the OLDEST bars at the cap, silently, with Status 200 and no Error.
+
+    Measured, not assumed. Asked for three days of 1-minute bars from 09:15 on the 24th and got
+    exactly 1,000 candles beginning **11:07 on the 24th** — 1,125 requested, 1,000 is the
+    documented cap, and the first 125 were simply absent. `classify_response` reads that as OK
+    because it is a 200 carrying rows, so `run_range_backfill` would mark the range done and
+    record a hole at its start that no later QC can distinguish from a quiet market.
+
+    A range that genuinely contains exactly the cap is indistinguishable from one that was
+    truncated, which is why this refuses rather than guesses — and why it raises rather than
+    retrying: the same range will truncate identically next time. The fix is a narrower range,
+    which is the caller's to choose.
+    """
+    at_cap = {
+        "Status": 200,
+        "Success": [{"datetime": f"2026-08-24 {i}", "close": 1.0} for i in range(CANDLES_PER_CALL)],
+    }
+    fetcher = FakeRangeFetcher(default=at_cap)
+
+    with pytest.raises(RangeTruncatedError, match="1000"):
+        run_range_backfill(
+            ["RELIND"], START, END, "1minute", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+        )
+
+    assert list((tmp_path / "bronze").rglob("*.json")) == [], "nothing is stored"
+    assert Manifest.load(tmp_path / "m.json").outcomes == {}, "and nothing is marked done"
+
+
+def test_a_reply_below_the_cap_is_a_complete_range(tmp_path: Path) -> None:
+    """The seed shape, and the reason the cheap plan works.
+
+    Three years of DAILY bars came back as 742 candles for one call — comfortably under the cap,
+    so the range was served whole. That is the case the universe seed depends on and it must not
+    be caught by the guard above.
+    """
+    under_cap = {
+        "Status": 200,
+        "Success": [{"datetime": f"2023-09-{i:02d}", "close": 1.0} for i in range(1, 29)],
+    }
+    fetcher = FakeRangeFetcher(default=under_cap)
+
+    result = run_range_backfill(
+        ["RELIND"], START, END, "1day", fetcher, tmp_path / "bronze", tmp_path / "m.json"
+    )
+
+    assert result.fetched == 1
+    assert Manifest.load(tmp_path / "m.json").is_done_range("RELIND", "1day", START, END)

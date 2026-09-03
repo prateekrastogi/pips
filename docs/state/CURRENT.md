@@ -111,7 +111,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff 269 files · mypy --strict 269 files · 2190 pytest · clippy clean · cargo test ok
+  ruff 269 files · mypy --strict 269 files · 2192 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 63 rows
   (planned=8 building=28 enforced=27)
   provenance: running on the host, not in a pips image

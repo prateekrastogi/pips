@@ -34,17 +34,50 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pips.core.atomic import atomic_write_text
 from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.budget import DailyBudgetExceededError
 from pips.data.breeze.ingest import ResponseKind, classify_response
 
-__all__ = ["BackfillResult", "Manifest", "run_backfill", "run_range_backfill"]
+__all__ = [
+    "CANDLES_PER_CALL",
+    "BackfillResult",
+    "Manifest",
+    "RangeTruncatedError",
+    "run_backfill",
+    "run_range_backfill",
+]
 
 Fetcher = Callable[[str, date], Any]
 RangeFetcher = Callable[[str, date, date], Any]
+
+
+CANDLES_PER_CALL: Final = 1000
+"""The vendor's per-call ceiling, and it truncates rather than erroring at it.
+
+MEASURED 2026-09-03, one authorised call: asked for three days of 1-minute bars from 09:15 and
+got exactly 1,000 candles beginning at 11:07 the same morning -- 1,125 requested, and the OLDEST
+125 simply absent, under Status 200 with no Error. The same failure shape as the UTC window
+`ist_window` exists for: missing bars rather than a failure.
+
+Three years of DAILY bars came back whole in one call (742 candles), which is what makes a
+universe seed one call per symbol.
+"""
+
+
+class RangeTruncatedError(RuntimeError):
+    """A range reply sat exactly on the candle cap, so the oldest bars are probably missing.
+
+    Raised rather than retried: the same range truncates identically next time, so there is
+    nothing to retry -- the range itself is too wide for its interval and narrowing it is the
+    caller's choice. Raised rather than marked, because a truncated range recorded as done is a
+    hole at the START of the window that no later QC can tell from a quiet market.
+
+    A range that genuinely holds exactly the cap is indistinguishable from one that was cut, and
+    this refuses both rather than guessing which it has.
+    """
 
 
 class _Decision(StrEnum):
@@ -183,6 +216,12 @@ def _write_bronze(root: Path, symbol: str, day: date, payload: Any) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _at_the_cap(payload: Any) -> bool:
+    """Whether a reply carries exactly the per-call ceiling, and is therefore suspect."""
+    rows = payload.get("Success") if isinstance(payload, dict) else None
+    return isinstance(rows, list) and len(rows) >= CANDLES_PER_CALL
 
 
 def _write_range_bronze(
@@ -324,6 +363,16 @@ def run_range_backfill(
 
         attempted += 1
         kind = classify_response(payload)
+        # `kind is OK` is equivalent in practice -- a rate-limited or errored reply carries
+        # `Success: None`, so the row count is never at the cap -- and is kept because a row
+        # count only means anything on a reply that carried rows.
+        if kind is ResponseKind.OK and _at_the_cap(payload):
+            raise RangeTruncatedError(
+                f"{symbol} {interval} {start}..{end} returned exactly {CANDLES_PER_CALL} "
+                "candles, which is the vendor's cap -- the oldest bars in the window are "
+                "probably missing, and the reply says Status 200 with no Error. Narrow the "
+                "range for this interval; retrying it will truncate identically."
+            )
         decision = _decide(kind)
         if decision is _Decision.STOP:
             stopped_rate = True
