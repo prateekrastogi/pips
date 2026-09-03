@@ -113,9 +113,9 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 279 source files · 2262 pytest · clippy clean · cargo test ok
-  determinism bit-identical ACROSS PROCESSES · ledger-check 68 rows
-  (planned=8 building=33 enforced=27)
+  ruff clean · mypy --strict 280 source files · 2280 pytest · clippy clean · cargo test ok
+  determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
+  (planned=8 building=34 enforced=27)
   provenance: running on the host, not in a pips image
   tdd-check NOT RUN: HEAD is main, the base itself, so the range is empty
 ```
@@ -200,8 +200,9 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
 
    The ordering that falls out: range-fetch daily for everything (1,800 calls once the fetch
    shape exists) → rank on the three daily-derivable components → 1-second for a shortlist →
-   the full four-component score → U300 → the 1m campaign already authorised (234,600 calls,
-   2.6 quota-days).
+   the full four-component score → U300 → the 1m campaign already authorised (235,200 calls
+   per symbol-day at 2.61 quota-days, or 117,600 at 1.31 once `chunk_range` `[C-M4-10]` is
+   wired into the fetch path).
 
    **DECIDED: the shortlist is 500** `[C-M4-06]`, authorised 2026-09-03. It was a bias question
    rather than a budget one. Acquiring spread only for the volume-top-N makes the spread z

@@ -16,7 +16,15 @@ from typing import Final
 
 from pips.core.calendar import SESSION_MINUTES_DEFAULT, load_calendar
 
-__all__ = ["CANDLES_PER_CALL", "SUPPORTED_INTERVALS", "CampaignPlan", "main", "plan_campaign"]
+__all__ = [
+    "CANDLES_PER_CALL",
+    "SUPPORTED_INTERVALS",
+    "CampaignPlan",
+    "RangeTooFineError",
+    "chunk_range",
+    "main",
+    "plan_campaign",
+]
 
 SUPPORTED_INTERVALS: Final = ("1second", "1minute", "5minute", "30minute", "1day")
 """What ``get_historical_data_v2`` serves (blueprint §4.4)."""
@@ -37,6 +45,77 @@ def _candles_per_session(interval: str, session_minutes: int) -> int:
         return 1
     seconds = _INTERVAL_SECONDS[interval]
     return -(-session_minutes * 60 // seconds)
+
+
+class RangeTooFineError(ValueError):
+    """No arrangement of whole days fits one call at this interval.
+
+    Distinct from every other bad argument so a caller can tell the one recoverable case --
+    fall back to the per-symbol-day campaign -- from a typo it should surface instead.
+    """
+
+
+def chunk_range(
+    start: date,
+    end: date,
+    interval: str,
+    *,
+    session_minutes: int = SESSION_MINUTES_DEFAULT,
+    candles_per_call: int = CANDLES_PER_CALL,
+) -> list[tuple[date, date]]:
+    """Split ``start``..``end`` into ranges no single call can truncate.
+
+    The 2026-09-03 probe measured the limit: Breeze caps a reply at ``candles_per_call`` and
+    drops the OLDEST bars to fit, under Status 200 with no Error. `run_range_backfill` refuses
+    a reply that arrives at the cap; this is what keeps one from arriving.
+
+    **The count is deliberately an over-estimate.** Weekends are free, holidays are not
+    subtracted (the list is unverified -- an open M6 item), and Breeze omits untraded bars, so
+    a chunk is planned for more candles than it can return. Each of those errs toward a smaller
+    chunk, costing an extra call and never losing a bar. The opposite error is silent: a chunk
+    that reaches the cap loses the beginning of the period it asked for and reports success.
+
+    Weekdays rather than calendar days, because counting calendar days would buy about 40% more
+    calls than the data needs -- and would split three years of daily bars, which the probe
+    measured fitting in one.
+
+    Every chunk is planned STRICTLY below the cap. `run_range_backfill` refuses a reply that
+    arrives at it, there being no way to tell a full call from a clipped one, so a chunk planned
+    to land exactly on the cap is one the fetcher rejects -- a campaign priced for a seed it
+    cannot run, failing one call into a three-year backfill.
+    """
+    if end < start:
+        raise ValueError(f"end {end} is before start {start}")
+    if interval not in SUPPORTED_INTERVALS:
+        raise ValueError(f"interval {interval!r} is not one of {list(SUPPORTED_INTERVALS)}")
+
+    per_session = _candles_per_session(interval, session_minutes)
+    # `>=`, not `>`: `run_range_backfill` refuses a reply that arrives AT the cap, because a
+    # full call and a clipped one are indistinguishable. A session that exactly fills a call
+    # therefore has no fetchable range either -- one day is the smallest range there is.
+    if per_session >= candles_per_call:
+        # No arrangement of whole days fits. Chunking to one day anyway would return a reply at
+        # the cap and lose the morning -- the exact failure the refusal exists to prevent. The
+        # ranged shape does not exist at this interval; the per-symbol-day campaign serves it.
+        raise RangeTooFineError(
+            f"one session at {interval} is {per_session} candles, more than the "
+            f"{candles_per_call} a single call returns, so no range of whole days can be "
+            f"fetched without truncation -- use the per-symbol-day campaign for this interval"
+        )
+
+    chunks: list[tuple[date, date]] = []
+    chunk_start, candles, day = start, 0, start
+    while day <= end:
+        cost = per_session if day.weekday() < 5 else 0
+        if candles + cost >= candles_per_call:
+            # Close BEFORE this day: `cost <= candles_per_call` is guaranteed above, so the
+            # chunk being closed always holds at least one day and the walk cannot stall.
+            chunks.append((chunk_start, day - timedelta(days=1)))
+            chunk_start, candles = day, 0
+        candles += cost
+        day += timedelta(days=1)
+    chunks.append((chunk_start, end))
+    return chunks
 
 
 @dataclass(frozen=True)
@@ -84,6 +163,38 @@ class CampaignPlan:
         """
         total = self.candles_per_symbol_day * len(self.days)
         return len(self.symbols) * max(1, -(-total // self.candles_per_call))
+
+    @property
+    def estimated_calls_if_chunked(self) -> int | None:
+        """What a DAY-ALIGNED ranged fetch costs -- the number this code would actually spend.
+
+        Between the other two, and different from both. :attr:`estimated_calls` is the
+        per-symbol-day toll; :attr:`estimated_calls_if_ranged` is the vendor's allowance, which
+        assumes windows packed to exactly ``candles_per_call`` and therefore ending mid-session.
+        The bronze layout is keyed per day, so a chunk stops at a day boundary and wastes
+        whatever is left of the cap. For U300 over three years at 1m that gap is 88,200 against
+        117,600 -- the allowance understates the real cost by a third.
+
+        ``None`` when no arrangement of whole days fits a call (1-second yields 22,500 candles a
+        session). Not a number, because every number would be a claim that some ranged fetch is
+        possible, and quoting a price for a shape that does not exist is how this estimate went
+        wrong the first time.
+        """
+        if not self.days:
+            return 0
+        try:
+            chunks = chunk_range(
+                self.days[0],
+                self.days[-1],
+                self.interval,
+                session_minutes=self.session_minutes,
+                candles_per_call=self.candles_per_call,
+            )
+        except RangeTooFineError:
+            # Only this one. A bad interval or a backwards range is a different fact, and
+            # reporting it as "no ranged shape exists" would cost a typo its only symptom.
+            return None
+        return len(self.symbols) * len(chunks)
 
     def exceeds_budget(self, daily_budget: int) -> bool:
         return self.estimated_calls > daily_budget

@@ -339,9 +339,13 @@ def run_range_backfill(
     Resume is per symbol-range rather than per symbol-day, which is the right grain here: a
     range IS one call, so there is nothing finer to resume to.
 
-    **The multi-day window is unverified against the live API** -- see :func:`ist_range`. This
-    fixes the shape of the request and the accounting around it; only a probe can confirm the
-    vendor honours it.
+    **The multi-day window was measured on 2026-09-03** under a one-call-per-symbol
+    authorisation: a three-year daily request returned 742 candles in one call, so the vendor
+    honours the range. The same probe found the limit -- a reply is capped at
+    :data:`CANDLES_PER_CALL` and the OLDEST bars are dropped to fit, under Status 200 with no
+    Error -- which is why a reply arriving at the cap is refused here rather than stored, and
+    why anything finer than daily must be split first. :func:`~pips.data.breeze.campaign.
+    chunk_range` is what splits it.
     """
     refuse_repo_paths(bronze_root, what="bronze")
     if end < start:

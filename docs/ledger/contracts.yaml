@@ -1243,7 +1243,19 @@
   # the vendor's range allowance while the code fetched per symbol-day, once in CURRENT.md the
   # same way -- both times in prose rather than in code anyone could run. `estimated_calls` now
   # costs the per-symbol-day toll and `estimated_calls_if_ranged` states the vendor allowance,
-  # with `describe()` printing the gap whenever they differ. An unknown interval is REFUSED
+  # with `describe()` printing the gap whenever they differ.
+  #
+  # A THIRD FIGURE SITS BETWEEN THEM, and it is the one a seeding decision needs.
+  # `estimated_calls_if_chunked` is what DAY-ALIGNED ranges cost. The vendor allowance assumes
+  # calls packed to exactly 1,000 candles, which needs windows ending mid-session; the bronze
+  # layout is keyed per day, so a chunk stops at a day boundary and wastes the rest of the cap.
+  # For U300 over three years at 1m: 235,200 per symbol-day, 117,600 chunked, 88,200 as the
+  # allowance -- so the allowance understates the real cost by a third, and chunking still
+  # halves the bill. `None` rather than a number when no arrangement of whole days fits a call,
+  # because every number would be a claim that some ranged fetch is possible, and quoting a
+  # price for a shape that does not exist is how this estimate went wrong the first time.
+  #
+  # An unknown interval is REFUSED
   # rather than costed as a minute, because a typo'd `1min` would inherit the 1-minute model
   # and under-state a 1-second plan by 23x.
   #
@@ -1527,6 +1539,46 @@
   # `building`: nothing runs it. Forward capture is now complete as composable parts --
   # shortlist, subscription, supervisor, writer, clock, deadline -- and what is missing is a
   # service, which needs a live market-data authorisation that does not exist.
+  status: building
+  owner_milestone: M4
+
+- id: C-M4-10
+  title: "A range is split so no single call can be truncated, strictly below the cap"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/campaign.py"
+  tests:
+    - "tests/unit/test_range_chunking.py"
+  # The 2026-09-03 probe measured the limit: Breeze caps a reply at 1,000 candles and drops the
+  # OLDEST bars to fit, under Status 200 with no Error. `[C-M4-02]` refuses a reply that comes
+  # back at the cap, which is right and leaves the ranged shape unusable for anything finer than
+  # daily. This is what makes it usable, and it HALVES the 1m seed: 235,200 calls per
+  # symbol-day against 117,600 chunked, for U300 over three years.
+  #
+  # THE COUNT IS DELIBERATELY AN OVER-ESTIMATE. Weekends are free, holidays are not subtracted
+  # (the list is unverified -- an open M6 item), and Breeze omits untraded bars, so a chunk is
+  # planned for more candles than it can return. Each of those errs toward a SMALLER chunk,
+  # costing an extra call and never losing a bar. The opposite error is silent: a chunk that
+  # reaches the cap loses the beginning of the period it asked for and reports success.
+  #
+  # Weekdays rather than calendar days: counting calendar days buys about 40% more calls than
+  # the data needs, and would split three years of daily bars -- which the probe measured
+  # fitting in one.
+  #
+  # STRICTLY BELOW THE CAP, and that boundary is shared with `[C-M4-02]`. A reply arriving AT
+  # the cap is refused there, because a full call and a clipped one are indistinguishable -- so
+  # a chunk planned to land exactly on the cap is one the fetcher rejects. The campaign would
+  # price a seed it cannot run and fail one call into a three-year backfill. Found by a
+  # mutation, not by reading either side: each half was defensible alone.
+  #
+  # The too-fine refusal has its OWN exception type. One second yields 22,500 candles a session,
+  # so no arrangement of whole days fits and the ranged shape does not exist -- a recoverable
+  # fact, the caller falls back to the per-symbol-day campaign. Catching every `ValueError` to
+  # mean that would report a typo'd interval as a costed decision and cost the typo its only
+  # symptom.
+  #
+  # `building`: nothing calls it from the fetch path yet. `run_range_backfill` still takes a
+  # single range and refuses a truncated reply; wiring the chunker into it is the next step and
+  # is what turns the halved estimate into a halved bill.
   status: building
   owner_milestone: M4
 

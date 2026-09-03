@@ -781,8 +781,9 @@ human.
 
   | U300 × 3y at 1m | calls | quota-days at 90k |
   |---|---|---|
-  | per symbol-day (what `run_backfill` does) | 234,600 | 2.6 |
-  | per range (`run_range_backfill`, `[C-M4-02]`) | 88,200 | 0.98 |
+  | per symbol-day (what `run_backfill` does) | 235,200 | 2.61 |
+  | per day-aligned range (`chunk_range`, `[C-M4-10]`) | 117,600 | 1.31 |
+  | the vendor's allowance, candle-packed | 88,200 | 0.98 |
 
   So "inside a single day's budget" holds **only for a range fetch**, which exists as of
   2026-09-03 and whose multi-day window was **measured against the live API that day** under a
@@ -791,9 +792,17 @@ human.
   that matters — the vendor caps a reply at **1,000 candles and truncates the OLDEST bars
   silently**, under Status 200 with no Error, so a 1m range spanning more than ~2 sessions
   returns recent data and quietly omits the start of the period it was asked for. A reply at
-  the cap is therefore refused rather than stored (`RangeTruncatedError`), which is why 1m
-  acquisition stays per-symbol-day until it chunks. Either way the budgeter is required,
-  because a fetch interrupted at call 60,000 must resume, not restart.
+  the cap is therefore refused rather than stored (`RangeTruncatedError`), and `chunk_range`
+  `[C-M4-10]` is what keeps one from arriving: it splits a range so no call can reach the cap,
+  counting weekdays rather than sessions so the estimate errs toward a smaller chunk — an extra
+  call costs a call, an over-long chunk costs the start of the period.
+
+  **The third row of that table is the one a seeding decision needs.** The vendor's allowance
+  assumes calls packed to exactly 1,000 candles, which needs windows ending mid-session; the
+  bronze layout is keyed per day, so a chunk stops at a day boundary and wastes the rest of the
+  cap. The allowance understates the real chunked cost by a third — and chunking still halves
+  the per-symbol-day bill. Either way the budgeter is required, because a fetch interrupted at
+  call 60,000 must resume, not restart.
 
   1s only for a **predeclared liquid subset** — 500 names, filtered for admissibility and then
   ranked by M7's own liquidity score so the subset is a superset of every registered universe
