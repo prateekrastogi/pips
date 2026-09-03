@@ -283,3 +283,43 @@ def test_a_same_stage_sibling_is_not_a_parent(tmp_path: Path) -> None:
     value = evidence_from_registry(registry, str(promoted))["identity.parent_experiment_ids"]
     assert str(sibling) not in value
     assert str(promoted) not in value
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_the_data_version_carries_the_snapshot_root_not_just_its_name() -> None:
+    """A name labels a snapshot; the root identifies it.
+
+    `[C-DATA-02]` pins results to Merkle roots precisely so a run can be re-derived from the
+    bytes it actually read. `identity.data_version` recording only `august-panel` says which
+    snapshot somebody meant and not which one they got — and the two diverge exactly when it
+    matters, after a snapshot is rebuilt or corrected under the same name.
+    """
+    evidence = evidence_from_run(
+        {
+            "snapshot_name": "august-panel",
+            "snapshot_root": "a" * 64,
+            "cost_model": "nse_equity_intraday@v1",
+            "trials_viewed": 120,
+            "multiplicity_effective": 7.5,
+        },
+        code_version="abc1234",
+    )
+
+    assert evidence["identity.data_version"] == f"august-panel@{'a' * 64}"
+
+
+def test_the_gap_report_reads_the_same_however_it_was_assembled() -> None:
+    """Sorted, so two runs of one cycle produce a diffable report.
+
+    The output is read by a human comparing one cycle against the next, and a listing whose
+    order follows whichever nominee happened to be processed first turns "nothing changed" into
+    a diff full of moved lines. Input order is not a property of the cycle.
+    """
+    forwards = format_gap({"A01": ("x.y",), "B02": ("p.q",)}, certified=0)
+    backwards = format_gap({"B02": ("p.q",), "A01": ("x.y",)}, certified=0)
+
+    assert forwards == backwards
+    assert forwards[0] == "certify-smoke: 0 certified"
+    assert forwards[1].startswith("  A01:")
