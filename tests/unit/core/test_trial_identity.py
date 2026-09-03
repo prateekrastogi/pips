@@ -175,3 +175,45 @@ def test_the_cache_records_the_identity_beside_the_result(tmp_path: Path) -> Non
     assert entry is not None
     assert entry["identity"]["capital_tier"] == "2L"
     assert entry["trial_id"] == ident.trial_id()
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_cache_entry_is_the_same_bytes_whatever_order_it_was_built_in(tmp_path: Path) -> None:
+    """The comment beside the write says why: `make determinism` would otherwise fail on the
+    cache rather than on the maths.
+
+    A result dict assembled in a different key order is the same result, and must be the same
+    file. Without `sort_keys` the bytes follow insertion order — stable within one process and
+    not across two, which is exactly the class the determinism gate was just widened to catch
+    and which it would still miss here, because the fixture pipeline does not touch this cache.
+    """
+    cache = TrialCache(tmp_path / "cache")
+    trial = identity()
+
+    cache.put(trial, {"sharpe": 1.5, "trades": 42, "alpha": "A01"})
+    first = cache.path_for(trial.trial_id()).read_bytes()
+
+    cache.put(trial, {"alpha": "A01", "trades": 42, "sharpe": 1.5})
+    second = cache.path_for(trial.trial_id()).read_bytes()
+
+    assert first == second
+
+
+def test_cache_entries_are_sharded_by_prefix(tmp_path: Path) -> None:
+    """Operational rather than correctness, and worth saying which.
+
+    A flat directory holding one file per trial is still correct — every read finds what every
+    write put there. What it is not is workable at campaign scale: the 3y x U300 run enumerates
+    234,900 symbol-days, and search trials outnumber that. Two hex characters split them across
+    256 directories for the cost of one slice.
+    """
+    cache = TrialCache(tmp_path / "cache")
+    trial = identity()
+    trial_id = cache.put(trial, {"ok": True})
+
+    path = cache.path_for(trial_id)
+    assert path.parent.name == trial_id[:2]
+    assert path.parent.parent == tmp_path / "cache"
+    assert cache.get(trial_id) == {"ok": True}
