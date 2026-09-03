@@ -795,7 +795,9 @@ human.
   acquisition stays per-symbol-day until it chunks. Either way the budgeter is required,
   because a fetch interrupted at call 60,000 must resume, not restart.
 
-  1s only for a predeclared liquid subset; **forward WS capture from day one** `[C-M4-04]`
+  1s only for a **predeclared liquid subset** — 500 names, filtered for admissibility and then
+  ranked by M7's own liquidity score so the subset is a superset of every registered universe
+  by construction `[C-M4-06]`; **forward WS capture from day one** `[C-M4-04]`
   (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log), reaching the
   vendor's callback-driven socket through the adapter at `[C-M4-05]`, which refuses a
   subscription the SDK only appeared to accept. *Verify:* recorded-cassette tests; no live

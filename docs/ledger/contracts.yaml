@@ -1340,3 +1340,53 @@
   status: building
   owner_milestone: M4
 
+- id: C-M4-06
+  title: "The 1s capture shortlist filters for admissibility and scores only to cut to N=500"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/universe/shortlist.py"
+  tests:
+    - "tests/unit/test_capture_shortlist.py"
+  # M4's phrase is "1s only for a predeclared liquid subset". This is the subset, and the
+  # width is an INPUT because the cost is fixed: 500 symbols x 60 sessions of one-second bars
+  # is 690,000 calls, about 7.7 quota-days. That single fact decides the mechanism.
+  #
+  # FILTER AND SCORE FAIL DIFFERENTLY. A filter names every rejection and can say "I don't
+  # know" -- a symbol whose spread was never measured is excluded because it was never
+  # measured. But its output size is whatever the thresholds admit, which a fixed call budget
+  # cannot use. A score takes exactly N, and pays by turning missingness into a middling
+  # z-score and by carrying weights that, fitted on the data they select from, make the
+  # shortlist a trial to be counted (rule 4). So: filter for admissibility, score only to cut
+  # the admissible set down to N.
+  #
+  # THE SCORE IS M7'S, UNCHANGED, AND THAT IS THE LOAD-BEARING CHOICE. `[C-UNIV-01]`'s
+  # `liquidity_scores` already ranks the cross-section, and the universe is the top N of that
+  # same ordering -- so ranking the shortlist by it makes the shortlist a SUPERSET OF EVERY
+  # REGISTERED UNIVERSE BY CONSTRUCTION. That is why the number is 500 and not 300: it is the
+  # stable-core buffer applied to data rather than membership, and without the headroom every
+  # name entering U300 would arrive with no 1s history and no way to backfill one. A second,
+  # differently-weighted score would break the superset silently. Tested against the real
+  # `top_n` for every N in SUPPORTED_N, not against a restatement of the score.
+  #
+  # 500 IS DELIBERATELY NOT IN `SUPPORTED_N`. The tempting way to make `top_n(scores, 500)`
+  # work is to register it -- which would silently authorise a U500 strategy nobody
+  # pre-registered. An acquisition width decides what is RECORDED; that set decides what is
+  # TRADED, and they must not share a registry. Pinned by its own test so the shortcut is
+  # closed rather than merely unused.
+  #
+  # THE FILTER ADDS NO CRITERIA OF ITS OWN, for the same superset reason: a stricter gate here
+  # could reject a name the universe admits, and that name would be traded with nothing
+  # captured behind it. What it adds is SPEECH -- `liquidity_scores` drops an unscorable symbol
+  # silently, and a caller cannot tell "no spread measured" from "never supplied". Tolerable
+  # for a universe; not for acquisition, where a name missing from the shortlist is missing
+  # from the archive for as long as the archive runs. Each reason names the failing field, so
+  # the fix is a data question rather than a debugging session.
+  #
+  # Selected, rejected and outranked are three outcomes, kept apart: a name that ranked 501st
+  # is not a data failure, and folding them together would either make a healthy shortlist look
+  # like hundreds of broken feeds or hide real breakages among the merely outranked.
+  #
+  # `building`: nothing calls it yet. It is the symbol list `[C-M4-05]` subscribes and
+  # `plan_campaign` costs; enforced when the capture service exists to consume it.
+  status: building
+  owner_milestone: M4
+

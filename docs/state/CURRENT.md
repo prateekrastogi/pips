@@ -13,7 +13,9 @@
 ## Active item
 **Nothing is in flight. The research factory is built and every part of it verified as far as
 it can be without data; what remains needs the owner.** The four decisions are in *Next
-actions* below, and the one that gates the rest is the shortlist width for spread acquisition.
+actions* below. The shortlist width — which gated the rest — was decided on 2026-09-03: 500
+`[C-M4-06]`. What remains needing the owner is a live market-data authorisation for forward
+capture, which is the item where delay costs something that cannot be recovered.
 
 Said plainly because the alternative is inventing work: the data path (M4–M6), the universe
 policy (M7), the search funnel (M12/M15/M18), selection and turnover (M19) and certification
@@ -111,9 +113,9 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 271 source files · 2208 pytest · clippy clean · cargo test ok
-  determinism bit-identical ACROSS PROCESSES · ledger-check 64 rows
-  (planned=8 building=29 enforced=27)
+  ruff clean · mypy --strict 273 source files · 2226 pytest · clippy clean · cargo test ok
+  determinism bit-identical ACROSS PROCESSES · ledger-check 65 rows
+  (planned=8 building=30 enforced=27)
   provenance: running on the host, not in a pips image
   tdd-check NOT RUN: HEAD is main, the base itself, so the range is empty
 ```
@@ -201,17 +203,18 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    the full four-component score → U300 → the 1m campaign already authorised (234,600 calls,
    2.6 quota-days).
 
-   **What is left for the owner is the shortlist width, and it is a bias question rather than a
-   budget one.** Acquiring spread only for the volume-top-N makes the spread z cross-sectional
-   over N, not over the eligible list, so a modest-volume name with an excellent spread can
-   never surface. Spread carries the second-largest weight (−0.75), so N wants to be comfortably
-   wider than 300.
+   **DECIDED: the shortlist is 500** `[C-M4-06]`, authorised 2026-09-03. It was a bias question
+   rather than a budget one. Acquiring spread only for the volume-top-N makes the spread z
+   cross-sectional over N rather than over the eligible list, so a modest-volume name with an
+   excellent spread could never surface — and spread carries the second-largest weight
+   (−0.75). 500 also buys the property that matters more: it is the stable-core buffer applied
+   to DATA, so a name entering U300 is already being captured rather than arriving cold.
 
-   **What is actually being decided, then, is the shortlist width** — and it is a bias question,
-   not a budget one. Acquiring spread only for the volume-top-N means the spread z is
-   cross-sectional over N, not over the eligible list, so a modest-volume name with an excellent
-   spread can never surface. Spread carries the second-largest weight (−0.75), so N wants to be
-   comfortably wider than 300. That is the owner's call, and it is now a small one.
+   The mechanism is *filter for admissibility, then score to cut to N*. The filter names the
+   field behind every rejection and can say "not measured"; the score is M7's own, unchanged,
+   which makes the shortlist a superset of every registered universe by construction. 500 is
+   deliberately absent from `SUPPORTED_N`: an acquisition width decides what is recorded, never
+   what is traded.
 
    *Unverified inputs, flagged rather than buried:* `candles_per_call: 1000` is
    `verified: false` in `config/breeze.yaml` (a blueprint planning figure) — daily survives any
