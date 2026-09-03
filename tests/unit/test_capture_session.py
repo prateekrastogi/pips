@@ -28,6 +28,7 @@ CAL = load_calendar(ROOT / "config" / "calendars" / "nse_equity.yaml")
 IST = ZoneInfo("Asia/Kolkata")
 
 OPEN = datetime(2026, 9, 3, 9, 15, tzinfo=IST)  # a Thursday
+CLOSE = datetime(2026, 9, 3, 15, 30, tzinfo=IST)
 DAY = "2026-09-03"
 
 
@@ -41,15 +42,22 @@ class SpyFeed:
 
     subscribed: list[str] | None = None
     closed: bool = False
+    drops: bool = False
+    stopped_with: str | None = None
 
     def subscribe(self, symbols: list[str]) -> None:
         self.subscribed = list(symbols)
 
     def messages(self) -> Any:
         yield (MessageKind.TICK, {"ltp": 2801.0})
+        if self.drops:
+            raise ConnectionError("the socket went away")
 
     def close(self) -> None:
         self.closed = True
+
+    def stop(self, reason: str = "stopped") -> None:
+        self.stopped_with = reason
 
 
 def records(writer: CaptureWriter) -> list[dict[str, Any]]:
@@ -210,3 +218,75 @@ def test_the_decision_says_whether_the_holiday_list_was_verified(tmp_path: Path)
     )
 
     assert report.holidays_verified is False
+
+
+def test_the_supervisor_does_not_reconnect_after_the_close(tmp_path: Path) -> None:
+    """A drop at 15:29:59 must not be answered with a fresh subscription at 15:30:01.
+
+    The deadline timer stops a feed the supervisor is already holding; it cannot stop one that
+    has not been handed over yet. Without the session applying the deadline to the ITERATION,
+    a disconnect near the bell reconnects into a shut market, and the archive carries a
+    subscription made after the last trade.
+    """
+    started = CLOSE - timedelta(seconds=1)
+    writer = CaptureWriter(root=tmp_path, session_id="s1", day=DAY)
+    dropped, replacement = SpyFeed(drops=True), SpyFeed()
+    # Time crosses the close during the drop. The tail repeats rather than running out, so the
+    # test pins WHEN the deadline bites rather than how many times the clock happens to be read.
+    ticks = [ns(started), ns(started), ns(started), ns(CLOSE + timedelta(seconds=1))]
+
+    def clock() -> int:
+        return ticks.pop(0) if len(ticks) > 1 else ticks[0]
+
+    report = run_session(
+        calendar=CAL,
+        now=started,
+        feeds=[dropped, replacement],
+        writer=writer,
+        symbols=["RELIND"],
+        clock=clock,
+        sleep=lambda _s: None,
+    )
+
+    assert report.ran is True
+    assert dropped.subscribed == ["RELIND"]
+    assert replacement.subscribed is None, "reconnected into a market that had closed"
+    assert report.capture is not None
+    assert report.capture.reconnects == 0
+
+
+def test_a_feed_is_armed_to_stop_itself_at_the_close(tmp_path: Path) -> None:
+    """The session applies the deadline rather than merely knowing the closing time.
+
+    `plan_capture` returns `closes_at`; using it is a separate act, and a session that computed
+    the close and never armed anything would hold the socket open all night while every report
+    it produced still named the right closing time.
+    """
+    writer = CaptureWriter(root=tmp_path, session_id="s1", day=DAY)
+    feed = SpyFeed()
+    armed: list[float] = []
+
+    run_session(
+        calendar=CAL,
+        now=OPEN,
+        feeds=[feed],
+        writer=writer,
+        symbols=["RELIND"],
+        clock=lambda: ns(OPEN),
+        sleep=lambda _s: None,
+        timer=lambda delay, callback: _RecordingTimer(armed, delay, callback),
+    )
+
+    assert armed == [6.25 * 3600], "armed for the seconds between the open and the close"
+
+
+@dataclass
+class _RecordingTimer:
+    armed: list[float]
+    delay: float
+    callback: Any
+
+    def __post_init__(self) -> None:
+        self.armed.append(self.delay)
+
+    def cancel(self) -> None: ...

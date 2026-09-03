@@ -799,7 +799,8 @@ human.
   ranked by M7's own liquidity score so the subset is a superset of every registered universe
   by construction `[C-M4-06]`; **forward WS capture from day one** `[C-M4-04]`, started and stopped on the
   exchange's own clock rather than the container's `[C-M4-07]`, writing the open it missed into
-  the stream when it starts late and nothing when it does not `[C-M4-08]`
+  the stream when it starts late and nothing when it does not `[C-M4-08]`, and stopping at the
+  bell without leaving a timer behind `[C-M4-09]`
   (ticks/quotes/depth → bronze with receive timestamps, reconnect + gap log), reaching the
   vendor's callback-driven socket through the adapter at `[C-M4-05]`, which refuses a
   subscription the SDK only appeared to accept. *Verify:* recorded-cassette tests; no live

@@ -1478,8 +1478,55 @@
   # and the failure mode is a socket held open past the close.
   #
   # `building`: nothing calls it. It is the last composable piece of forward capture -- what
-  # remains is the deadline, and a service to run it under an authorisation that does not yet
-  # exist. `reader.Dockerfile` stays the stub for the reason `[C-M4-07]` records.
+  # remains is a service to run it under an authorisation that does not yet exist.
+  # `reader.Dockerfile` stays the stub for the reason `[C-M4-07]` records. The close deadline
+  # it once lacked is `[C-M4-09]`.
+  status: building
+  owner_milestone: M4
+
+- id: C-M4-09
+  title: "Capture stops at the close, per feed, and leaves no timer behind"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/breeze/deadline.py"
+  tests:
+    - "tests/unit/test_capture_deadline.py"
+    - "tests/unit/test_capture_session.py"
+  # `[C-M4-04]`'s supervisor BLOCKS inside `feed.messages()`, so nothing inside the loop can
+  # notice 15:30 arriving. The deadline must come from outside it, which makes this a timer --
+  # and a timer has two failure modes that stay invisible until the day they matter.
+  #
+  # THE SUPERVISOR ROTATES FEEDS. `run_capture` iterates over successive connections, one per
+  # reconnect, so a timer armed once on the first feed stops a connection a disconnect already
+  # replaced. A capture that dropped at 10:00 would then run until the process was killed. The
+  # deadline is armed PER FEED.
+  #
+  # A TIMER NEVER CANCELLED OUTLIVES ITS FEED. Ten reconnects leave ten threads waiting to stop
+  # feeds that are already closed, and `threading.Timer` is non-daemon by default -- the
+  # interpreter will not exit while one is pending, so the service would capture the day
+  # correctly and then refuse to stop. Cancelled on every exit path, including the supervisor
+  # abandoning the iterator mid-stream (which is why this is a GENERATOR: `close()` runs the
+  # `finally`). Daemonised as well, for the cancel that never runs because something above it
+  # died -- the loop covers what it controls, the flag covers what it does not.
+  #
+  # NO FEED IS HANDED OUT ONCE THE CLOSE HAS PASSED. A drop at 15:29:59 must not be answered
+  # with a subscription at 15:30:01: the timer can stop a feed the supervisor is already
+  # holding, never one it has not been given. The boundary is `>=`, the SAME one `[C-M4-07]`
+  # uses to decline to start -- two places decide whether the session is over and they are one
+  # character apart from disagreeing about a drop landing on the bell.
+  #
+  # THE CLOCK IS READ ONCE per feed, for the decision and the delay together. Two reads would
+  # let the close fall between them and arm a negative delay, and clamping that to zero would
+  # be defending against a race the loop need not have. The session likewise derives the
+  # deadline's wall clock from the SAME nanosecond clock the writer stamps with: a second clock
+  # is a second account of one instant, and the day they disagree is the day capture stops at
+  # the wrong time while every timestamp it wrote still looks right.
+  #
+  # It wraps the ITERATION, never the feed. A wrapper object would have to reimplement the
+  # protocol, and the supervisor would be talking to it instead of to the vendor.
+  #
+  # `building`: nothing runs it. Forward capture is now complete as composable parts --
+  # shortlist, subscription, supervisor, writer, clock, deadline -- and what is missing is a
+  # service, which needs a live market-data authorisation that does not exist.
   status: building
   owner_milestone: M4
 

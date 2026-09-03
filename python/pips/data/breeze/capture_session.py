@@ -28,18 +28,20 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pips.data.breeze.capture_plan import plan_capture
+from pips.data.breeze.deadline import arm_timer, until_close
 from pips.data.breeze.ws_capture import run_capture
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
-    from datetime import datetime
 
     from pips.core.calendar import ExchangeCalendar
     from pips.data.breeze.capture import CaptureWriter
-    from pips.data.breeze.ws_capture import CaptureReport, Feed
+    from pips.data.breeze.deadline import Cancellable, StoppableFeed
+    from pips.data.breeze.ws_capture import CaptureReport
 
 __all__ = ["SessionReport", "run_session"]
 
@@ -69,11 +71,12 @@ def run_session(
     *,
     calendar: ExchangeCalendar,
     now: datetime,
-    feeds: Iterable[Feed],
+    feeds: Iterable[StoppableFeed],
     writer: CaptureWriter,
     symbols: list[str],
     clock: Callable[[], int] = time.time_ns,
     sleep: Callable[[float], None] = time.sleep,
+    timer: Callable[[float, Callable[[], None]], Cancellable] = arm_timer,
     **capture_kwargs: Any,
 ) -> SessionReport:
     """Capture ``symbols`` for the session containing ``now``, or explain why not.
@@ -112,8 +115,26 @@ def run_session(
             f"{decision.opens_at:%H:%M} and nothing was recorded until then",
         )
 
+    # `closes_at` is not None for the same reason `opens_at` is not: `should_run` is only true
+    # once the window is known. Refused rather than asserted -- see the branch above.
+    if decision.closes_at is None:
+        raise RuntimeError("the session is open but its closing instant is unknown")
+
     capture = run_capture(
-        feeds=feeds, writer=writer, symbols=symbols, clock=clock, sleep=sleep, **capture_kwargs
+        feeds=until_close(
+            feeds,
+            closes_at=decision.closes_at,
+            # ONE clock, not two. A wall clock beside the nanosecond clock is two accounts of
+            # the same instant, and the day they disagree is the day capture stops at the wrong
+            # time while every timestamp it wrote still looks right.
+            clock=lambda: datetime.fromtimestamp(clock() / 1_000_000_000, tz=UTC),
+            timer=timer,
+        ),
+        writer=writer,
+        symbols=symbols,
+        clock=clock,
+        sleep=sleep,
+        **capture_kwargs,
     )
     return SessionReport(
         ran=True,
