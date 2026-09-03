@@ -174,8 +174,16 @@ def _correlation_gate(
         )
 
     for candidate in survivors:
+        # No default. `measured` holds every pair among `survivors` and `kept` is a subset of
+        # them, so a missing entry is a broken invariant rather than an uncorrelated pair --
+        # and the default it used to carry was 0.0, which reads an UNMEASURED pair as a
+        # DIVERSE one and admits it. That is this project's recurring failure shape (a
+        # NOT_RUN reading as a PASS) sitting in a gate, unreachable today and permissive the
+        # moment it is not.
         against = [
-            measured.get((candidate.id, other.id), measured.get((other.id, candidate.id), 0.0))
+            measured[(candidate.id, other.id)]
+            if (candidate.id, other.id) in measured
+            else measured[(other.id, candidate.id)]
             for other in kept
         ]
         if any(value > limit for value in against):

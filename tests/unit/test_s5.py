@@ -24,6 +24,7 @@ from decimal import Decimal
 import pytest
 
 from pips.search.s5 import S5Result, TurnoverInputs, run_s5
+from pips.selection.cluster import correlation_distance
 from pips.selection.netting import BlotterOrder
 from pips.selection.order_budget import NSE_RETAIL_BUDGET
 from pips.selection.pareto import Candidate, Direction, Objective
@@ -417,3 +418,28 @@ def test_a_passing_pair_is_reported_below_the_limit() -> None:
     result = run(series={"a": BASE, "b": OTHER})
     assert all(v <= 0.5 for v in result.pairwise_correlations.values())
     assert len(result.ensemble) == 2
+
+
+# --------------------------------------------------------- found by mutation sweep ---
+
+
+def test_a_pair_exactly_at_the_limit_is_admitted() -> None:
+    """`max_pairwise_correlation` is a maximum, so the value itself is allowed.
+
+    The boundary decides membership of the ensemble that actually trades, and it was
+    untested — `>` and `>=` differ on exactly the pair a caller sets the limit to describe.
+    Read as `>=`, a limit of 0.5 would reject a pair correlated 0.5, which is not what "at most
+    0.5" says and would quietly shrink every ensemble by whatever sits on the line.
+    """
+    # The limit set to EXACTLY the pair's correlation, which is the only value that separates
+    # the two readings. Identical series will not do it: they collapse in the clustering step
+    # before the gate ever sees a pair, so the first version of this test passed either way.
+    exact = 1.0 - correlation_distance(BASE, OTHER)
+
+    at_limit = run(max_pairwise_correlation=exact)
+    step = next(s for s in at_limit.funnel if s.name == "pairwise-correlation-gate")
+    assert step.dropped == (), f"a correlation of exactly {exact} must clear a limit of {exact}"
+
+    just_below = run(max_pairwise_correlation=exact - 1e-9)
+    beyond = next(s for s in just_below.funnel if s.name == "pairwise-correlation-gate")
+    assert beyond.dropped != (), "and a hair beyond it must not"
