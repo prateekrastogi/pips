@@ -1,8 +1,12 @@
 # Breeze data-plane quota and connection limits [C-DATA-01] (ADR-0012).
 #
 # Effective-dated data, like a fee schedule (rule 6): every number carries where it came from
-# and when it was verified. The fetcher reads these; it does not hard-code them. An
-# entitlement that changed once will change again.
+# and when it was verified. An entitlement that changed once will change again.
+#
+# The `quota` block is READ AT RUNTIME by `budget.py`. The `fetch` block is NOT -- see the note
+# beside it. The header used to claim the fetcher reads all of this and hard-codes none of it,
+# which was true of the quota and false of the cap, and a reader had no way to tell which block
+# they were looking at.
 
 schema_version: 1
 vendor: ICICI_BREEZE
@@ -23,9 +27,21 @@ quota:
   max_calls_per_minute_source: "CONSERVATIVE PLACEHOLDER — lower of the two conflicting public figures"
 
 fetch:
+  # MEASURED, not planned. One authorised call asked for three days of 1-minute bars from
+  # 09:15 and got exactly 1,000 candles beginning at 11:07 the same morning: 1,125 requested,
+  # the OLDEST 125 simply absent, under Status 200 with no Error. The same failure shape as
+  # the UTC window `ist_window` exists for — missing bars rather than a failure.
   candles_per_call: 1000
-  candles_per_call_verified: false
-  candles_per_call_source: "IMPLEMENTATION.md §6 M4 planning figure — confirm at the M3 probe"
+  candles_per_call_verified: true
+  candles_per_call_verified_on: 2026-09-03
+  candles_per_call_source: "M3 probe, 2026-09-03: 1,125 one-minute bars requested, 1,000 returned, oldest truncated silently"
+
+  # THIS NUMBER IS NOT READ AT RUNTIME, and saying so is the point. Unlike the quota above —
+  # which `budget.py` loads, because an entitlement that changed once will change again — the
+  # candle cap is a `Final` in `pips.data.breeze.campaign`, where it is the default that
+  # `chunk_range` splits against and `run_range_backfill` refuses against. It is declared here
+  # so it carries a source and a date like everything else, and a test pins the two together
+  # so they cannot drift silently. Change it in one place and the suite names the other.
 
 # Everything the M3 probe must still measure, kept here so it cannot be forgotten.
 unverified:

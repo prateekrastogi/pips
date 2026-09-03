@@ -1661,6 +1661,21 @@
   # `backfill` imports it. A test asserts they are the same object, so the duplication cannot
   # come back.
   #
+  # A THIRD COPY OF THE CAP LIVED IN `config/breeze.yaml`, and it was the dangerous one.
+  # `budget.py` genuinely reads that file's `quota` block, and the file's own header claimed
+  # "the fetcher reads these; it does not hard-code them" -- true of the quota, false of the
+  # cap. So a reader had every reason to believe `fetch.candles_per_call` was live, and it was
+  # inert: measure a different cap, update the config, and nothing changes, while the number
+  # that decides every chunk boundary stays what it was. The header now says which block is
+  # read, the fetch block says why it is not, and a test pins the declared value to the
+  # constant so the two cannot drift silently.
+  #
+  # The config also still called the cap `verified: false` and "a planning figure -- confirm at
+  # the M3 probe", four days after the M3 probe confirmed it. A fact that WAS established
+  # reading as one that was not is the same defect as a check that did not run reading as one
+  # that passed, pointed the other way: the next person plans a campaign around a number they
+  # have been told to distrust. It now carries the measurement and its date.
+  #
   # `enforced`: `run_range_backfill` calls it, so the halved estimate is now the actual bill.
   status: enforced
   owner_milestone: M4

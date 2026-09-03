@@ -113,7 +113,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 285 source files · 2334 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 286 source files · 2339 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 69 rows
   (planned=8 building=32 enforced=29)
   provenance: running on the host, not in a pips image
@@ -217,12 +217,13 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    deliberately absent from `SUPPORTED_N`: an acquisition width decides what is recorded, never
    what is traded.
 
-   *Unverified inputs, flagged rather than buried:* `candles_per_call: 1000` is
-   `verified: false` in `config/breeze.yaml` (a blueprint planning figure) — daily survives any
-   plausible cap since 782 < 800, but the 1-second rows scale inversely with it; the `1second`
-   interval's availability and per-symbol history depth are both on the M3 probe's outstanding
-   list; and Breeze **omits untraded bars**, so the 1-second counts are an upper bound that
-   illiquid names will come in well under.
+   *Inputs, flagged rather than buried:* `candles_per_call: 1000` is **verified as of
+   2026-09-03** — the probe asked for 1,125 one-minute bars and got exactly 1,000, oldest
+   truncated silently — and `config/breeze.yaml` now records the measurement with its date. The
+   number is a `Final` in `campaign.py` rather than loaded, and a test pins the two together so
+   they cannot drift. Still open: the `1second` interval's availability and per-symbol history
+   depth are on the M3 probe's outstanding list; and Breeze **omits untraded bars**, so the
+   1-second counts are an upper bound that illiquid names will come in well under.
 2. **M7's pure layer is COMPLETE and composed** — `[C-UNIV-01]` to `[C-UNIV-06]`: the liquidity
    score, the stable-core buffer, the daily eligibility gates, the refresh cadence, the
    survivorship audit (which blocks promotion outright, and blocks on *unknown* coverage too),
