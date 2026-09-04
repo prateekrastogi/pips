@@ -35,6 +35,7 @@ def candidate(symbol: str, *, volume: float = 1e7, **elig: object) -> UniverseCa
         "unresolved_symbol_change": False,
         "sessions_listed": 500,
         "corporate_action_certain": True,
+        "mis_allowed": True,
     }
     eligibility.update(elig)
     return UniverseCandidate(

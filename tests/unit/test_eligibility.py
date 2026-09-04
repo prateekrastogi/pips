@@ -39,6 +39,7 @@ def inputs(**over: object) -> EligibilityInputs:
         "unresolved_symbol_change": False,
         "sessions_listed": 500,
         "corporate_action_certain": True,
+        "mis_allowed": True,
     }
     base.update(over)
     return EligibilityInputs(**base)  # type: ignore[arg-type]
@@ -153,3 +154,42 @@ def test_failures_and_gaps_are_reported_apart() -> None:
     result = verdict(suspended=True, corporate_action_certain=None)
     assert "suspended" in " ".join(result.ineligible)
     assert "corporate_action_certain" in " ".join(result.undetermined)
+
+
+# ------------------------------------------------- broker-MIS is its own gate (§4.1) -----
+
+
+def test_a_name_the_broker_will_not_allow_mis_on_is_ineligible() -> None:
+    """§4.1's formula names `broker-MIS allowed` as one of its six terms.
+
+    This is an intraday strategy that must square off the same session. A name the BROKER will
+    not grant MIS on cannot be traded intraday there at all: the order is either rejected or,
+    worse, filled as a delivery position the strategy never intended to hold overnight.
+    """
+    result = verdict(mis_allowed=False)
+    assert not result.eligible
+    assert "mis_allowed" in " ".join(result.ineligible)
+
+
+def test_an_unknown_mis_permission_leaves_the_name_out() -> None:
+    """Unknown is not eligibility — the same rule every other gate here follows."""
+    result = verdict(mis_allowed=None)
+    assert not result.eligible
+    assert "mis_allowed" in " ".join(result.undetermined)
+    assert result.ineligible == (), "undetermined is not the same as failing"
+
+
+def test_broker_mis_is_not_the_exchange_t2t_list() -> None:
+    """The gate that earns the separate field.
+
+    T2T is the EXCHANGE forbidding intraday trading in a name; broker-MIS is one BROKER's own,
+    narrower list. A name can be perfectly free of T2T and still be one this broker declines to
+    fund intraday — Flattrade and Zerodha publish different lists, and neither equals the
+    exchange's. Reading one as the other admits names the broker will refuse.
+    """
+    not_t2t_but_no_mis = verdict(trade_to_trade=False, mis_allowed=False)
+    assert not not_t2t_but_no_mis.eligible
+    assert "mis_allowed" in " ".join(not_t2t_but_no_mis.ineligible)
+    assert "trade_to_trade" not in " ".join(not_t2t_but_no_mis.ineligible), (
+        "the T2T gate passed; only the MIS gate should have fired"
+    )

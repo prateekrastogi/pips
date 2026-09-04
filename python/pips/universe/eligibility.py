@@ -56,6 +56,19 @@ class EligibilityInputs:
     unresolved_symbol_change: bool | None
     sessions_listed: int | None
     corporate_action_certain: bool | None
+    mis_allowed: bool | None
+    """Whether THIS BROKER will fund an intraday position in the name.
+
+    §4.1's eligibility formula names `broker-MIS allowed` as one of its six terms, and it is
+    NOT the exchange's T2T list: T2T is the exchange forbidding intraday trading outright,
+    while MIS is one broker's own, narrower list, and Flattrade's does not equal Zerodha's.
+    Reading either as the other admits names the broker will refuse to fund -- which for a
+    strategy that must square off the same session means a rejected order, or a delivery
+    position it never meant to hold overnight.
+
+    Sourced from the capability snapshot (:mod:`pips.data.pit.capability_master`), which is
+    where `[C-UNIV-02]` already says the MIS/short gate comes from.
+    """
 
 
 @dataclass(frozen=True)
@@ -93,6 +106,8 @@ def eligible_on(inputs: EligibilityInputs, *, min_sessions_listed: int) -> Eligi
         ("unresolved_symbol_change", inputs.unresolved_symbol_change, True),
         # Inverted: the gate is CERTAINTY, so False is the failure and None is still a gap.
         ("corporate_action_certain", inputs.corporate_action_certain, False),
+        # Inverted for the same reason: the gate is PERMISSION.
+        ("mis_allowed", inputs.mis_allowed, False),
     ):
         if flag is None:
             undetermined.append(f"{name} could not be resolved before the open")
