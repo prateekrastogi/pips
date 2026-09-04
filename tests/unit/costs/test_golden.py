@@ -104,11 +104,49 @@ def test_stt_is_sell_side_only_and_stamp_is_buy_side_only() -> None:
 
 
 def test_gst_applies_to_brokerage_and_exchange_fees_but_not_to_stt_or_stamp() -> None:
-    # GST is on the *service* component. Applying it to STT or stamp duty would be a tax on
-    # a tax and would silently inflate every cost estimate in the funnel.
-    cost = order_cost(SCHEDULE, Broker.HIGH_COST_REFERENCE, OrderSide.SELL, ONE_LAKH, TRADE_DAY)
-    taxable = cost.brokerage_paise + cost.exchange_paise + cost.ipft_paise + cost.sebi_paise
-    assert cost.gst_paise == round(taxable * Decimal("0.18"))
+    """GST is on the *service* component. Taxing STT or stamp duty would be a tax on a tax and
+    would silently inflate every cost estimate in the funnel.
+
+    Stated as a PROPERTY rather than as arithmetic over the rounded components. A buy pays
+    stamp duty and no STT; a sell pays STT and no stamp. Neither is taxable, so both must show
+    the SAME GST -- and that holds whatever the rounding does, which the previous assertion did
+    not.
+
+    That assertion recomputed GST as 18% of the summed ROUNDED components and compared it to a
+    `gst_paise` the implementation derives from the EXACT ones. The two agree at ONE LAKH and
+    disagree at 42 of 399 notionals tested, so it passed here by coincidence -- and it asserted
+    exactly the per-component rounding this module's docstring refuses to do.
+    """
+    buy = order_cost(SCHEDULE, Broker.HIGH_COST_REFERENCE, OrderSide.BUY, ONE_LAKH, TRADE_DAY)
+    sell = order_cost(SCHEDULE, Broker.HIGH_COST_REFERENCE, OrderSide.SELL, ONE_LAKH, TRADE_DAY)
+
+    assert buy.stt_paise == 0 and sell.stt_paise > 0
+    assert sell.stamp_paise == 0 and buy.stamp_paise > 0
+    assert buy.gst_paise == sell.gst_paise, "GST moved with STT/stamp — a tax on a tax"
+
+    # The golden value, kept as a number rather than a re-derivation: 18% of the exact service
+    # component at 1L on the high-cost reference line.
+    assert buy.gst_paise == 417
+
+
+def test_the_total_is_rounded_once_and_the_lines_need_not_sum_to_it() -> None:
+    """`total_paise` is one half-to-even step on the EXACT sum, not the sum of the rounded
+    lines -- "rounding per component would drift against the goldens and, worse, would drift
+    differently at different notionals".
+
+    A consequence nothing stated: the components then do NOT generally sum to the total. They
+    differ at 219 of 399 notionals tested, by a paise. At ONE LAKH they happen to agree, which
+    is why every existing test over this could hold both beliefs at once.
+
+    ₹500 is one of the notionals where they do not, so this pins the rule in the direction that
+    matters: anyone "fixing" the discrepancy by summing the lines breaks the goldens.
+    """
+    cost = order_cost(SCHEDULE, Broker.FLATTRADE, OrderSide.SELL, 50_000, TRADE_DAY)
+    lines = sum(cost.components().values())
+
+    assert lines != cost.total_paise
+    assert cost.total_paise == 14
+    assert lines == 13
 
 
 def test_every_component_is_integer_paise() -> None:

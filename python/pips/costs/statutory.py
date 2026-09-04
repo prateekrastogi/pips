@@ -54,7 +54,17 @@ class OrderCost:
     total_paise: int
 
     def components(self) -> dict[str, int]:
-        """Every charge line, for a report or a contract-note reconciliation."""
+        """Every charge line, for a report or a contract-note reconciliation.
+
+        **These do not generally sum to** :attr:`total_paise`, and a reconciliation has to know
+        that. Each line is rounded on its own for display; the total is one half-to-even step on
+        the EXACT sum, which is what a contract note does and what the goldens are stated in.
+        Summing rounded lines drifts, and drifts differently at different notionals.
+
+        The gap is at most a paise or two, and it is real: over 399 notionals sampled from ₹250
+        to ₹1,00,000 the lines disagree with the total at 219 of them. At ₹1,00,000 they happen
+        to agree, which is why it is easy to believe they always do.
+        """
         return {
             "brokerage": self.brokerage_paise,
             "exchange": self.exchange_paise,

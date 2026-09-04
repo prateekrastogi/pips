@@ -152,6 +152,22 @@
   source_refs: ["reference/cg-meta §8.2", "reference/blueprint Appendix A"]
   code: "python/pips/costs/statutory.py"
   tests: ["tests/unit/costs/test_golden.py::test_flattrade_1l_rt"]
+  # THE LINES DO NOT SUM TO THE TOTAL, and nothing said so. `total_paise` is one half-to-even
+  # step on the EXACT sum -- what a contract note does -- while each component is rounded on
+  # its own for display. Over 399 notionals from Rs250 to Rs1,00,000 they disagree at 219 of
+  # them, by a paise. At Rs1,00,000 they happen to AGREE, which is why every test over this
+  # could hold both beliefs at once, and why `components()` could advertise itself "for a
+  # contract-note reconciliation" without anyone noticing the reconciliation would not balance.
+  # Documented on the method and pinned by a test at a notional where they differ, so anyone
+  # "fixing" the gap by summing the lines breaks the goldens instead of the arithmetic.
+  #
+  # ONE GOLDEN PASSED BY COINCIDENCE. `test_gst_applies_to_brokerage_and_exchange_fees_but_not_
+  # to_stt_or_stamp` recomputed GST as 18% of the summed ROUNDED components and compared it to
+  # a `gst_paise` derived from the EXACT ones -- the very per-component rounding this module's
+  # docstring refuses. The two agree at one lakh and disagree at 42 of the 399. The test's own
+  # comment says its intent is that taxes are not taxed, so it now states that as a PROPERTY: a
+  # buy pays stamp and no STT, a sell pays STT and no stamp, and both must show the same GST
+  # whatever the rounding does. The golden value is kept beside it as a number.
   status: enforced
   owner_milestone: M9
   # The rate set was DERIVED from §3.7's goldens, not copied: sell-buy = Rs22 at Rs1L fixes
