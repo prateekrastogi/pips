@@ -17,10 +17,17 @@
 corporate actions excluded. `pips.data.daily.promote_daily` explodes range records into
 symbol-day rows; `amihud_ratio` and `gap_rate` are both implemented and swept.
 
-**What is arithmetic now, not a decision:** median rupee volume over the daily panel, then the
-three-component daily ranking. `_usable` requires all four components and spread needs a live
-tape, so the three-component ranking is its own function — not `liquidity_scores` with a field
-missing, which is exactly what `_usable` refuses.
+**Median ₹-volume, Amihud and gap-rate are all implemented and swept.** Three of the four score
+components exist.
+
+**But the fourth is not arithmetic, it is `BLK-0005`.** I recorded here that the three-component
+ranking was "arithmetic, not a decision". That was wrong. `build_shortlist` scores with
+`liquidity_scores`, whose `_unmeasurable` requires a finite spread and refuses to default it —
+and spread comes from the 1-second capture that the shortlist itself selects the names for. The
+shortlist needs spread; spread is what the shortlist buys. `shortlist.py` forbids the
+three-component pre-rank that `CURRENT.md`'s own ordering calls for, on the stated grounds that a
+second score would break the shortlist's superset-of-the-universe guarantee. Both were written
+deliberately and they cannot both hold.
 
 ### Before promoting the seed, one thing must be settled
 
