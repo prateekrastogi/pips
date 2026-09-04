@@ -29,6 +29,49 @@ commands:
 """
 
 
+# Commands whose OWN parser prints a better help than `_usage_for` could -- argparse lists every
+# flag with its metavar. Checked by a test rather than trusted: a command that stopped using
+# argparse would otherwise go quietly back to eating the flag as a positional.
+_OWN_HELP = frozenset({"backfill", "capture", "promote"})
+
+
+def _is_entry(line: str) -> bool:
+    """Is this a `_USAGE` command entry, as opposed to a heading or a wrapped continuation?
+
+    An entry starts at column 2 with a non-space. `s1-search`'s description wraps onto a line
+    indented past the command column, and a scan that accepted it would invent a command called
+    `successive` -- which would then be reported as known, and helped, and never dispatched.
+    """
+    return line.startswith("  ") and not line[2:3].isspace()
+
+
+def _documented() -> frozenset[str]:
+    return frozenset(line[2:].split()[0] for line in _USAGE.splitlines() if _is_entry(line))
+
+
+_COMMANDS = _documented()
+
+
+def _usage_for(command: str) -> str:
+    """The `_USAGE` entry describing one command, its wrapped continuation included.
+
+    A command line starts at column 2 with a non-space; a continuation is indented past the
+    command column. Reading the continuation as an entry is exactly how a help-text parser goes
+    wrong, so `documented_commands` in the test asserts the distinction holds.
+    """
+    lines = _USAGE.splitlines()
+    for i, line in enumerate(lines):
+        if not _is_entry(line) or line[2:].split()[0] != command:
+            continue
+        block = [line.strip()]
+        for cont in lines[i + 1 :]:
+            if not cont.strip() or _is_entry(cont):
+                break
+            block.append(" ".join(cont.split()))
+        return "usage: pips " + "\n       ".join(block)
+    return _USAGE
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
     if not args or args[0] in {"-h", "--help"}:
@@ -36,6 +79,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if args else 1
 
     command, rest = args[0], args[1:]
+
+    # `--help` IS NOT DATA. Every command below parses its own arguments, and the ones doing it
+    # by hand read the flag as a positional. Measured 2026-09-04: twelve of fifteen commands did
+    # something other than help when asked for help, and two did real work --
+    # `pips fixtures generate --help` wrote 11 files over the repo's own fixtures, and
+    # `pips determinism --help` ran the smoke pipeline twice. Three more exited 0 while doing
+    # nothing, which reads as success.
+    #
+    # Intercepted HERE rather than in each command, because the failure is uniform and a
+    # per-command fix is a per-command thing to forget.
+    # A command that does not exist is not helped, it is refused: answering "here is the usage,
+    # exit 0" would report success for a command pips cannot run -- the same shape as everything
+    # else this guard is for. An unknown command falls through to the refusal at the bottom.
+    if command in _COMMANDS and command not in _OWN_HELP and ("-h" in rest or "--help" in rest):
+        print(_usage_for(command))
+        return 0
     if command == "ledger" and rest[:1] == ["check"]:
         from pips.ledger.check import main as ledger_main
 
