@@ -217,3 +217,46 @@ if [ -n "$DEFERRED" ]; then
 else
   log "deployed ${TARGET:0:12}; all services on the new SHA"
 fi
+
+# --- reclaim: one image trio per SHA, and the disk is not infinite ---------------------
+#
+# 2026-09-04: this rail stopped with `fatal: write error: No space left on device`, retrying
+# and alerting every two minutes. arb-vm was 96G/96G with ZERO bytes free and Docker held 476
+# tagged `pips/*` images -- 83.7 GB, 92% reclaimable. Exactly ONE was dangling, so a routine
+# `docker image prune` would have freed nothing: the garbage is TAGGED, a research/engine/reader
+# trio per deployed SHA at roughly 3 GB each, and nothing ever removed them.
+#
+# AN AGE FILTER WOULD NOT HAVE SAVED IT. Fourteen commits reached main that day; every trio was
+# hours old and would have survived any plausible `until=24h` cutoff, which is ~40 GB of a 96 GB
+# disk in a single day. So the bound is a COUNT OF SHAS, not an age.
+#
+# This runs last, AFTER `last-good-sha` is written. `last-good` is the rollback pointer, and
+# reclaiming before it exists would let a deploy that dies in between delete the images it
+# would need to roll back to -- turning a failed deploy into an unrecoverable one.
+KEEP_SHAS="${PIPS_KEEP_SHAS:-3}"
+
+# Newest first, which is `docker images`' default order. `:current` is excluded because it is a
+# floating tag, not a SHA -- it is protected separately below.
+RECENT="$(docker images 'pips/research' --format '{{.Tag}}' 2>/dev/null \
+  | grep -v '^current$' | head -n "$KEEP_SHAS")"
+KEEP="$(printf '%s\n%s\n%s\n' "$RECENT" "$TARGET" "$LAST_DEPLOYED" | grep -v '^$' | sort -u)"
+
+RECLAIMED=0
+for ref in $(docker images 'pips/*' --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); do
+  tag="${ref##*:}"
+  # The floating tag compose falls back to. Removing it recreates the exact bug the
+  # republish above exists to prevent: a manual `docker compose run` silently executing
+  # whatever stale image last carried the name.
+  [ "$tag" = "current" ] && continue
+  printf '%s\n' "$KEEP" | grep -qxF "$tag" && continue
+  # `|| true` is the guard, not sloppiness: docker refuses to remove an image backing a
+  # running container, which is precisely the protection wanted. A refusal here is correct
+  # and must not fail the deploy -- the deploy already succeeded.
+  if docker rmi "$ref" >/dev/null 2>&1; then
+    RECLAIMED=$((RECLAIMED + 1))
+  fi
+done
+
+# Bounded, and generous: build cache is cheap to rebuild and expensive to lose mid-iteration.
+docker builder prune -f --filter 'until=168h' >/dev/null 2>&1 || true
+log "reclaimed $RECLAIMED image(s); keeping $KEEP_SHAS SHA(s) plus :current and last-good"
