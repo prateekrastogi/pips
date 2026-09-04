@@ -361,6 +361,11 @@ already `economics.breakeven_edge`.
   the liquidity ranking until it is decided where daily bars live: a daily panel beside silver
   (my read), or an interval dimension inside silver. Everything between the seed and the 500
   shortlist waits on it; the research factory does not.
+- **`BLK-0004` — Breeze refuses our streaming namespace.** Not on the critical path for the
+  shortlist, so it does not stop a tick, but it is a human-only item that had no card and lived
+  only in a dead container's log. The transport is fine (Engine.IO handshake returns 200 with a
+  session id); the authenticated Socket.IO namespace connect is refused, while REST with the same
+  token succeeds. It needs a question put to ICICI, not a code change.
 - Everything below was true before that block opened and still is.
 - The security-master download was approved and completed; 5,851 instruments
   are live in the PIT store on arb-vm and the QC verdict seam resolves end to end. The orphaned `checkout` compose project was cleared with the
