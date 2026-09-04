@@ -11,57 +11,28 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
-**The seed ran, and nothing downstream can read what it wrote.** That is the finding of
-2026-09-04 and it is the next thing to fix.
 
-The daily seed landed 3,101 symbols of real NSE daily bars on arb-vm — verified, not assumed:
-all Status 200, none unreadable, median 743 bars per symbol, max 744, and 1,804 symbols
-carrying more than 700 sessions. 411 returned zero bars, matching the seed's own `empty=411`;
-plausible for delisted names and **still unchecked**.
+**`BLK-0003` is resolved and the data path is unblocked.** Both owner decisions landed on
+2026-09-05: daily bars get their own panel beside silver, and `gap_rate` is a frequency with
+corporate actions excluded. `pips.data.daily.promote_daily` explodes range records into
+symbol-day rows; `amihud_ratio` and `gap_rate` are both implemented and swept.
 
-But the seed writes RANGE records, keyed `SYMBOL:INTERVAL:START:END`, and every consumer
-downstream expects the day-keyed shape:
+**What is arithmetic now, not a decision:** median rupee volume over the daily panel, then the
+three-component daily ranking. `_usable` requires all four components and spread needs a live
+tape, so the three-component ranking is its own function — not `liquidity_scores` with a field
+missing, which is exactly what `_usable` refuses.
 
-| stage | behaviour on the 3,101 range records | state |
-|---|---|---|
-| `run_qc` | skipped — no checks exist for the shape (`skipped 3101 record(s)`) | honest, useless |
-| `promote_bronze` | would quarantine all of them as "not a readable symbol-day capture" | survives, promotes nothing |
-| `SymbolStats` | **nothing in the repo constructs one from bars at all** | absent |
+### Before promoting the seed, one thing must be settled
 
-QC over the real archive reported `checked 6 record(s) … skipped 3101` — the 6 being the old
-day-keyed records. That is the skip counter doing its job: an empty check that cannot pass
-itself off as a clean one. The alternative reading — "checked 3,107, zero findings" — would have
-been a clean bill nothing earned, and `promote_bronze` reads exactly that set as consent.
+**Every one of the 3,101 seeded records is missing 2023-09-04.** `ist_range` opened daily windows
+at the session open (09:15) while a daily bar is stamped 00:00, so the first day of every range
+fell outside its own window — measured on the live API across three overlapping windows, and
+fixed the same day. The seed predates the fix.
 
-**This is now `docs/state/blocks/BLK-0003.md` and it needs the owner.** An earlier version of
-this section named the next unit as "teach promotion the range shape". That was wrong, and the
-correction matters: it treats a missing **layer** as a missing branch.
-
-`_INTERVAL_MINUTES = 1` — silver is *definitionally* the one-minute intraday panel, and its bar
-model is `(trade_date, close_label)` with the label clipped to `09:15 < t <= 15:30`. A daily bar
-has no intraday close label. Fed through `normalize_candles` a daily candle yields **zero bars**,
-observed directly:
-
-```
-daily candle at 00:00:00 -> 0 bar(s)
-same candle at 10:00:00 -> 1 bar(s)
-```
-
-So handling the range shape alone would walk all 3,101 records one step further and quarantine
-them again as `no bars survived normalization` — a worse message for the same outcome, wearing
-the appearance of progress.
-
-Confirmed by running promotion over the real archive rather than reading it:
-
-```
-promotion: read 3107 file(s), promoted 6, 2216 bar(s); 3101 quarantined (0 by QC)
-```
-
-The decision in BLK-0003 is where daily bars live: **a daily panel beside silver** (my read), or
-**an interval dimension inside silver**. Two further gaps follow from it and need no decision: no
-bars → `SymbolStats` path exists anywhere outside tests, and the three-component daily ranking
-must be its own function, because `_usable` refuses a score with spread missing — which daily
-OHLC cannot supply at any interval.
+It is one call per symbol to repair, but the manifest records those range keys as TERMINAL, so a
+normal backfill skips them: the keys must be cleared first. Promoting before that bakes a
+systematic first-day hole into the daily panel — and a uniform gap does not look like corruption,
+it looks like the range starting a day later than it does. **Owner's call, recorded not spent.**
 
 ## Superseded by the above
 **Nothing is in flight. The research factory is built and every part of it verified as far as
@@ -368,11 +339,12 @@ remote branch. `make ci` is unaffected (`salvage-verify` was never in the ladder
 explains that the folder was removed on purpose and prints the `git clone` lines that restore it.
 
 ## Blockers / awaiting
-- **WAITING ON `BLK-0003` — and it sits on the critical path**, so the tick stops here rather
-  than falling through (LOOP.md §1.2). The seed's 3,101 symbols of real daily bars cannot reach
-  the liquidity ranking until it is decided where daily bars live: a daily panel beside silver
-  (my read), or an interval dimension inside silver. Everything between the seed and the 500
-  shortlist waits on it; the research factory does not.
+- **`BLK-0003` RESOLVED 2026-09-05.** Both decisions made; the daily panel and `gap_rate` are
+  built and swept. Nothing on the critical path is blocked on a decision any more.
+- **Awaiting the owner, not blocking a tick:** (a) whether to clear the manifest keys and
+  re-fetch the seed's missing first day before promoting — one call per symbol, see *Active
+  item*; (b) ICICI's written reply for `[G-AUTH-0]`'s `evidence_paths`; (c) whether to wire
+  `AdaptivePacer` into the fetchers, which changes live campaign behaviour.
 - **`BLK-0004` — Breeze refuses our streaming namespace.** Not on the critical path for the
   shortlist, so it does not stop a tick, but it is a human-only item that had no card and lived
   only in a dead container's log. The transport is fine (Engine.IO handshake returns 200 with a
