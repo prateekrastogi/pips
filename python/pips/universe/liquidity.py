@@ -46,6 +46,7 @@ __all__ = [
     "amihud_ratio",
     "gap_rate",
     "liquidity_scores",
+    "median_rupee_volume",
     "stable_core",
     "top_n",
 ]
@@ -100,6 +101,51 @@ def amihud_ratio(returns: Sequence[float], rupee_volume: Sequence[float]) -> flo
     if not per_day:
         return math.nan
     return sum(per_day) / len(per_day)
+
+
+def median_rupee_volume(bars: Sequence[tuple[int, int]]) -> float:
+    """Median daily traded value, in rupees: §4.1's `median ₹-volume`, weight +1.0.
+
+    ``bars`` is ``(close_paise, volume)`` per session, in the caller's lookback. The window is
+    the caller's: §4.1's policy grid searches it over {20, 40, 60} sessions, so choosing one in
+    here would be a second, hidden parameter — the same reason `amihud_ratio` does no windowing.
+
+    PRICE CONVENTION: close x volume. The blueprint names "₹-volume" and does not say which
+    price, and the honest alternative is a typical price ((H+L+C)/3) x volume, which is nearer to
+    NSE's own turnover figure because trades happen through the day rather than at the close.
+    Close was chosen because it is the standard proxy and because the difference cannot matter
+    here: this is a MEDIAN over dozens of sessions, then logged, then z-scored cross-sectionally,
+    and every name in the cross-section is measured the same way. Recorded rather than left
+    implicit, so a future reader knows it was a choice.
+
+    A ZERO-VOLUME DAY COUNTS. This is the sharp difference from `amihud_ratio`, which drops such
+    a day because `|r| / 0` is undefined and the day says nothing about that ratio. A session on
+    which nothing traded says a great deal about how liquid a name is, and dropping it would let
+    a stock trading twice a month rank beside one trading every session. It counts, and it drags
+    the median down, which is the truth.
+
+    A name that never traded is therefore 0.0, not NaN -- the LEAST liquid reading rather than
+    the most, and `log(0)` is refused by `_usable` downstream anyway. NaN is reserved for having
+    no sessions at all, which is not the same fact.
+    """
+    values: list[float] = []
+    for close_paise, volume in bars:
+        if close_paise <= 0:
+            raise ValueError(
+                f"close_paise must be positive, got {close_paise!r}. A broken bar must not "
+                "contribute zero value and be mistaken for a session with no trades, which is "
+                "a different and legitimate thing."
+            )
+        if volume < 0:
+            raise ValueError(f"volume cannot be negative, got {volume!r}")
+        values.append(close_paise * volume / 100.0)
+    if not values:
+        return math.nan
+    values.sort()
+    middle = len(values) // 2
+    if len(values) % 2:
+        return values[middle]
+    return (values[middle - 1] + values[middle]) / 2.0
 
 
 def gap_rate(
