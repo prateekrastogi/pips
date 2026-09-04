@@ -26,6 +26,27 @@ quota:
   max_calls_per_minute_verified: false
   max_calls_per_minute_source: "CONSERVATIVE PLACEHOLDER — lower of the two conflicting public figures"
 
+  # A THIRD SOURCE, from ../past (SAL-0003, intraday be8186d4262a, breeze/ratelimit.py), read
+  # 2026-09-04. It states as MEASURED: "verified 2026: 100 calls/min, 5,000/day, GLOBAL counter",
+  # and paces itself at 1.0s/call (~60/min) with a 4,500/day stop.
+  #
+  # ON THE MINUTE RATE this corroborates us: 75/min sits under a measured 100/min, so the
+  # placeholder is conservative in the direction we assumed rather than guessed.
+  #
+  # ON THE DAILY CAP the two sources disagree by 20x -- 5,000/day measured there against the
+  # 100,000/day the owner confirmed here -- and NOTHING IN THIS REPO HAS EVER MEASURED IT. The
+  # numbers may simply describe different account tiers. What we can say from our own data:
+  # 2026-09-04's seed spent 3,101 calls with errored=0, plus a 20-call probe. That rules out the
+  # donor's other warning ("a user hit the daily error at ~170 calls") for THIS account; it does
+  # not test 5,000 and it does not test 100,000.
+  #
+  # It matters for the 1-minute campaign, which plans 117,600 calls against this number. At
+  # 100,000/day that is two days; at 5,000/day it is twenty-four. The budgeter stops cleanly and
+  # resumes either way, so nothing breaks -- but the PLAN's duration would be 12x wrong, and
+  # that is a scheduling decision made on an unverified figure. Left as the owner's number,
+  # recorded as a conflict, not silently reconciled.
+  daily_cap_conflicting_source: "SAL-0003 donor measured 5,000/day (GLOBAL) — unreconciled"
+
 fetch:
   # MEASURED, not planned. One authorised call asked for three days of 1-minute bars from
   # 09:15 and got exactly 1,000 candles beginning at 11:07 the same morning: 1,125 requested,

@@ -11,6 +11,24 @@
 #
 # Schema and coverage enforced by python/pips/ledger/salvage.py (tests/unit/test_salvage.py),
 # which runs inside `make ledger-check`.
+#
+# ─────────────────────── ../past WAS DELETED, 2026-09-04 ───────────────────────
+# The harvest is complete: every PORT row below carries an AUDITED / HARVESTED / KNOWLEDGE
+# CAPTURED note recording what crossed over and what deliberately did not, so this file is the
+# artifact and the folder was working material.
+#
+# `make salvage-verify` resolves donor SHAs against ../past and therefore CANNOT RUN without it.
+# It is not part of `make ci` and no test depends on it (tests/unit/test_salvage.py builds its
+# own repo under tmp_path), so nothing is broken — but to run it, or to read any donor again,
+# re-clone first:
+#
+#     git clone https://github.com/prateekrastogi/convexity.git    ../past/convexity
+#     git clone https://github.com/prateekrastogi/intraday.git     ../past/intraday
+#     git clone https://github.com/prateekrastogi/vol_research.git ../past/vol_research
+#
+# Verified before deleting: all 21 donor SHAs are reachable from remote branches in those three
+# repositories, every repo had 0 unpushed commits and 0 uncommitted changes, and local `main`
+# matched remote `main` for each. Nothing here existed only on that disk.
 
 # ═══════════════════════ intraday — the Breeze donor ═══════════════════════
 # 47 commits, refs: main + origin/main. HEAD is a bare README: everything below was deleted
@@ -32,6 +50,12 @@
     Small but load-bearing: the daily session dance is where Breeze integrations actually
     fail. Port rather than vendor — pips splits the data plane into its own process with its
     own credentials (rule 7), so the auth surface changes shape even though the flow does not.
+    AUDITED 2026-09-04. The session-token flow itself is what pips already does (interactive,
+    daily, expires at midnight; ADR-0011 keeps the token in the git-tracked .env of a private
+    repo). One line was NOT in pips and is worth having: "Only API *calls* must egress from the
+    whitelisted IP; the browser login can be from anywhere." That splits rule 9's static-IP
+    obligation in two, and it is the kind of thing that otherwise gets learned by a failed login
+    from the wrong machine. Cross-referenced onto BLK-0004.
 
 - id: SAL-0002
   component: "Breeze historical OHLCV fetcher + normalizer"
@@ -51,6 +75,14 @@
     PORTED at M4 into python/pips/data/breeze/ingest.py. Its IST-wall-clock note held on
     live data, and the M3 probe added what it did not record: Breeze is OPEN-labelled, so
     ingest adds one interval.
+    AUDITED 2026-09-04. NO GAP — every operational fact in this donor is already in pips, and in
+    two cases pips learned it independently and wrote it down harder:
+      * "1,000 candles/request" -> `chunk_range`, which sits STRICTLY BELOW the cap;
+      * "treats from_date/to_date as IST wall-clock and IGNORES the trailing 'Z' ... sending UTC
+        silently CLIPS the window" -> `ist_window`, whose docstring says the same;
+      * "a full NSE session 09:15->15:30 returns 375 one-minute candles" -> the session grid.
+    The donor does not know the thing pips measured later: under the 1,000-candle cap Breeze
+    truncates the OLDEST bars silently, under Status 200.
 - id: SAL-0003
   component: "Breeze rate limiter (100/min, 5000/day, Status-5 detection)"
   repo: intraday
@@ -71,6 +103,19 @@
     by config/breeze.yaml per ADR-0012. Its most valuable line was that a rate rejection
     arrives in the JSON BODY as Status 5, not as HTTP 429: a client checking HTTP status
     records a gap that looks like a quiet market.
+    AUDITED 2026-09-04, and this is the row that paid. It carries MEASURED vendor limits pips
+    never had: "verified 2026: 100 calls/min, 5,000/day, GLOBAL counter", paced at 1.0s/call with
+    a 4,500/day stop, plus "real enforcement is stricter/buggier than published (a user hit the
+    daily error at ~170 calls)". Recorded into config/breeze.yaml as a CONFLICTING source rather
+    than silently reconciled: it corroborates our 75/min placeholder (under a measured 100/min)
+    and disagrees 20x with the owner-confirmed 100,000/day.
+    Its other claim was TESTED rather than believed: "an empty Success can be a transient glitch
+    -> retry a couple times before accepting 'no data'". pips treats EMPTY as TERMINAL
+    (`_TERMINAL = {OK, EMPTY}`) and never retries, so the seed's empty=411 rests on one ask each.
+    Re-asked 20 of those symbols over the same 3-year window: 20 empty again, 0 with data, 0
+    errors. DID NOT REPRODUCE for a ranged daily request, so pips' EMPTY-as-terminal stands for
+    this shape and the 411 are genuinely empty. The caution is retained for the 1-minute
+    per-symbol-day campaign, whose request shape is the donor's, not this one's.
 - id: SAL-0004
   component: "Resumable multi-instrument backfill orchestrator"
   repo: intraday
@@ -94,6 +139,12 @@
     could not draw: a RATE-LIMITED reply is never marked done either, because Breeze
     sends it as HTTP 200 and marking it would write a permanent hole that looks exactly
     like a holiday.
+    AUDITED 2026-09-04. NO GAP on the orchestration contract: "robust to transient errors
+    (retry+backoff, never marked done -> retried next run)" is pips' manifest policy verbatim
+    (`transient error | no | retry next run`), and "clean stop ... so the next token resumes" is
+    the CallBudget stop. "Index/holiday days return empty (Status 200) and self-skip" is pips'
+    ResponseKind.EMPTY. The donor's expiry-probing and ATM-strike-band machinery is options
+    infrastructure with no counterpart in a cash-equity project.
 - id: SAL-0005
   component: "Breeze adapter test suite (cassette-style)"
   repo: intraday
@@ -126,6 +177,15 @@
     same commit, tests/test_costs.py (8435b). The rates are STALE — pips carries schedules
     as effective-dated data with verified_on (rule 6), so port the STRUCTURE and re-verify
     every number against the goldens in §3.7.
+    AUDITED 2026-09-04. NOT APPLICABLE as code: this is an NSE **options** fee model — exchange
+    txn on premium turnover, STT on the SELL of premium, STT on intrinsic at ITM exercise. pips
+    is cash equity; none of those rates transfer.
+    Its one transferable idea, DATE-AWARE statutory rates (`stt_sell_rate(d)` stepping at
+    2024-10-01 and 2026-04-01), pips already holds and holds better: rates live in
+    `config/costs/*.yaml` with a source and a verification date, because costs are effective-dated
+    data (rule 6), where the donor hard-codes them as module constants. Its warning — "VERIFY
+    against a real broker contract note before trusting live P&L" — is the same caution pips'
+    cost rows already carry.
 
 - id: SAL-0007
   component: "Walk-forward + embargo + final-holdout splitter"
@@ -142,6 +202,18 @@
     (tests/test_splits.py, 4607b at 9518f3e). M15 needs purge = horizon and embargo >=
     horizon + order duration, which this predates — port the isolation logic, not the
     parameters.
+    AUDITED 2026-09-04. NO GAP; pips EXCEEDS this donor. Both do walk-forward with a final
+    holdout, but `pips.validation.walk_forward` adds purging and an ENFORCED FLOOR — it raises
+    when `embargo < horizon + order_duration`, on the stated grounds that "a shorter embargo is
+    not a tuning choice; it contradicts the definition of the split".
+    The donor's headline claim is the weaker one: "for our INTRADAY, same-day-square-off strategy
+    each trade's label lives entirely within its own day, so embargo=0 is already leak-free".
+    pips' floor derives the same conclusion from the label horizon instead of asserting it, so it
+    stays correct if a multi-day label is ever introduced — which is exactly the caveat the donor
+    has to remember to apply by hand.
+    pips also carries `purge=False` purely as a CONTROL, because "an assertion that a purged split
+    has zero overlapping pairs is worth nothing without a companion showing that an unpurged one
+    does not". The donor has no such control.
 
 - id: SAL-0008
   component: "Panel / bar data layer"
@@ -156,6 +228,24 @@
   notes: >
     Predates the AsOf discipline entirely, so it is a shape reference only: pips panels are
     read through AsOfPanelView and may not expose a row later than decision_ts (rule 2).
+    AUDITED 2026-09-04. Two things came out of reading it, neither of them code.
+    LAKE LAYOUT, evidence for BLK-0003: the donor separates by DATA KIND into distinct roots
+    (`underlying/`, `futures/`, `vix/`, `options/expiry=.../right=.../strike=.../{date}.parquet`),
+    day-partitioned, rather than adding an interval dimension to one panel. That is precedent
+    for BLK-0003's option A (a daily panel beside silver) over option B.
+    A LATENT HAZARD pips does not yet have a caller for: the donor computes `log_ret` strictly
+    WITHIN a session, so the first bar of each day is null — "no return is ever taken across the
+    overnight gap or a futures monthly roll". `AsOfPanelView.shifted` refuses forward shifts
+    (lookahead) but has NO session-boundary guard, and the view carries only `close_ts_ns` with
+    no day column to build one from. Today nothing is wrong: `shifted` has no production caller
+    that computes returns (only `alphas/canary.py`, which passes -1 to prove the guard fires).
+    The first alpha that lags a price across a multi-session panel will silently compute an
+    overnight return as if it were intraday. Recorded rather than guarded, because a guard with
+    no caller would be a design invented ahead of its use.
+    The donor's other discipline — reindex onto the session grid but NEVER blanket
+    forward-fill, "that would fabricate zero returns" — pips already has, in
+    `normalize_candles`: "Missing minutes stay missing ... inventing them here would manufacture
+    a price claim nobody made".
 
 - id: SAL-0009
   component: "Breeze scaffold stubs (data/execution/factories/providers/config)"
@@ -194,6 +284,19 @@
     fleet, so its safety properties are the interesting part. M3.5 adds what it lacks:
     SHA-tagged images, market-hours deferral for trading-path services, and auto-rollback
     [C-DEPLOY-01] [G-DEPLOY-01].
+    AUDITED 2026-09-04. NO GAP — all four of the donor's stated safety properties are present in
+    `ops/deploy/sync.sh`, and three were confirmed by OBSERVATION today rather than by reading:
+      * never take the fleet down for a build (live tag moves only after the gates) — `:current`
+        is republished after promotion;
+      * never restart mid-cycle — pips' market-hours guard deferred breeze-reader and
+        shadow-engine at 13:15 IST and promoted them at 16:49, unattended (observed);
+      * never force-reset the checkout, `--ff-only`, divergence stops the deploy loudly — observed
+        this morning when a dirty checkout halted the rail instead of discarding work;
+      * failures alert and stop, no retry storm — observed as "gave up after 3 attempts — human
+        needed".
+    pips has one property this donor does not: SHA-count image retention. Its absence is what let
+    arb-vm fill to 0 bytes free on 2026-09-04 behind 476 tagged images, and an age filter would
+    not have saved it (14 commits landed that day). Added to the rail the same day.
 
 - id: SAL-0011
   component: "Liquidity ranking / universe scoring"
@@ -236,6 +339,17 @@
     Sibling: universe/shortability/liquidity_gate.py (5234b, 635b051). pips' eligibility is
     read from the daily broker_capability snapshot, never hard-coded (§3.4) — port the gate
     structure and make the inputs data.
+    AUDITED 2026-09-04. The donor layers explicit VENUE gates on top of eligibility
+    (`short_permitted`, `short_liquid`), and comparing them against pips found a real gap:
+    §4.1's formula names `broker-MIS allowed` as one of six terms and `EligibilityInputs` had no
+    field for it. `trade_to_trade` is NOT the same gate — T2T is the exchange forbidding
+    intraday trading; MIS is one broker's own, narrower list. Gate added as
+    `EligibilityInputs.mis_allowed`, inverted like `corporate_action_certain` because the gate
+    is permission.
+    STILL OUTSTANDING, and NOT fixed by that commit: `CapabilitySnapshot`, which `[C-UNIV-02]`
+    says supplies this gate, has NO production importer — every reference to it outside
+    `data/pit/` is a docstring or a comment. So the gate exists and nothing feeds it, and
+    `mis_allowed` reads undetermined until a caller layer does.
 
 - id: SAL-0013
   component: "Spread + impact friction model"
@@ -335,6 +449,20 @@
     Reconciling venue truth against internal state is [C-OMS-03]'s hardest requirement, and
     this is a working implementation of it on a live account. Venue differs; the failure
     taxonomy does not.
+    KNOWLEDGE CAPTURED 2026-09-04, ahead of `../past` being deleted. M23 is `status: planned`, so
+    there is nothing to port INTO yet; what follows is the donor's design, recorded so the row
+    survives the folder:
+      * the invariant is `|delta_i,t| <= epsilon_i` where
+        `delta_i,t = book_position_i,t - exchange_position_i,t`, per instrument, at any instant;
+      * `epsilon_i` is SCALED to the instrument's lot size / notional, NEVER a flat global
+        constant — "either too loose for majors or cries wolf on alt dust, the classic
+        uncalibrated-control-limit SPC failure";
+      * the ladder is OK / WARN (logged, no book action) / BREACH (immediate RECON_BREACH -> HALT,
+        a Shewhart SINGLE-POINT rule, deliberately not waiting for a statistical filter);
+      * a failed READ is RECON_STALE WARN — never a silent pass. That is this project's oldest
+        defect shape stated by someone else: a check that could not run must not read as one that
+        passed.
+    Donor is recoverable at convexity 635b051c9e48 if the code itself is ever wanted.
 
 - id: SAL-0018
   component: "Risk brake engine"
@@ -349,6 +477,18 @@
   notes: >
     Exposure-reducing-only degradation is exactly [C-RISK-01]'s DEGRADED state. pips' risk
     layer is Rust and independent of the strategy, so this is a logic donor, not a code one.
+    KNOWLEDGE CAPTURED 2026-09-04, ahead of `../past` being deleted. M23 is `status: planned`.
+    The donor's shape, worth having when pips builds its risk governor:
+      * ONE Protocol entry point, `on_obs(obs) -> OpsDirective`, taking one causal observation
+        that may carry any subset of {settled return, reconciliation snapshot, realized
+        fill/slippage, heartbeat};
+      * the engine reimplements NO detector logic — it is a thin composition + latch layer over
+        proven sub-modules (Sharpe-CUSUM kill switch, Shewhart-style immediate triggers),
+        combined by MAX-SEVERITY precedence;
+      * a HALT LATCH: once any source drives the engine to HALT it stays HALT, a monotone
+        invariant rather than a level that can drift back down on the next quiet observation.
+    The latch and the max-severity rule are the two parts that are easy to get wrong by building
+    a detector that resets itself. Donor at convexity 635b051c9e48.
 
 - id: SAL-0019
   component: "Paise/unit-exact accounting"
@@ -363,6 +503,17 @@
   notes: >
     Supports the `pnl_gross - costs == pnl_net` identity pips asserts continuously (§7).
     pips' boundary is integer paise [C-NUM-01]; check what this donor uses before porting.
+    KNOWLEDGE CAPTURED 2026-09-04, ahead of `../past` being deleted. M23 is `status: planned`.
+    Most of this donor does not transfer: it is crypto-perp accounting (SIGNED funding cash flow
+    per leg, dollar-neutral weekly rebalance) and NSE cash equity intraday has no funding leg.
+    ONE IDEA DOES, and it belongs to M19 rather than M23: turnover is measured against
+    `w_carried` — the prior book's weights DRIFTED by their realized returns over the elapsed
+    period — not against the prior TARGETS. "A name that ran up carries a larger weight into the
+    rebalance, so even holding the same names incurs drift turnover." Measuring against targets
+    understates turnover, and therefore understates cost, in the flattering direction.
+    NOT a present gap: `selection/turnover.py::optimal_turnover` computes a PLANNED turnover
+    implied by the selectivity threshold, and pips has no realized-turnover-from-weights
+    computation for the subtlety to apply to. Recorded for whoever writes one.
 
 - id: SAL-0020
   component: "Fleet alerting"
