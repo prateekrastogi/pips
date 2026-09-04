@@ -21,6 +21,20 @@ unreachable() {
   exit "${UNREACHABLE}"
 }
 
+# THREE STATES, NOT TWO. The exit-code note above splits a build that FAILED from a gate that
+# COULD NOT RUN. A third state hid between them: the gate is WAITING. `pips-ci` builds one at a
+# time, so a push made while another build is in flight finds its item BLOCKED -- and the
+# controller is demonstrably reachable, because it is the very thing answering the poll that
+# reports the block. Calling that "could not reach the controller" sent this session to probe a
+# controller that was up the whole time and answering 200.
+still_queued() {
+  echo "pips-ci: the build is STILL QUEUED after ${QUEUE_WAIT}s -- THE GATE DID NOT RUN." >&2
+  echo "         This is NOT an unreachable controller. It is answering, and it reports:" >&2
+  echo "           $1" >&2
+  echo "         pips-ci builds one at a time. Let the build in flight finish, then push again." >&2
+  exit "${UNREACHABLE}"
+}
+
 # TMPDIR, not a hardcoded /tmp: some sandboxes deny /tmp writes, and curl then fails to
 # open its cookie jar and exits before the request is ever made — which reads as an auth or
 # network fault rather than a filesystem one.
@@ -52,16 +66,29 @@ fi
 echo "pips-ci: queued at ${QUEUE_URL}"
 
 # The queue item becomes a build; poll until it does, then follow the build to a verdict.
+# The wait has to outlast the build ahead of it. The old bound was 120 polls x 2s = 240s
+# against a build that takes ~885s, so ANY push made during a build was guaranteed to fail.
+QUEUE_WAIT="${PIPS_JENKINS_QUEUE_WAIT:-1800}"
 BUILD_URL=""
-for _ in $(seq 1 120); do
+QUEUE_WHY=""
+QUEUE_DEADLINE=$(( SECONDS + QUEUE_WAIT ))
+while [ "${SECONDS}" -lt "${QUEUE_DEADLINE}" ]; do
   # `|| true`: a transport blip mid-poll is not a verdict. The loop retries; only running out
-  # of attempts is conclusive, and that is reported as "did not run" rather than as red.
-  BUILD_URL="$(curl -fsS "${AUTH[@]}" "${QUEUE_URL}api/json" 2>/dev/null \
-    | jq -r '.executable.url // empty' || true)"
+  # of patience is conclusive, and that is reported as "did not run" rather than as red.
+  ITEM="$(curl -fsS "${AUTH[@]}" "${QUEUE_URL}api/json" 2>/dev/null || true)"
+  BUILD_URL="$(printf '%s' "${ITEM}" | jq -r '.executable.url // empty' 2>/dev/null || true)"
   [ -n "${BUILD_URL}" ] && break
+  # Keep the last reason the controller gave. An EMPTY `why` is not evidence of reachability --
+  # the item may be gone, or the poll may have failed -- so only a non-empty one may claim it.
+  QUEUE_WHY="$(printf '%s' "${ITEM}" | jq -r '.why // empty' 2>/dev/null || true)"
   sleep 2
 done
-[ -n "${BUILD_URL}" ] || unreachable "the build never left the queue"
+if [ -z "${BUILD_URL}" ]; then
+  if [ -n "${QUEUE_WHY}" ]; then
+    still_queued "${QUEUE_WHY}"
+  fi
+  unreachable "the build never left the queue"
+fi
 echo "pips-ci: building at ${BUILD_URL}"
 
 RESULT="null"

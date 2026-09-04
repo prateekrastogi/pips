@@ -51,11 +51,14 @@ fi
 
 if [ "$STATUS" -eq "$GATE_DID_NOT_RUN" ]; then
   cat >&2 <<'MSG'
-pre-push: could not reach the controller — THE GATE DID NOT RUN. Push blocked.
+pre-push: THE GATE DID NOT RUN — push blocked. The specific reason is printed above.
 
-This is NOT a red build. Nothing was tested, so nothing is known. Check that the controller
-is up (`make jenkins-up`, `make jenkins-logs`) and try again — a restart mid-poll is the
-usual cause and retrying is usually enough.
+This is NOT a red build. Nothing was tested, so nothing is known. Two causes look alike from
+here, and the line above is what tells them apart:
+
+  * the controller is down — `make jenkins-up`, `make jenkins-logs`, then push again;
+  * the build is still QUEUED behind one already in flight — pips-ci builds one at a time,
+    so wait for that build to finish rather than retrying into the same queue.
 
 Blocked rather than waved through, because an untested push and a tested one must not look
 alike. If you must push anyway, use `git push --no-verify` and record why in
