@@ -12,6 +12,7 @@
     - "tests/unit/core/test_ids.py"
     - "tests/unit/core/test_trial_identity.py"
     - "tests/property/test_core_properties.py"
+    - "tests/unit/test_trial_cache_durability.py"
   # THE CACHE COULD POISON ITSELF. `put` wrote with `path.write_text` and `entry_for` read
   # with a bare `json.loads`, so a kill mid-write left a truncated entry and every later lookup
   # of that trial id RAISED -- permanently, until someone deleted the file by hand. The failure
@@ -75,6 +76,7 @@
     - "tests/unit/test_instrument_master.py"
     - "tests/unit/test_corporate_actions.py"
     - "tests/unit/test_capability_master.py"
+    - "tests/unit/test_locality_coverage.py"
   # BUILDING, not enforced, and the distinction is deliberate. The bitemporal half is done and
   # tested: valid_from/known_from, corrections as new versions, as-of reads that never move,
   # and now the instrument master on top of it (ISIN-keyed, symbol/token histories, ambiguity
@@ -138,6 +140,7 @@
     - "tests/unit/test_registry.py::test_erank_of_identical_trials_collapses_to_one"
     - "tests/unit/test_registry.py::test_erank_of_independent_trials_is_the_trial_count"
     - "tests/unit/test_manifest.py::test_the_appendix_b_example_parses"
+    - "tests/unit/test_trial_context_provenance.py"
   status: enforced
   owner_milestone: M11
   # Append-only is enforced by SQLite TRIGGERS, not by the application declining to write an
@@ -227,6 +230,7 @@
     - "tests/unit/test_protected_limit.py"
     - "tests/unit/test_flatten.py"
     - "tests/unit/test_reconciliation.py"
+    - "tests/unit/test_f0_cost_direction.py"
   # F0'S COST UNDERSTATES, AND ITS DOCSTRING CALLED THAT "CONSERVATIVE". `run_screen` charges
   # `round_trip_cost` -- statutory plus brokerage -- and nothing else: no half-spread, no
   # impact, no latency, no adverse selection. Those omitted terms are MULTIPLES of the
@@ -963,6 +967,7 @@
   code: "python/pips/search/s5.py"
   tests:
     - "tests/unit/test_s5.py"
+    - "tests/unit/test_s5_cost_consistency.py"
   # THE SMOKE PRICES SELECTION AND NETTING ON TWO DIFFERENT LINES, and the module warned about
   # exactly that at one of the two sites -- "Two literals would drift, and S5 would then price a
   # trade differently from the series it is selecting on." They had drifted by a factor of two:
@@ -1163,6 +1168,7 @@
   tests:
     - "tests/unit/test_silver.py"
     - "tests/unit/test_promote_cli.py"
+    - "tests/unit/test_s1_on_silver.py"
   status: building
   owner_milestone: M6
   # Three trading days of real RELIND minute bars sat in bronze on arb-vm with silver empty --
@@ -1260,6 +1266,10 @@
   code: "python/pips/data/qc/checks.py"
   tests:
     - "tests/unit/test_qc.py"
+    - "tests/unit/test_calendar_gaps.py"
+    - "tests/unit/test_qc_calendar_wiring.py"
+    - "tests/unit/test_qc_gates_promotion.py"
+    - "tests/unit/test_qc_verdict_file.py"
   # M5 had NO ledger row at all until now -- 691 lines of detectors and runner, 52 tests, and
   # the only trace in the ledger was `[C-DATA-01]`'s aside that "quarantine exists (qc)".
   #
@@ -1793,6 +1803,7 @@
   code: "python/pips/data/breeze/campaign.py"
   tests:
     - "tests/unit/test_range_chunking.py"
+    - "tests/unit/test_breeze_config_claims.py"
   # The 2026-09-03 probe measured the limit: Breeze caps a reply at 1,000 candles and drops the
   # OLDEST bars to fit, under Status 200 with no Error. `[C-M4-02]` refuses a reply that comes
   # back at the cap, which is right and leaves the ranged shape unusable for anything finer than
