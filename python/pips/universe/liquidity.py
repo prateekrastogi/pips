@@ -30,16 +30,21 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
+    from typing import Any
 
 __all__ = [
     "SUPPORTED_N",
     "WEIGHTS",
     "SymbolStats",
     "amihud_ratio",
+    "gap_rate",
     "liquidity_scores",
     "stable_core",
     "top_n",
@@ -95,6 +100,61 @@ def amihud_ratio(returns: Sequence[float], rupee_volume: Sequence[float]) -> flo
     if not per_day:
         return math.nan
     return sum(per_day) / len(per_day)
+
+
+def gap_rate(
+    bars: Sequence[tuple[date, int, int]],
+    *,
+    threshold: float,
+    explain: Callable[[str, date, int, int], Any] | None = None,
+    symbol: str = "",
+) -> float:
+    """How OFTEN a name gaps overnight: the fourth term of §4.1's score.
+
+        move_d   = |open_d / close_{d-1} - 1|
+        gap_rate = #{d : move_d > threshold} / #{d : usable}
+
+    ``bars`` is ``(trade_date, open_paise, close_paise)`` in session order, and the caller slices
+    the lookback -- a window length chosen in here would be a second, hidden parameter.
+
+    DEFINED 2026-09-05 by owner decision. §4.1 names `gap_rate` and its -0.25 weight and defines
+    no component, so until then this existed as a field name and nothing else. It is a FREQUENCY
+    rather than a mean magnitude: one crash day would dominate an average, and "rate" means how
+    often rather than how far. ``threshold`` is effective-dated configuration, never a constant
+    here -- it is a judgement and should look like one.
+
+    CORPORATE ACTIONS ARE EXCLUDED FROM BOTH SIDES. A 1:2 split is a 50% "gap" that says nothing
+    about liquidity: counted, the name looks like the gappiest on the exchange; counted as a
+    non-gap, unusually smooth. Neither is true, so the pair leaves the sample. ``explain`` is the
+    same `jump_explainer` QC uses, so this reuses that judgement rather than growing a second
+    notion of an unexplained jump.
+
+    The threshold comparison is exact rather than floating point: `10300 / 10000 - 1` is
+    0.030000000000000027, so an exactly-3% move would test as above a 3% threshold and the
+    boundary would quietly sit somewhere other than where it was configured.
+
+    A name with no usable pair is NaN, not 0.0 -- zero is the smoothest reading there is, and
+    `_usable` already refuses non-finite components, so the name leaves the ranking rather than
+    topping it. The same rule `amihud_ratio` follows for a day with no usable volume.
+    """
+    gapped = usable = 0
+    for (_, _, prev_close), (day, open_paise, _) in pairwise(bars):
+        if prev_close <= 0 or open_paise < 0:
+            continue
+        if explain is not None:
+            verdict = explain(symbol, day, prev_close, open_paise)
+            if getattr(verdict, "explained", False):
+                continue
+        usable += 1
+        # EXACT, not float. `10300 / 10000 - 1` is 0.030000000000000027, so a move of exactly
+        # 3% tests as ABOVE a 3% threshold and the boundary silently moves. Prices are integer
+        # paise for this reason; the comparison is cross-multiplied into the same arithmetic:
+        #     |open/prev - 1| > t   <=>   |open - prev| > t * prev
+        if Decimal(abs(open_paise - prev_close)) > Decimal(str(threshold)) * prev_close:
+            gapped += 1
+    if usable == 0:
+        return math.nan
+    return gapped / usable
 
 
 SUPPORTED_N: frozenset[int] = frozenset({50, 100, 150, 300})

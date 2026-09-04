@@ -1,0 +1,26 @@
+# `gap_rate` — the fourth term of M7's liquidity score [C-UNIV-01] (§4.1).
+#
+# Effective-dated data, like a fee schedule (rule 6): the threshold carries where it came from
+# and when it was verified, because it is a JUDGEMENT and should look like one. §4.1 names
+# `gap_rate` and its -0.25 weight and defines no component at all, so every number here is a
+# decision rather than a reading.
+
+schema_version: 1
+
+# A session-pair counts as gapped when |open_d / close_{d-1} - 1| EXCEEDS this. Strictly above:
+# a move of exactly the threshold is not past it, and the comparison is done in integer paise
+# so the boundary sits where it is written rather than where floating point puts it.
+threshold: 0.03
+threshold_source: "OWNER DECISION 2026-09-05, on the agent's recommendation. UNVERIFIED against any study of NSE overnight moves."
+threshold_verified: false
+threshold_verified_on: null
+
+# Sessions of history the rate is computed over. Matches the daily screen's other components;
+# §4.1's policy grid searches liquidity lookback over {20, 40, 60}, so this is the top of that
+# range and is a POLICY DIMENSION, not a constant to tune on outcomes.
+lookback_sessions: 60
+
+# Corporate-action-explained jumps are dropped from BOTH the numerator and the denominator, via
+# the same `jump_explainer` QC uses. A 1:2 split is a 50% "gap" and is not evidence about
+# liquidity in either direction.
+exclude_corporate_actions: true
