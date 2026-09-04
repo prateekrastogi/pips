@@ -382,9 +382,10 @@ explains that the folder was removed on purpose and prints the `git clone` lines
 - The security-master download was approved and completed; 5,851 instruments
   are live in the PIT store on arb-vm and the QC verdict seam resolves end to end. The orphaned `checkout` compose project was cleared with the
   owner's go-ahead. All three original owner-actions remain cleared.
-- **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
-  `WRITTEN` by sending the letter in `ops/runbooks/authority.md`, and fill the four blank
-  fields in `gate0-owner-attestation.md`.
+- **`[G-AUTH-0]` is now `WRITTEN`** (2026-09-05, owner's explicit instruction), so
+  `pips authority check` no longer prints the verbal-evidence caveat. Two documentary items
+  remain and neither blocks: `evidence_paths` should gain ICICI's reply itself when filed, and
+  the four blank fields in `gate0-owner-attestation.md` are still blank.
 - **Deliberate placeholders, all erring safe and all marked unverified:** Flattrade's MIS
   square-off (15:00), the Breeze per-minute rate (75/min — **not** inferred from the owner's
   100k/day and 32 parallel fetches), and the NSE holiday list (empty). Each is an M6 item.

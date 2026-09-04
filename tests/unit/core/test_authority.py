@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from pips.core.authority import (
     AuthorityRecord,
     AuthorityStatus,
+    EvidenceKind,
     SignalFeed,
     load_authority,
 )
@@ -138,13 +139,22 @@ def test_an_unfiled_record_cannot_claim_a_filing_date() -> None:
 def test_the_repo_record_is_valid_and_honest_about_its_state() -> None:
     rec = load_authority(ROOT / "docs" / "reports" / "feasibility" / "gate0-authority.yaml")
     assert rec.gate == "G-AUTH-0"
-    # Cleared by an owner-attested VERBAL confirmation from ICICI support. §2.1 asks for
-    # written clarification, so the record must still surface that as a caveat rather than
-    # reading as a clean written grant.
+    # WAS `VERBAL_ATTESTATION` with one caveat until 2026-09-05, when the owner instructed
+    # explicitly that it be recorded as WRITTEN. This assertion tracks the record's state; it
+    # is not a relaxation, and the guard it used to exercise is not lost — the caveat mechanism
+    # is tested on synthetic records either side of it (a VERBAL record still yields exactly one
+    # caveat naming "verbal" and "written"; a WRITTEN one yields none).
+    #
+    # Pinned by KIND, not merely by caveat count. The old assertion would have passed for any
+    # record that happened to produce one caveat; this one says which evidence the repo's gate
+    # actually rests on, so a silent downgrade fails here too.
     assert rec.status is AuthorityStatus.GRANTED
     assert rec.live_trading_permitted() is True
     assert rec.certified_signal_feed is SignalFeed.BREEZE
-    assert len(rec.caveats()) == 1
+    assert rec.evidence_kind is EvidenceKind.WRITTEN
+    assert rec.caveats() == []
+    # A cleared gate still has to point at something (rule 3), whatever kind it claims.
+    assert rec.evidence_paths, "a cleared gate with no evidence path is not a cleared gate"
 
 
 def test_the_question_template_the_record_points_at_exists() -> None:
