@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
+from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
 from pips.data.qc.checks import (
     QcVerdicts,
@@ -136,6 +137,12 @@ def promote_bronze(
     session and the corporate-action master, and quarantining on a guess would be worse than
     not checking. What promotion could not do before was find out whether QC had run at all.
     """
+    # Rule 14, before anything is read: silver IS market data, and `refuse_repo_paths` is
+    # cheap while a panel written into the working tree is one of the few mistakes here that
+    # cannot be fully undone. Checked at the top rather than beside the write, so a run that
+    # would end in the repository fails before it spends any time.
+    refuse_repo_paths(silver_root, what="silver bars")
+
     rows: list[dict[str, Any]] = []
     quarantined: list[Quarantined] = []
     files_read = files_promoted = 0

@@ -84,6 +84,17 @@
   # (`[C-QC-01]`) -- that second clause was stale, and is the half of this blocker that is now
   # done. What remains is that nothing promotes silver to gold. Marking this enforced would
   # claim a promotion path that is not complete; the row goes to enforced when it is.
+  # RULE 14'S GUARD COVERED TWO OF FOUR ZONES. `core/locality.py` put the rule in one place and
+  # warns that it FAILS SILENTLY when it fails -- it allows a path by concluding the path is
+  # outside the repository, so anything that makes the repository un-findable reads as
+  # permission. What nothing checked was whether every writer uses it: `run_backfill` guarded
+  # bronze and `CaptureWriter` guarded tick capture, while `promote_bronze` wrote
+  # `silver_root/bars_1m.parquet` and `run_qc` wrote quarantined records with no check at all.
+  # Silver is the panel and a quarantined record is the bronze payload plus its reasons; both
+  # are market data, and market data in git is one of the few mistakes here that cannot be
+  # fully undone. The gap became reachable when `pips promote` gained a `data_root` argument.
+  # Both are guarded now, at the top of the run rather than beside the write, so a run destined
+  # for the repository fails before it spends any time.
   status: building
   owner_milestone: M6
 

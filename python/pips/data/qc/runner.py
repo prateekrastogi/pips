@@ -28,6 +28,7 @@ from typing import Any, Final
 
 from pips.core.atomic import atomic_write_text
 from pips.core.calendar import ExchangeCalendar
+from pips.core.locality import refuse_repo_paths
 from pips.data.breeze.ingest import ResponseKind, classify_response, normalize_candles
 from pips.data.pit.explain import JumpExplainer, jump_explainer
 from pips.data.qc.checks import (
@@ -277,6 +278,10 @@ def run_qc(
     that looks connected and silently resolves nothing.
     """
     from pips.core.calendar import SESSION_MINUTES_DEFAULT, load_calendar
+
+    # Rule 14: a quarantined record is the bronze payload plus its reasons -- the same market
+    # data, moved aside -- so the zone it lands in is guarded like bronze is.
+    refuse_repo_paths(quarantine_root, what="quarantined records")
 
     calendar = load_calendar(calendar_path) if calendar_path else None
     expected_minutes = calendar.continuous_session_minutes if calendar else SESSION_MINUTES_DEFAULT
