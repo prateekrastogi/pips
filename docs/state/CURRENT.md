@@ -11,6 +11,37 @@
 > history lives in `docs/state/log/`; this file says what is true now.
 
 ## Active item
+**The seed ran, and nothing downstream can read what it wrote.** That is the finding of
+2026-09-04 and it is the next thing to fix.
+
+The daily seed landed 3,101 symbols of real NSE daily bars on arb-vm — verified, not assumed:
+all Status 200, none unreadable, median 743 bars per symbol, max 744, and 1,804 symbols
+carrying more than 700 sessions. 411 returned zero bars, matching the seed's own `empty=411`;
+plausible for delisted names and **still unchecked**.
+
+But the seed writes RANGE records, keyed `SYMBOL:INTERVAL:START:END`, and every consumer
+downstream expects the day-keyed shape:
+
+| stage | behaviour on the 3,101 range records | state |
+|---|---|---|
+| `run_qc` | skipped — no checks exist for the shape (`skipped 3101 record(s)`) | honest, useless |
+| `promote_bronze` | would quarantine all of them as "not a readable symbol-day capture" | survives, promotes nothing |
+| `SymbolStats` | **nothing in the repo constructs one from bars at all** | absent |
+
+QC over the real archive reported `checked 6 record(s) … skipped 3101` — the 6 being the old
+day-keyed records. That is the skip counter doing its job: an empty check that cannot pass
+itself off as a clean one. The alternative reading — "checked 3,107, zero findings" — would have
+been a clean bill nothing earned, and `promote_bronze` reads exactly that set as consent.
+
+**Next unit: teach promotion the range shape** — group a range payload's candles by their own
+date, resolve the vendor code per day, and emit per-day silver bars. That is the first of three
+missing links between the seed and CURRENT's stated ordering ("range-fetch daily for everything
+→ rank on the three daily-derivable components"). The second is a bars → `SymbolStats` path,
+which does not exist. The third is that `_usable` requires all four components including
+**spread**, which daily OHLC cannot give at any interval — so the three-component ranking is a
+distinct function from `liquidity_scores`, not a call to it with fields missing.
+
+## Superseded by the above
 **Nothing is in flight. The research factory is built and every part of it verified as far as
 it can be without data; what remains needs the owner.** The four decisions are in *Next
 actions* below. The shortlist width — which gated the rest — was decided on 2026-09-03: 500
