@@ -346,8 +346,14 @@ remote branch. `make ci` is unaffected (`salvage-verify` was never in the ladder
 explains that the folder was removed on purpose and prints the `git clone` lines that restore it.
 
 ## Blockers / awaiting
+- **WAITING ON `BLK-0005`, and it sits on the critical path**, so the tick stops here rather
+  than falling through (LOOP.md §1.2). The shortlist scores with `liquidity_scores`, which
+  refuses a missing spread; spread comes from the 1-second capture the shortlist itself selects
+  names for. `CURRENT.md`'s ordering breaks that circle with a three-component pre-rank and
+  `shortlist.py` forbids exactly that, on the stated grounds that a second score would silently
+  break the shortlist's superset-of-the-universe guarantee. Both deliberate; both cannot hold.
 - **`BLK-0003` RESOLVED 2026-09-05.** Both decisions made; the daily panel and `gap_rate` are
-  built and swept. Nothing on the critical path is blocked on a decision any more.
+  built and swept. Three of the four score components now exist.
 - **Awaiting the owner, not blocking a tick:** (a) whether to clear the manifest keys and
   re-fetch the seed's missing first day before promoting — one call per symbol, see *Active
   item*; (b) ICICI's written reply for `[G-AUTH-0]`'s `evidence_paths`; (c) whether to wire
