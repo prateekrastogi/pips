@@ -464,3 +464,50 @@ def test_another_symbols_day_keys_do_not_warn(
 
     assert campaign_module.main([*ARGS, "--ranged"]) == 0
     assert "re-fetched" not in capsys.readouterr().out
+
+
+# 200 symbols over three years at 1-minute: 156,800 calls per symbol-day and 78,400 chunked,
+# against a 90,000 effective daily budget. The only span where the two costings DISAGREE about
+# whether the plan fits -- `ARGS` is 1 symbol over 5 days, five calls, which fits either way and
+# is why my first version of these tests passed without testing anything.
+BIG = [
+    "--symbols",
+    ",".join(f"SYM{i:03d}" for i in range(200)),
+    "--from",
+    "2023-09-04",
+    "--to",
+    "2026-09-03",
+    "--interval",
+    "1minute",
+]
+
+
+def test_the_budget_warning_costs_the_shape_that_will_actually_run(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Observed live on the 2026-09-04 daily seed.
+
+    A `--ranged` run of 3,101 symbols warned "this plan exceeds today's remaining budget" while
+    spending 3,101 of 90,000 calls. `exceeds_budget` costed `estimated_calls` -- the
+    per-symbol-day toll, 2,431,184 there -- for a run that was never going to pay it.
+
+    A warning that fires on a run using 3% of the budget is one an operator learns to skip, and
+    the next time it fires it will be right.
+    """
+    monkeypatch.setattr(backfill_module, "run_range_backfill", lambda *_a, **_k: _result())
+    monkeypatch.setattr(client_module, "ranged_fetcher", lambda *_a, **_k: lambda *_x: None)
+
+    assert campaign_module.main([*BIG, "--ranged"]) == 0
+
+    assert "exceeds today's remaining budget" not in capsys.readouterr().out
+
+
+def test_an_unranged_run_that_really_does_exceed_still_warns(
+    cli: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other direction, on the SAME plan: silencing the ranged case must not silence the
+    warning everywhere. Unranged, those 200 symbols cost 156,800 calls and genuinely will stop
+    on budget."""
+    assert campaign_module.main(BIG) == 0
+
+    assert "exceeds today's remaining budget" in capsys.readouterr().out

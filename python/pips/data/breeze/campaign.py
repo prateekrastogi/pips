@@ -207,7 +207,20 @@ class CampaignPlan:
             return None
         return len(self.symbols) * len(chunks)
 
-    def exceeds_budget(self, daily_budget: int) -> bool:
+    def exceeds_budget(self, daily_budget: int, *, ranged: bool = False) -> bool:
+        """Whether the plan will stop on budget -- costed for the shape that will RUN.
+
+        Observed live on the 2026-09-04 daily seed: a `--ranged` run of 3,101 symbols warned
+        that it exceeded the day's budget while spending 3,101 of 90,000 calls, because this
+        costed `estimated_calls` -- the per-symbol-day toll, 2,431,184 there -- for a run that
+        was never going to pay it. A warning that fires on a run using 3% of the budget is one
+        an operator learns to skip, and the next time it fires it will be right.
+
+        `ranged` with no chunked cost means the interval has no ranged shape at all
+        (`estimated_calls_if_chunked` is None), so the per-symbol-day figure is what will run.
+        """
+        if ranged and (chunked := self.estimated_calls_if_chunked) is not None:
+            return chunked > daily_budget
         return self.estimated_calls > daily_budget
 
     def describe(self) -> str:
@@ -330,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     bronze, manifest_path, budget_state = default_paths(args.data_root)
     budget = CallBudget.from_config(Path("config/breeze.yaml"), state_path=budget_state)
     print(f"  budget: {budget.remaining} calls remaining today of {budget.effective_budget}")
-    if plan.exceeds_budget(budget.remaining):
+    if plan.exceeds_budget(budget.remaining, ranged=args.ranged):
         print("  NOTE: this plan exceeds today's remaining budget. It will stop cleanly when")
         print("        the budget is spent and resume tomorrow — finished keys cost no calls.")
 
