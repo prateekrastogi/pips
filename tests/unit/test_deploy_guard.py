@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -104,15 +105,18 @@ def test_an_unreadable_calendar_defers_rather_than_proceeding() -> None:
     assert "calendar" in d.reason.lower()
 
 
-def test_an_unverified_holiday_list_errs_toward_deferring() -> None:
+def test_an_unverified_holiday_list_errs_toward_deferring(unverified_calendar: Any) -> None:
     # The shipped calendar has an empty, unverified holiday list, so it can only ever
     # OVER-report trading days — never under-report one. Over-reporting defers a restart,
     # which is the safe direction. Pinned so a future holiday source cannot silently invert it.
-    assert CAL.holidays_verified is False
-    assert CAL.is_trading_day(date(2026, 6, 1)) is True  # a real trading Monday
+    assert unverified_calendar.holidays_verified is False
+    assert unverified_calendar.is_trading_day(date(2026, 6, 1)) is True  # a real trading Monday
     # If 2026-06-01 were in fact a holiday, the empty list would still call it a trading day,
     # and the guard would DEFER a restart it could have allowed. Wrong in the safe direction.
-    assert restart_decision("live-engine", at(TRADING_DAY, "12:00:00"), CAL).permitted is False
+    assert (
+        restart_decision("live-engine", at(TRADING_DAY, "12:00:00"), unverified_calendar).permitted
+        is False
+    )
 
 
 # ------------------------------------ the rail's service set must be real ---------------

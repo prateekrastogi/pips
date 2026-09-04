@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -115,7 +116,7 @@ def test_a_listed_holiday_is_not_a_session() -> None:
     assert "not a trading day" in decision.reason
 
 
-def test_the_decision_says_whether_the_holiday_list_was_verified() -> None:
+def test_the_decision_says_whether_the_holiday_list_was_verified(unverified_calendar: Any) -> None:
     """An empty day on an UNVERIFIED calendar is unknown, not quiet.
 
     The shipped calendar has no holidays and says so (`holidays_verified` false), so on Diwali
@@ -123,7 +124,7 @@ def test_the_decision_says_whether_the_holiday_list_was_verified() -> None:
     flag onto the decision is what lets the record distinguish "the exchange was shut" from
     "the feed was dead" -- without it, the two are the same zero.
     """
-    assert plan_capture(CAL, OPEN).holidays_verified is False
+    assert plan_capture(unverified_calendar, OPEN).holidays_verified is False
 
     verified = CAL.model_copy(
         update={"holidays_source": "NSE circular", "holidays_verified_on": date(2026, 1, 1)}

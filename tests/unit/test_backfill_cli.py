@@ -54,8 +54,12 @@ def test_the_plan_warns_when_it_exceeds_the_daily_budget() -> None:
     # Stating the cost before spending it. A three-year U300 campaign is ~85k calls, which
     # fits one day's budget (ADR-0012) — but a wider request must say so rather than
     # discovering it at call 90,000.
+    # WAS 2020-01-01, which now RAISES: since 2026-09-05 the calendar's holidays are sourced
+    # and bounded, and it refuses dates it does not cover rather than guessing their trading
+    # days. Planning a campaign over a span whose sessions are unknown is exactly the thing
+    # worth refusing, so the fixture moved inside the covered range instead of the guard moving.
     plan = plan_campaign(
-        [f"S{i}" for i in range(500)], date(2020, 1, 1), date(2026, 1, 1), CALENDAR
+        [f"S{i}" for i in range(500)], date(2023, 1, 2), date(2026, 1, 1), CALENDAR
     )
     assert plan.estimated_calls > 100_000
     assert plan.exceeds_budget(daily_budget=90_000)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -75,7 +76,7 @@ def test_a_listed_holiday_is_not_a_gap() -> None:
     assert check_calendar_gaps({MON, TUE, THU, FRI}, calendar, MON, FRI) == []
 
 
-def test_an_unverified_holiday_list_makes_every_gap_a_maybe() -> None:
+def test_an_unverified_holiday_list_makes_every_gap_a_maybe(unverified_calendar: Any) -> None:
     """The shipped calendar lists no holidays, deliberately — so on Diwali this check sees a
     weekday with no data and cannot tell a shut exchange from a hole.
 
@@ -84,8 +85,8 @@ def test_an_unverified_holiday_list_makes_every_gap_a_maybe() -> None:
     can find. But the wording must not claim certainty it does not have, and the verified case
     must read differently — otherwise the reader cannot tell which they are looking at.
     """
-    assert CAL.holidays_verified is False
-    unverified = check_calendar_gaps({MON, TUE, THU, FRI}, CAL, MON, FRI)[0].detail
+    assert unverified_calendar.holidays_verified is False
+    unverified = check_calendar_gaps({MON, TUE, THU, FRI}, unverified_calendar, MON, FRI)[0].detail
 
     verified_cal = CAL.model_copy(
         update={"holidays_source": "NSE circular", "holidays_verified_on": date(2026, 1, 1)}

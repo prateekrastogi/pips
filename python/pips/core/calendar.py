@@ -43,6 +43,10 @@ SESSION_MINUTES_DEFAULT = 375
 _UNTRADEABLE: Final = frozenset({"CAS", "FLATTEN_ONLY"})
 
 
+class CalendarCoverageError(LookupError):
+    """A date was asked about that the holiday list does not claim to cover."""
+
+
 class SessionState(StrEnum):
     """The six session states of §3.15."""
 
@@ -91,6 +95,11 @@ class ExchangeCalendar(PipsConfig):
     holidays: list[date] = Field(default_factory=list)
     holidays_source: str | None = None
     holidays_verified_on: date | None = None
+    holidays_covering_start: date | None = None
+    holidays_covering_end: date | None = None
+    """What the holiday list actually covers. A list running 2023-2026 says NOTHING about 2019,
+    and answering `day not in holidays` for such a date reports an absence of data as a verified
+    absence of a holiday. Bounds required once the list is verified; see `is_trading_day`."""
 
     # -- identity ---------------------------------------------------------------------
     def content_hash(self) -> str:
@@ -140,8 +149,27 @@ class ExchangeCalendar(PipsConfig):
                 "before this calendar is used for anything that trades"
             )
 
+    def covers(self, day: date) -> bool:
+        """Is ``day`` inside the range the holiday list claims to know about?
+
+        Always true while the holidays are unverified: an unsourced calendar makes no claim to
+        bound, and `require_verified_holidays` is what guards the path to real capital.
+        """
+        if not self.holidays_verified:
+            return True
+        if self.holidays_covering_start is None or self.holidays_covering_end is None:
+            return True
+        return self.holidays_covering_start <= day <= self.holidays_covering_end
+
     def is_trading_day(self, day: date) -> bool:
         """Weekday and not a listed holiday. Honest about an unverified list: see above."""
+        if not self.covers(day):
+            raise CalendarCoverageError(
+                f"{day.isoformat()} is outside the range this calendar's holidays cover "
+                f"({self.holidays_covering_start} to {self.holidays_covering_end}). Answering "
+                "would report an absence of data as an absence of a holiday -- the list simply "
+                "does not reach this date. Extend `holidays` and `holidays_covering_*` together."
+            )
         return day.weekday() < 5 and day not in self.holidays
 
     # -- session structure ------------------------------------------------------------

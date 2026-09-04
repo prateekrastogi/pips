@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -117,7 +118,8 @@ def test_weekends_are_not_trading_days(cal: ExchangeCalendar) -> None:
     assert cal.is_trading_day(date(2026, 6, 1))  # Monday
 
 
-def test_the_calendar_admits_its_holidays_are_unverified(cal: ExchangeCalendar) -> None:
+def test_the_calendar_admits_its_holidays_are_unverified(unverified_calendar: Any) -> None:
+    cal = unverified_calendar
     # Costs are effective-dated data with source + verified_on (rule 6); a calendar is the
     # same kind of object. Shipping invented holiday dates would be worse than shipping none,
     # because an invented date looks exactly like a verified one.

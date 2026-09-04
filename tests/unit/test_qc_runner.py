@@ -18,6 +18,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 from pips.data.qc import runner as runner_module
 from pips.data.qc.checks import Finding, Severity
@@ -304,7 +305,7 @@ def test_a_non_adjacent_pair_is_counted_as_skipped_not_as_examined(tmp_path: Pat
 
 
 def test_the_cli_reports_coverage_and_warns_about_the_unverified_holiday_list(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seed_two_sessions(tmp_path / "bronze", first_close_paise=100_000, second_open_paise=99_900)
     (tmp_path / "state").mkdir()
@@ -312,6 +313,29 @@ def test_the_cli_reports_coverage_and_warns_about_the_unverified_holiday_list(
         json.dumps({"outcomes": {"CLEAN:2026-08-27": "OK", "CLEAN:2026-08-28": "OK"}}),
         encoding="utf-8",
     )
+    # The repo calendar's holidays are SOURCED since 2026-09-05, so it no longer triggers this
+    # warning -- correctly. The warning is about an UNVERIFIED list, so the test supplies one
+    # rather than being deleted: strip the holidays and their provenance into a temp calendar.
+    shipped = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[2] / "config" / "calendars" / "nse_equity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    shipped.update(
+        holidays=[],
+        holidays_source=None,
+        holidays_verified_on=None,
+        holidays_covering_start=None,
+        holidays_covering_end=None,
+    )
+    # `main` resolves its calendar RELATIVELY ("config/calendars/nse_equity.yaml"), so placing
+    # an unverified copy at that path under a chdir is enough -- no CLI flag needed, and no
+    # patching of module internals.
+    bare = tmp_path / "config" / "calendars"
+    bare.mkdir(parents=True, exist_ok=True)
+    (bare / "nse_equity.yaml").write_text(yaml.safe_dump(shipped, sort_keys=False), "utf-8")
+    monkeypatch.chdir(tmp_path)
+
     assert main([str(tmp_path)]) == 0
     out = capsys.readouterr().out
     assert "overnight-ratio comparisons" in out

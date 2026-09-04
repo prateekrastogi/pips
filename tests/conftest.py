@@ -19,6 +19,7 @@ than the guard is worth — so the rule lives here once, and text-matching guard
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -39,3 +40,33 @@ def uncommented(text: str, marker: str = "#") -> str:
 def strip_comments() -> Callable[[str], str]:
     """:func:`uncommented` as a fixture, so tests need no import path gymnastics."""
     return uncommented
+
+
+@pytest.fixture
+def unverified_calendar() -> Any:
+    """The repo calendar with its holiday list unsourced, for the unverified-path guards.
+
+    Until 2026-09-05 the shipped calendar had no holidays, so every guard that behaves
+    differently on an unverified list was tested against the repo's own file. Then the list was
+    sourced from NSE and those tests broke -- correctly. One of them says in as many words
+    "pinned so a future holiday source cannot silently invert it", and a future holiday source
+    is precisely what arrived.
+
+    The guards are about UNVERIFIED CALENDARS, not about this repo's calendar, so they are handed
+    one instead of being deleted, and the verified path gets its own assertions beside them.
+    """
+    from pathlib import Path
+
+    from pips.core.calendar import load_calendar
+
+    root = Path(__file__).resolve().parent.parent
+    calendar = load_calendar(root / "config" / "calendars" / "nse_equity.yaml")
+    return calendar.model_copy(
+        update={
+            "holidays": [],
+            "holidays_source": None,
+            "holidays_verified_on": None,
+            "holidays_covering_start": None,
+            "holidays_covering_end": None,
+        }
+    )

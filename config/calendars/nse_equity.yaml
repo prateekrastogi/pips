@@ -3,12 +3,21 @@
 # A calendar is effective-dated data, exactly like a fee schedule (rule 6): it carries a
 # source and a verification date, and code may ask whether it has been verified.
 #
-# HOLIDAYS ARE DELIBERATELY EMPTY. Inventing plausible dates would be worse than shipping
-# none — an invented holiday is indistinguishable from a verified one at the point of use,
-# and it would silently delete or fabricate a trading day in every backtest that spans it.
-# The list is sourced at M6 from the PIT exchange-calendar master, with source and
-# verified_on filled in by the same commit. Until then `holidays_verified` is false and
-# anything on the path to real capital must call `require_verified_holidays()` and refuse.
+# HOLIDAYS ARE SOURCED, 2026-09-05, from NSE's own trading-holiday API for the CASH MARKET
+# segment (`CM`), one call per year for 2023-2026. 79 dates. Not transcribed by hand: fetched
+# as JSON and rendered mechanically, because a mistyped holiday deletes a real trading day from
+# every backtest that spans it and is indistinguishable from a verified one at the point of use.
+#
+# THE COVERING RANGE IS PART OF THE DATA. A list that runs 2023-2026 says nothing whatever about
+# 2019, and `day not in holidays` would answer "it traded" for a date the list never reached.
+# `holidays_covering_*` bounds what this file actually knows, and `is_trading_day` REFUSES
+# outside it rather than guessing. Extending the list means extending the range in the same
+# commit.
+#
+# The `CM` segment specifically: NSE publishes different lists per segment (FO, COM, IRD ...)
+# and this is a cash-equity project. Some dates fall on a Saturday or Sunday and are kept
+# verbatim as published — the weekday rule already excludes them, and dropping them would make
+# this file disagree with its source for no gain.
 
 schema_version: 1
 exchange: NSE
@@ -40,6 +49,90 @@ cas_window:
   end:   "15:35:00"
   enabled_as_alpha: false
 
-holidays: []
-holidays_source: null
-holidays_verified_on: null
+holidays_source: "NSE trading-holiday API, segment CM (www.nseindia.com/api/holiday-master?type=trading&year=YYYY), fetched from arb-vm"
+holidays_verified_on: 2026-09-05
+
+# What this list actually covers. Outside it, `is_trading_day` refuses.
+holidays_covering_start: 2023-01-01
+holidays_covering_end: 2026-12-31
+
+holidays:
+  - 2023-01-26   # Thursday, Republic Day
+  - 2023-02-18   # Saturday, Mahashivratri
+  - 2023-03-07   # Tuesday, Holi
+  - 2023-03-30   # Thursday, Ram Navami
+  - 2023-04-04   # Tuesday, Mahavir Jayanti
+  - 2023-04-07   # Friday, Good Friday
+  - 2023-04-14   # Friday, Dr. Baba Saheb Ambedkar Jayanti
+  - 2023-04-22   # Saturday, Id-Ul-Fitr (Ramzan ID)
+  - 2023-05-01   # Monday, Maharashtra Day
+  - 2023-06-29   # Thursday, Bakri Id
+  - 2023-07-29   # Saturday, Moharram
+  - 2023-08-15   # Tuesday, Independence Day
+  - 2023-09-19   # Tuesday, Ganesh Chaturthi
+  - 2023-10-02   # Monday, Mahatma Gandhi Jayanti
+  - 2023-10-24   # Tuesday, Dussehra
+  - 2023-11-12   # Sunday, Diwali-Laxmi Pujan*
+  - 2023-11-14   # Tuesday, Diwali-Balipratipada
+  - 2023-11-27   # Monday, Gurunanak Jayanti
+  - 2023-12-25   # Monday, Christmas
+  - 2024-01-22   # Monday, Special Holiday
+  - 2024-01-26   # Friday, Republic Day
+  - 2024-03-02   # Saturday, Special Live Trading
+  - 2024-03-08   # Friday, Mahashivratri
+  - 2024-03-25   # Monday, Holi
+  - 2024-03-29   # Friday, Good Friday
+  - 2024-04-11   # Thursday, Id-Ul-Fitr (Ramadan Eid)
+  - 2024-04-14   # Sunday, Dr. Baba Saheb Ambedkar Jayanti
+  - 2024-04-17   # Wednesday, Shri Ram Navmi
+  - 2024-04-21   # Sunday, Shri Mahavir Jayanti
+  - 2024-05-01   # Wednesday, Maharashtra Day
+  - 2024-05-20   # Monday, General Parliamentary Elections
+  - 2024-06-17   # Monday, Bakri Id
+  - 2024-07-17   # Wednesday, Moharram
+  - 2024-08-15   # Thursday, Independence Day
+  - 2024-09-07   # Saturday, Ganesh Chaturthi
+  - 2024-10-02   # Wednesday, Mahatma Gandhi Jayanti
+  - 2024-10-12   # Saturday, Dussehra
+  - 2024-11-02   # Saturday, Balipratipada
+  - 2024-11-15   # Friday, Prakash Gurpurb Sri Guru Nanak Dev
+  - 2024-11-20   # Wednesday, Assembly Elections in Maharashtra
+  - 2024-12-25   # Wednesday, Christmas
+  - 2025-01-26   # Sunday, Republic Day
+  - 2025-02-26   # Wednesday, Mahashivratri
+  - 2025-03-14   # Friday, Holi
+  - 2025-03-31   # Monday, Id-Ul-Fitr (Ramadan Eid)
+  - 2025-04-06   # Sunday, Shri Ram Navami
+  - 2025-04-10   # Thursday, Shri Mahavir Jayanti
+  - 2025-04-14   # Monday, Dr. Baba Saheb Ambedkar Jayanti
+  - 2025-04-18   # Friday, Good Friday
+  - 2025-05-01   # Thursday, Maharashtra Day
+  - 2025-06-07   # Saturday, Bakri Id
+  - 2025-07-06   # Sunday, Muharram
+  - 2025-08-15   # Friday, Independence Day / Parsi New Year
+  - 2025-08-27   # Wednesday, Shri Ganesh Chaturthi
+  - 2025-10-02   # Thursday, Mahatma Gandhi Jayanti/Dussehra
+  - 2025-10-21   # Tuesday, Diwali Laxmi Pujan
+  - 2025-10-22   # Wednesday, Balipratipada
+  - 2025-11-05   # Wednesday, Prakash Gurpurb Sri Guru Nanak Dev
+  - 2025-12-25   # Thursday, Christmas
+  - 2026-01-15   # Thursday, Municipal Corporation Election - Maharashtra
+  - 2026-01-26   # Monday, Republic Day
+  - 2026-02-15   # Sunday, Mahashivratri
+  - 2026-03-03   # Tuesday, Holi
+  - 2026-03-21   # Saturday, Id-Ul-Fitr (Ramadan Eid)
+  - 2026-03-26   # Thursday, Shri Ram Navami
+  - 2026-03-31   # Tuesday, Shri Mahavir Jayanti
+  - 2026-04-03   # Friday, Good Friday
+  - 2026-04-14   # Tuesday, Dr. Baba Saheb Ambedkar Jayanti
+  - 2026-05-01   # Friday, Maharashtra Day
+  - 2026-05-28   # Thursday, Bakri Id
+  - 2026-06-26   # Friday, Muharram
+  - 2026-08-15   # Saturday, Independence Day
+  - 2026-09-14   # Monday, Ganesh Chaturthi
+  - 2026-10-02   # Friday, Mahatma Gandhi Jayanti
+  - 2026-10-20   # Tuesday, Dussehra
+  - 2026-11-08   # Sunday, Diwali Laxmi Pujan*
+  - 2026-11-10   # Tuesday, Diwali-Balipratipada
+  - 2026-11-24   # Tuesday, Prakash Gurpurb Sri Guru Nanak Dev
+  - 2026-12-25   # Friday, Christmas

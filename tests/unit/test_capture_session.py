@@ -202,13 +202,15 @@ def test_the_session_subscribes_the_symbols_it_was_given(tmp_path: Path) -> None
     assert feed.subscribed == ["RELIND", "TCS"]
 
 
-def test_the_decision_says_whether_the_holiday_list_was_verified(tmp_path: Path) -> None:
+def test_the_decision_says_whether_the_holiday_list_was_verified(
+    tmp_path: Path, unverified_calendar: Any
+) -> None:
     """Carried onto the session report for the same reason it is on the decision: a capture day
     with no messages, on a calendar with no verified holidays, is UNKNOWN rather than quiet."""
     writer = CaptureWriter(root=tmp_path, session_id="s1", day=DAY)
 
     report = run_session(
-        calendar=CAL,
+        calendar=unverified_calendar,
         now=OPEN,
         feeds=[SpyFeed()],
         writer=writer,
