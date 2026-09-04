@@ -33,13 +33,35 @@ day-keyed records. That is the skip counter doing its job: an empty check that c
 itself off as a clean one. The alternative reading — "checked 3,107, zero findings" — would have
 been a clean bill nothing earned, and `promote_bronze` reads exactly that set as consent.
 
-**Next unit: teach promotion the range shape** — group a range payload's candles by their own
-date, resolve the vendor code per day, and emit per-day silver bars. That is the first of three
-missing links between the seed and CURRENT's stated ordering ("range-fetch daily for everything
-→ rank on the three daily-derivable components"). The second is a bars → `SymbolStats` path,
-which does not exist. The third is that `_usable` requires all four components including
-**spread**, which daily OHLC cannot give at any interval — so the three-component ranking is a
-distinct function from `liquidity_scores`, not a call to it with fields missing.
+**This is now `docs/state/blocks/BLK-0003.md` and it needs the owner.** An earlier version of
+this section named the next unit as "teach promotion the range shape". That was wrong, and the
+correction matters: it treats a missing **layer** as a missing branch.
+
+`_INTERVAL_MINUTES = 1` — silver is *definitionally* the one-minute intraday panel, and its bar
+model is `(trade_date, close_label)` with the label clipped to `09:15 < t <= 15:30`. A daily bar
+has no intraday close label. Fed through `normalize_candles` a daily candle yields **zero bars**,
+observed directly:
+
+```
+daily candle at 00:00:00 -> 0 bar(s)
+same candle at 10:00:00 -> 1 bar(s)
+```
+
+So handling the range shape alone would walk all 3,101 records one step further and quarantine
+them again as `no bars survived normalization` — a worse message for the same outcome, wearing
+the appearance of progress.
+
+Confirmed by running promotion over the real archive rather than reading it:
+
+```
+promotion: read 3107 file(s), promoted 6, 2216 bar(s); 3101 quarantined (0 by QC)
+```
+
+The decision in BLK-0003 is where daily bars live: **a daily panel beside silver** (my read), or
+**an interval dimension inside silver**. Two further gaps follow from it and need no decision: no
+bars → `SymbolStats` path exists anywhere outside tests, and the three-component daily ranking
+must be its own function, because `_usable` refuses a score with spread missing — which daily
+OHLC cannot supply at any interval.
 
 ## Superseded by the above
 **Nothing is in flight. The research factory is built and every part of it verified as far as
