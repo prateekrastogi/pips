@@ -277,9 +277,22 @@ prices exact to the paise, an empty holiday list, a machine that happens to be i
    existed; `check_calendar_gaps` is now the other `[C-QC-01]`. What still blocks `enforced` is
    only the first half: nothing makes QC a precondition of anything.
 
-`certify-smoke`: **0 certified, 18 unsupplied.** Seven of eight hard gates compute;
-concentration is measured but ungated; `outer_folds` has a bar `[G-P4-FOLDS]` and fails on
-absence until walk-forward runs, which needs the panel from (1).
+`certify-smoke` — **measured 2026-09-04 by `make certify-smoke`, not asserted.** The previous
+entry here said "0 certified, 18 unsupplied; seven of eight hard gates compute; concentration is
+measured but ungated", and three of those four numbers had drifted. Running it:
+
+- **0 certified** — unchanged, and expected.
+- **21 dossier fields the factory cannot supply**, not 18.
+- **Five of eight hard gates compute**, not seven: `economics.dsr` (0.0), `stability.pbo`
+  (0.81), `stability.spa_p` (1.0), `stress.cost_1_5x` (−2.16), `stress.delay_1_bar` (−1.45).
+  All five compute and all five fail, which on fixtures of seeded noise is the right answer.
+- **Three are ungated because they are not `Measurement`s at all** — `parameter_plateau`,
+  `concentration`, `outer_folds`. "Concentration is *measured* but ungated" was the stale part:
+  it is not measured. ADR-0014 declares no bar for it, so it has nowhere to come from, and
+  `outer_folds` waits on walk-forward, which waits on the panel from (1).
+
+These are tool outputs, so they are a snapshot and go stale the moment the factory supplies one
+more field. Re-run the command rather than trusting the numbers.
 
 *Verified 2026-09-02, so it is not re-litigated:* `capacity.minimum_economic_ticket` needs a
 **price**, not a cost model. Every component of `config/costs/nse_equity_intraday.yaml` is
