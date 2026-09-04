@@ -176,6 +176,22 @@ def main(argv: list[str] | None = None) -> int:
     past = Path(args[0]) if args else Path("../past")
     rows = load_salvage(Path("docs/ledger/salvage.yaml"))
     donors = [r for r in rows if r.decision is not Decision.NONE_FOUND]
+
+    # A ROOT THAT IS NOT THERE IS ONE FACT, NOT ONE PER ROW. `../past` was deleted on
+    # 2026-09-04, deliberately, once every PORT row carried its audit note -- so the usual
+    # reason this fails now is that the harvest is FINISHED, not that donors have gone missing.
+    # Printing "no git repo at ../past/convexity" twenty-one times says the second thing, and a
+    # reader has no way to tell it from a corrupted or half-cloned source.
+    if not past.exists():
+        print(f"salvage-verify: {past} does not exist, so no donor could be checked.")
+        print("    This is expected: the harvest completed on 2026-09-04 and the folder was")
+        print("    removed. Every PORT row carries its own AUDITED / HARVESTED / KNOWLEDGE")
+        print("    CAPTURED note, and docs/ledger/salvage.yaml is now the artifact.")
+        print("    To run this check again, restore the donors first:")
+        for repo in sorted({r.repo for r in donors if r.repo}):
+            print(f"      git clone https://github.com/prateekrastogi/{repo}.git {past}/{repo}")
+        return 1
+
     failures = verify_donors(rows, past)
     if failures:
         print(f"salvage-verify FAILED ({len(failures)} problem(s)):")

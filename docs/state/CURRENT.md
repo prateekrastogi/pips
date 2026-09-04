@@ -355,6 +355,18 @@ fraction at every size and no minimum economic ticket arises from it; the constr
 shares, which needs a price, which needs the panel. The size-independent form of the question is
 already `economics.breakeven_edge`.
 
+## `../past` is gone (2026-09-04)
+
+The harvest finished and the folder was deleted on the owner's instruction. All 15 `PORT` rows
+carry an AUDITED / HARVESTED / KNOWLEDGE CAPTURED note, so `docs/ledger/salvage.yaml` is the
+artifact and the folder was working material.
+
+Verified before deleting, not assumed: **0 commits not on any remote** in all three repos, 0
+dirty files, 0 stashes, 0 untracked files, and every one of the 21 donor SHAs reachable from a
+remote branch. `make ci` is unaffected (`salvage-verify` was never in the ladder) and
+`tests/unit/test_salvage.py` builds its own repo under `tmp_path`. `make salvage-verify` now
+explains that the folder was removed on purpose and prints the `git clone` lines that restore it.
+
 ## Blockers / awaiting
 - **WAITING ON `BLK-0003` — and it sits on the critical path**, so the tick stops here rather
   than falling through (LOOP.md §1.2). The seed's 3,101 symbols of real daily bars cannot reach

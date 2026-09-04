@@ -17,6 +17,7 @@ from pips.ledger.salvage import (
     SalvageRow,
     check_salvage,
     load_salvage,
+    main,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -161,3 +162,27 @@ def test_donor_rows_are_verified_against_real_blobs(tmp_path: Path) -> None:
     )
     failures = verify_donors([missing], past)
     assert len(failures) == 1 and "ghost.py" in failures[0]
+
+
+def test_an_absent_past_directory_is_reported_as_absent_not_as_21_broken_donors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`../past` was deleted on 2026-09-04, deliberately, after the harvest completed.
+
+    Before this, running the verifier without it printed one failure PER ROW —
+    "SAL-0019: no git repo at ../past/convexity", twenty-one times — which reads exactly like a
+    corrupted or half-cloned harvest source. A folder that was removed on purpose and a folder
+    whose donors have gone missing are different states, and they were being reported
+    identically.
+
+    The register's header carries the `git clone` lines that restore it; this points there
+    rather than making the reader work out that nothing is actually wrong.
+    """
+    missing = tmp_path / "not-here"
+    code = main([str(missing)])
+
+    out = capsys.readouterr().out
+    assert code == 1, "still a failure: the check genuinely did not run"
+    assert "does not exist" in out, out
+    assert "git clone" in out, "the reader needs the way back, not just the bad news"
+    assert out.count("no git repo") == 0, "a missing root is one fact, not one per donor row"
