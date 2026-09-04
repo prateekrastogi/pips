@@ -278,7 +278,14 @@
   size_bytes: 7203
   decision: PORT
   covers_needs: ["M7 universe policy"]
-  notes: "Amihud is a named term in M7's liquidity score; this is a calibrated implementation."
+  notes: >
+    Amihud is a named term in M7's liquidity score; this is a calibrated implementation.
+    HARVESTED 2026-09-04 -> `pips.universe.liquidity.amihud_ratio`, which records this SHA in
+    its docstring. What was taken is the MEASURE, not the calibration: the recorded path here
+    is the walk-forward calibration companion, and it imports the measure from
+    `spread_impact.py` (SAL-0013, SKIP). SAL-0013's note already anticipated this -- "its
+    amihud_ratio shape corroborates SAL-0015, which remains a PORT" -- so the measure crossed
+    over and the crypto-anchored impact constants did not.
 
 - id: SAL-0016
   component: "Corporate actions handling"

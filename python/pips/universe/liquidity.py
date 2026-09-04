@@ -39,6 +39,7 @@ __all__ = [
     "SUPPORTED_N",
     "WEIGHTS",
     "SymbolStats",
+    "amihud_ratio",
     "liquidity_scores",
     "stable_core",
     "top_n",
@@ -53,6 +54,48 @@ WEIGHTS: dict[str, float] = {
 """M7's coefficients, verbatim and closed. Not a default, not a parameter: *fixed,
 stress-tested, never P&L-tuned* is the property that makes the universe an eligibility rule
 rather than a second selection stage."""
+
+
+def amihud_ratio(returns: Sequence[float], rupee_volume: Sequence[float]) -> float:
+    """Amihud (2002) illiquidity for ONE symbol over a causal trailing window.
+
+        Amihud_i = (1/D) * sum_d |r_i,d| / Vol_i,d
+
+    PORTED under rule 13 from `../past` convexity `c13fccaf3dfa`,
+    `src/convexity/cost/friction/spread_impact.py::amihud_ratio` (`SAL-0015`). The donor's
+    surrounding friction model is SKIPped (`SAL-0013`) because its impact anchor was calibrated
+    on a crypto book; this measure is venue-neutral and is the part that was kept.
+
+    Per-symbol rather than the donor's ``(D, n_sym)`` matrix, because `SymbolStats` is
+    per-symbol and a matrix here would exist only to be sliced apart again.
+
+    The caller slices the trailing window ending at day ``t`` INCLUSIVE, so the estimate stays
+    F_t-measurable (rule 2). This function does no windowing of its own: a window length chosen
+    in here would be a second, hidden parameter.
+
+    A day whose volume is not strictly positive and finite is DROPPED from the mean -- never
+    divided into, and never counted as a zero contribution. The two are easy to confuse and
+    they differ: counting an untraded day as zero shrinks the average and makes an illiquid
+    name look tighter, which is the flattering direction.
+
+    A name with no usable day is NaN rather than 0.0, because a zero Amihud is the most liquid
+    reading there is. `_usable` already refuses non-finite components, so the NaN leaves the
+    name out of the ranking instead of putting it at the top of it.
+    """
+    if len(returns) != len(rupee_volume):
+        raise ValueError(
+            f"returns ({len(returns)}) and rupee_volume ({len(rupee_volume)}) must be aligned; "
+            "zipping to the shorter one would silently drop the tail of the window"
+        )
+    per_day = [
+        abs(r) / v
+        for r, v in zip(returns, rupee_volume, strict=True)
+        if math.isfinite(r) and math.isfinite(v) and v > 0.0
+    ]
+    if not per_day:
+        return math.nan
+    return sum(per_day) / len(per_day)
+
 
 SUPPORTED_N: frozenset[int] = frozenset({50, 100, 150, 300})
 """The universe sizes M7 registers. An arbitrary N is a universe nobody pre-registered, and
