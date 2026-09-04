@@ -81,6 +81,10 @@ class QcReport:
     # was examined and found whole, because that indistinguishability is exactly how the
     # missing check went unnoticed for a milestone.
     calendar_days_examined: int = 0
+    # Records QC has no checks for -- range spans, which the daily seed writes by the thousand.
+    # Counted rather than ignored: "0 findings" over an archive QC mostly skipped is not a
+    # result, it is the same clean line a full pass prints.
+    unsupported_shape: int = 0
     # THE KEYS, not just the counts. `checked: int` cannot tell promotion WHICH records were
     # examined, and promotion has to know per record -- a count would let it assume the two
     # sets line up and promote an unchecked record as though QC had cleared it.
@@ -133,6 +137,11 @@ class QcReport:
             f"overnight-ratio comparisons made {self.ratio_checks_run}, "
             f"skipped {self.ratio_checks_skipped}; "
             f"{calendar}"
+            + (
+                f"; skipped {self.unsupported_shape} record(s) of a shape QC has no checks for"
+                if self.unsupported_shape
+                else ""
+            )
         )
 
 
@@ -297,6 +306,25 @@ def run_qc(
     for path in sorted(bronze_root.rglob("*.json")):
         record = json.loads(path.read_text(encoding="utf-8"))
         request = record["request"]
+        if "trade_date" not in request:
+            # A RANGE record: `run_range_backfill` writes a span, not a day, and the daily
+            # universe seed is made entirely of them. Found 2026-09-04 by running QC over the
+            # archive the seed had just written -- `KeyError: 'trade_date'` on the first record
+            # and the whole pass died. `promote_bronze` already carries this lesson: "a bare
+            # KeyError here takes the whole run down and discards every reason already
+            # collected for every other file."
+            #
+            # SKIPPED, NOT QUARANTINED. Quarantine means a record FAILED a check, and a shape
+            # QC has no checks for has failed nothing -- moving thousands of good records aside
+            # would be wrong twice over. It is counted instead, because a pass that silently
+            # ignored most of the archive would print the same clean line as one that examined
+            # it.
+            #
+            # And it is NOT added to `examined_keys`: `promote_bronze` reads those and counts
+            # anything absent as unchecked, so listing a record QC never looked at would be a
+            # clean bill QC never issued.
+            report.unsupported_shape += 1
+            continue
         symbol, day = request["symbol"], date.fromisoformat(request["trade_date"])
         key = f"{symbol}:{day.isoformat()}"
         seen_days.setdefault(symbol, set()).add(day)
