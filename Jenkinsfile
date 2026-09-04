@@ -27,6 +27,19 @@ pipeline {
   environment {
     SHA   = "${env.GIT_COMMIT ?: 'dev'}"
     IMAGE = "pips/research:${env.GIT_COMMIT ?: 'dev'}"
+    // The image already syncs the environment at build time -- `uv sync --group dev
+    // --no-install-project`, then `uv sync --group dev --frozen`. Without this, `uv run`
+    // re-resolves `pips @ file:///app` from `build-system.requires` on every stage, so a
+    // transient DNS or index blip fails whichever stage runs first and reports it as THAT
+    // stage failing. Twice in two days: #244 died in `determinism` on a pypi timeout, #267 in
+    // `lint` on a DNS error, and `make: *** [Makefile:26: lint] Error 1` is indistinguishable
+    // from a real lint failure without reading the log. Both went green on retry with the
+    // identical commit.
+    //
+    // The failure mode of this setting being WRONG is loud: if the baked environment is
+    // insufficient, the very next build fails immediately and visibly rather than silently
+    // using something stale.
+    UV_NO_SYNC = "1"
   }
 
   stages {

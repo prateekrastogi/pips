@@ -342,3 +342,43 @@ def test_the_adapter_and_the_supervisor_capture_across_a_drop(tmp_path: Any) -> 
     gap = records[1]
     assert (gap["disconnected_at_ns"], gap["reconnected_at_ns"]) == (1_000, 2_000)
     assert LIVENESS_PATH in gap["reason"], "the gap says what reported the drop"
+
+
+def test_closing_a_feed_that_never_connected_does_not_mask_the_real_failure() -> None:
+    """Found live, 2026-09-04, on the first real subscription attempt.
+
+    The socket failed to connect (`Failed to connect to live stream`). `run_capture` then ran
+    `feed.close()` from its `finally`, and the vendor's `ws_disconnect` emits on the namespace
+    unconditionally — raising `BadNamespaceError: / is not a connected namespace` from inside
+    the cleanup. **That exception replaced the one that mattered**, so the traceback ended in a
+    socketio internal and the actual reason was three frames up under "During handling of the
+    above exception".
+
+    The supervisor closes every feed in a `finally` precisely so a drop cannot leak one, which
+    means `close()` is reached on paths where the socket never opened. It must not raise there.
+    """
+
+    class NeverConnected(FakeBreeze):
+        def ws_disconnect(self) -> list[dict[str, str]]:
+            raise RuntimeError("/ is not a connected namespace")
+
+    feed = BreezeFeed(NeverConnected())
+
+    feed.close()  # must not raise
+
+
+def test_a_failure_to_close_is_still_visible() -> None:
+    """Swallowing is not the same as hiding. A disconnect that fails is worth knowing about --
+    it can leak a socket -- so it is recorded on the feed rather than discarded, and a caller
+    that wants to report cleanup trouble can. What it must not do is replace the reason the
+    capture ended."""
+
+    class NeverConnected(FakeBreeze):
+        def ws_disconnect(self) -> list[dict[str, str]]:
+            raise RuntimeError("/ is not a connected namespace")
+
+    feed = BreezeFeed(NeverConnected())
+    feed.close()
+
+    assert feed.close_error is not None
+    assert "not a connected namespace" in str(feed.close_error)

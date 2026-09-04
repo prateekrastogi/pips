@@ -89,6 +89,8 @@ class BreezeFeed:
         self._queue: queue.Queue[Any] = queue.Queue()
         self._stop_reason: str | None = None
         self._closed = False
+        self.close_error: Exception | None = None
+        """Set when `ws_disconnect` raised. Visible rather than swallowed; see `close`."""
         # Registered before subscribing: the socketio thread can deliver the moment the
         # subscription lands, and a tick arriving before the callback exists is gone.
         client.on_ticks = self._receive
@@ -153,7 +155,25 @@ class BreezeFeed:
         self._closed = True
         self.stop("closed")
         self._client.on_ticks = None
-        self._client.ws_disconnect()
+        try:
+            self._client.ws_disconnect()
+        except Exception as failure:
+            # FOUND LIVE, 2026-09-04, on the first real subscription attempt. The socket failed
+            # to connect, `run_capture` reached this from its `finally`, and the vendor's
+            # `ws_disconnect` emits on the namespace unconditionally -- raising
+            # `BadNamespaceError: / is not a connected namespace` from inside the cleanup. That
+            # exception REPLACED the one that mattered, so the traceback ended in a socketio
+            # internal and "Failed to connect to live stream" was three frames up under
+            # "During handling of the above exception".
+            #
+            # The supervisor closes every feed in a `finally` so a drop cannot leak one, which
+            # means this runs on paths where the socket never opened. Broad `except` on purpose:
+            # what the vendor raises when disconnecting something it never connected is its
+            # business, and none of it is a reason to lose the caller's failure.
+            #
+            # RECORDED, not swallowed -- a disconnect that fails can leak a socket, so it stays
+            # visible on the feed for a caller that wants to report it.
+            self.close_error = failure
 
     def _receive(self, payload: Any) -> None:
         """The vendor callback. Runs on the socketio thread; does nothing that can block."""

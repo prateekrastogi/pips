@@ -758,6 +758,12 @@
   spec: "IMPLEMENTATION.md#310-order-plane"
   code: "schemas/order_intent"
   tests: []
+  # RULE 9 LANDS HERE: "all client-API orders are algo orders and get broker Algo-ID tagging".
+  # The tag belongs in this schema -- an OrderIntent that cannot carry one cannot be tagged, and
+  # the requirement is regulatory, not stylistic (SEBI retail-algo framework, mandatory since
+  # 1 Apr 2026). Recorded on the row because until 2026-09-04 the obligation existed only in the
+  # constitution's prose: nothing in the ledger carried it, so whoever built this schema would
+  # have had to remember rule 9 unprompted.
   status: planned
   owner_milestone: M23
 
@@ -816,6 +822,10 @@
   spec: "IMPLEMENTATION.md#313-live-journal"
   code: "rust/crates/journal"
   tests: []
+  # RULE 9 LANDS HERE: "audit trail retained >=5 years". This journal IS that trail, so the
+  # retention is a property of this row and not of whatever storage happens to hold it. Recorded
+  # because until 2026-09-04 the obligation lived only in the constitution's prose -- a
+  # five-year retention is not something to discover after the first year is deleted.
   status: planned
   owner_milestone: M23
 

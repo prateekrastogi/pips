@@ -83,19 +83,24 @@ it; the search runs under `COST_MODEL = "0" * 64`, a declared placeholder. Wirin
 is M9's job, and until then this is a stand-in that says it is one.
 """
 
-SELECTION_COST_FACTOR = 0.5
-"""How much of `ROUND_TRIP_COST` the SELECTION side is priced at, and it is not 1.
+SELECTION_COST_FACTOR = 1.0
+"""How much of `ROUND_TRIP_COST` the SELECTION side is priced at. ONE -- they are the same line.
 
 This was an unexplained `CostLine(0.00025)` two hundred lines below the comment warning against
 exactly it -- "Two literals would drift, and S5 would then price a trade differently from the
-series it is selecting on." They had drifted, by a factor of two, and the drift is load-bearing:
-set it to 1 and `s5_admissible` goes false, because the synthetic edge clears 2.5 bps and not 5.
+series it is selecting on." They had drifted, by a factor of two, and the drift was
+load-bearing: at 0.5 the smoke reported `s5_admissible: True`, and at 1 it does not, because the
+synthetic edge clears 2.5 bps and not 5.
 
-So the S5 smoke demonstrates the chain composing only because selection is priced at half what
-the returns are netted at. That is a property of the FIXTURE, and naming it here is not a
-defence of it -- it is the difference between a reader seeing the assumption and not. Whether
-the edge curve should clear the honest cost instead is a modelling decision for M15, and one
-that should be taken deliberately rather than discovered.
+RESOLVED 2026-09-04 (owner): equalise, and let the verdict be false. The smoke's job is to prove
+the chain is WIRED, and its own output says so -- "WHAT THIS IS NOT: an edge. The fixtures are
+two synthetic symbols from a seeded random walk". An admissible verdict on noise was never
+meaningful, and buying one by pricing selection at half the netting cost made the single number
+that looks like a result the one that was arranged.
+
+Kept as a named constant rather than deleted: the ratio being 1 is the claim, and a claim worth
+stating is worth being able to see. A future venue where selection and netting genuinely differ
+would change this and say why.
 """
 
 SELECTION_COST = ROUND_TRIP_COST * SELECTION_COST_FACTOR

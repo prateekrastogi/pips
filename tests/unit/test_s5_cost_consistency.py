@@ -11,14 +11,15 @@ comment — for the line that decides τ* and h*. `turnover.CostLine` documents 
 all-in cost per round trip", the same quantity `gross_cost` carries, so these are two prices for
 one thing.
 
-**The smoke's headline verdict depends on the gap.** Setting them equal makes `s5_admissible`
+**The smoke's headline verdict depended on the gap.** Equalising them makes `s5_admissible`
 false: the synthetic edge clears 2.5 bps and does not clear 5. So the demonstration that the S5
-chain composes end to end rests on selection being priced at half what the returns are netted
+chain composes end to end rested on selection being priced at half what the returns are netted
 at, and nothing said so.
 
-This test does not decide which number is right — that is a modelling question about a fixture,
-not something to settle from the outside. It pins the RELATIONSHIP, so the two cannot drift
-further in silence, and it fails loudly if anyone changes one without the other.
+**Resolved 2026-09-04 (owner): equalise.** `SELECTION_COST_FACTOR` is 1.0 and the verdict on
+fixture noise is false, which is the honest answer — the smoke's job is to prove the chain is
+wired, not to produce an admissible strategy from a seeded random walk. These tests now pin that
+the two lines are ONE line, so splitting them again would have to be argued for.
 """
 
 from __future__ import annotations
@@ -50,15 +51,24 @@ def test_the_turnover_inputs_use_the_named_selection_cost() -> None:
     assert line.total == pytest.approx(families.SELECTION_COST)
 
 
-def test_the_smokes_admissibility_is_recorded_as_depending_on_the_gap() -> None:
-    """A regression guard on the finding itself.
+def test_the_two_lines_are_now_one_line() -> None:
+    """The guard that used to sit here asserted `SELECTION_COST_FACTOR != 1.0`, so that
+    equalising could not happen quietly: *"that should be a deliberate act with its reasoning
+    written down, not something noticed later."*
 
-    If `SELECTION_COST_FACTOR` ever becomes 1, the two lines agree — and the S5 smoke stops
-    reporting admissible, which is a real change in what the fixture demonstrates. That should
-    be a deliberate act with its reasoning written down, not something noticed later.
+    It did its job — this is the deliberate act. Resolved by the owner on 2026-09-04: equalise,
+    and let the verdict be false. The smoke proves the chain is WIRED, and its own output says
+    "WHAT THIS IS NOT: an edge — the fixtures are two synthetic symbols from a seeded random
+    walk". An admissible verdict on noise was never meaningful, and buying one by pricing
+    selection at half the netting cost made the single number that looks like a result the one
+    that was arranged.
+
+    The assertion is inverted rather than deleted: a future change back to a split line would be
+    a modelling decision too, and should meet the same bar.
     """
-    assert families.SELECTION_COST_FACTOR != 1.0, (
-        "the two cost lines now agree — S5 will report inadmissible on the fixture edge, so "
-        "the smoke no longer demonstrates the chain composing. If that is intended, say so "
-        "here and in the module; if not, the edge curve needs to clear the honest cost."
+    assert families.SELECTION_COST_FACTOR == 1.0, (
+        "the selection line has been split from the netting line again — S5 would price a "
+        "trade differently from the series it selects on, which is what `families.py`'s own "
+        "comment warns against. If a venue genuinely differs, say which and why."
     )
+    assert families.SELECTION_COST == families.ROUND_TRIP_COST

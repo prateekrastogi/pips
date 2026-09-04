@@ -211,7 +211,11 @@ def test_a_winner_that_never_traded_is_named_rather_than_crashing_s5(tmp_path: P
     # session the five remaining alphas trade the same two random-walk symbols and correlate
     # heavily, so the pairwise gate collapses them to one — correct behaviour, not a failure.
     assert len(report["ensemble"]) >= 1  # type: ignore[arg-type]
-    assert report["s5_admissible"] is True
+    # THAT S5 REACHED A VERDICT is the subject; which verdict is not, and the comment above
+    # already says so. This asserted `is True` while `SELECTION_COST_FACTOR` was 0.5 -- the
+    # ensemble cleared a cost line half the one its returns were netted at. Equalised
+    # (2026-09-04), the fixture's noise does not clear its costs and the honest answer is False.
+    assert isinstance(report["s5_admissible"], bool)
 
 
 def test_the_run_is_deterministic(tmp_path: Path) -> None:
