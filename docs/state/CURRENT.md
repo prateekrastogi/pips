@@ -166,7 +166,7 @@ at `/srv/pips/bronze`, QC-green against a calendar-derived coverage expectation.
 ## Last verify output
 ```
 make ci -> ci: green
-  ruff clean · mypy --strict 297 source files · 2434 pytest · clippy clean · cargo test ok
+  ruff clean · mypy --strict 299 source files · 2481 pytest · clippy clean · cargo test ok
   determinism bit-identical ACROSS PROCESSES · ledger-check 70 rows
   (planned=7 building=34 enforced=29)
   provenance: running on the host, not in a pips image
@@ -356,7 +356,13 @@ shares, which needs a price, which needs the panel. The size-independent form of
 already `economics.breakeven_edge`.
 
 ## Blockers / awaiting
-- None blocking. The security-master download was approved and completed; 5,851 instruments
+- **WAITING ON `BLK-0003` — and it sits on the critical path**, so the tick stops here rather
+  than falling through (LOOP.md §1.2). The seed's 3,101 symbols of real daily bars cannot reach
+  the liquidity ranking until it is decided where daily bars live: a daily panel beside silver
+  (my read), or an interval dimension inside silver. Everything between the seed and the 500
+  shortlist waits on it; the research factory does not.
+- Everything below was true before that block opened and still is.
+- The security-master download was approved and completed; 5,851 instruments
   are live in the PIT store on arb-vm and the QC verdict seam resolves end to end. The orphaned `checkout` compose project was cleared with the
   owner's go-ahead. All three original owner-actions remain cleared.
 - **Recommended, not blocking:** upgrade `[G-AUTH-0]` evidence from `VERBAL_ATTESTATION` to
