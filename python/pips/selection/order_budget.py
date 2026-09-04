@@ -54,14 +54,28 @@ _ONE_SECOND_NS = 1_000_000_000
 
 
 class OrderKind(enum.Enum):
+    """The message kinds rule 9 counts against the governor -- all four of them.
+
+    "place+modify+cancel+square-off all count". SQUARE_OFF was missing, and the omission was in
+    the vocabulary rather than the arithmetic: `check_order_budget` measures every event it is
+    handed, so a caller had to either mislabel a square-off as NEW or leave it out. Rule 9
+    spells this one out because of WHEN it happens -- §3.14 runs an independent flatten
+    scheduler, so every intraday strategy emits these, together, at the end of the session.
+    """
+
     NEW = "new"
     MODIFY = "modify"
     CANCEL = "cancel"
+    SQUARE_OFF = "square_off"
 
 
 @dataclass(frozen=True)
 class OrderEvent:
-    """One message to the broker. A modify and a cancel are orders, the same as a new one."""
+    """One message to the broker.
+
+    A modify, a cancel and a square-off are each an order, the same as a new one -- the
+    exchange counts messages, not intentions.
+    """
 
     ts_ns: int
     symbol: str

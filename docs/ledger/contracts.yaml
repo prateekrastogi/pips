@@ -944,6 +944,21 @@
   code: "python/pips/selection/order_budget.py"
   tests:
     - "tests/unit/test_order_budget.py"
+  # RULE 9 NAMES FOUR KINDS AND `OrderKind` HAD THREE. "engine governor caps at 5/s shared
+  # token bucket (place+modify+cancel+square-off all count)" -- and SQUARE_OFF was missing. The
+  # arithmetic was never wrong: `check_order_budget` measures every event it is handed,
+  # whatever its kind. The gap was the VOCABULARY, so a caller building the stream had to
+  # either mislabel a square-off as NEW or leave it out, and this module's own docstring said
+  # "a modify and a cancel are orders, the same as a new one" -- three, mirroring the omission.
+  #
+  # Rule 9 spells that kind out because of WHEN it happens: §3.14 runs an independent flatten
+  # scheduler, so every intraday strategy emits square-offs, together, at the end of the
+  # session. That is where a burst lands, and it lands PER SYMBOL -- a mutation filtering them
+  # out of the per-symbol throttle survived a first test that spread them across three symbols
+  # so only the global cap bound.
+  #
+  # "Forced, not discretionary, so it should not count against selection" is the plausible
+  # future argument this now refuses: the exchange counts messages, not intentions.
   status: enforced
   owner_milestone: M19
   # Blueprint §12: "order budget respected as an optimizer constraint, so research never

@@ -308,3 +308,76 @@ def test_one_nanosecond_inside_the_window_does_breach() -> None:
     verdict = check_order_budget(events, NSE_RETAIL_BUDGET)
     assert verdict.peak_per_symbol["RELIANCE"] == 3
     assert not verdict.admissible
+
+
+# ------------------------------------------------- rule 9 names four kinds, not three ------
+
+
+def test_a_square_off_is_an_order_kind() -> None:
+    """Rule 9: "engine governor caps at 5/s shared token bucket (place+modify+cancel+
+    **square-off** all count)".
+
+    `OrderKind` had NEW, MODIFY and CANCEL. The counting was never the problem —
+    `check_order_budget` measures every event it is handed, whatever its kind — but a caller
+    building the stream had no correct value for a square-off, so it had to be mislabelled as
+    NEW or left out. The module's own docstring enumerated three and mirrored the omission.
+
+    Square-off is the one the rule bothers to spell out, and the reason is timing: §3.14 has an
+    independent flatten scheduler, so every intraday strategy emits these, all at the end of
+    the session — the moment the burst actually happens.
+    """
+    assert OrderKind.SQUARE_OFF.value == "square_off"
+
+
+def test_a_square_off_counts_against_the_governor_like_any_other_message() -> None:
+    """The property rule 9 exists to protect.
+
+    "Forced, not discretionary, so it should not count against selection" is a plausible
+    argument and a wrong one: the exchange counts messages, not intentions. A future filter on
+    kind would make a strategy admissible at 5/s that emits 6/s while flattening.
+    """
+    budget = OrderBudget(
+        global_per_second=2, per_symbol_per_second=2, daily_cap=100, legal_per_second=10
+    )
+    events = [
+        OrderEvent(ts_ns=0, symbol="A", kind=OrderKind.NEW),
+        OrderEvent(ts_ns=1, symbol="B", kind=OrderKind.SQUARE_OFF),
+        OrderEvent(ts_ns=2, symbol="C", kind=OrderKind.SQUARE_OFF),
+    ]
+
+    verdict = check_order_budget(events, budget)
+
+    assert not verdict.admissible
+    assert any("global orders/second" in b.limit for b in verdict.breaches)
+
+
+def test_every_kind_rule_9_names_is_expressible() -> None:
+    """The vocabulary must cover the rule, or a caller has to choose between a wrong label and
+    a missing event -- and both of those end in an undercount."""
+    assert {k.value for k in OrderKind} >= {"new", "modify", "cancel", "square_off"}
+
+
+def test_square_offs_count_against_the_per_symbol_throttle_too() -> None:
+    """The global cap is not the only one they have to clear.
+
+    The test above spread its square-offs across three symbols, so the per-symbol throttle
+    never bound and only the global breach fired — a mutation filtering square-offs out of the
+    per-symbol count survived it. Flattening is per symbol by nature, so that is precisely
+    where a burst of them lands.
+
+    Global set high enough not to bind, so the only thing that can fail here is the throttle.
+    """
+    budget = OrderBudget(
+        global_per_second=10, per_symbol_per_second=2, daily_cap=100, legal_per_second=10
+    )
+    events = [
+        OrderEvent(ts_ns=0, symbol="A", kind=OrderKind.SQUARE_OFF),
+        OrderEvent(ts_ns=1, symbol="A", kind=OrderKind.SQUARE_OFF),
+        OrderEvent(ts_ns=2, symbol="A", kind=OrderKind.SQUARE_OFF),
+    ]
+
+    verdict = check_order_budget(events, budget)
+
+    assert not verdict.admissible
+    assert any("symbol" in b.limit for b in verdict.breaches)
+    assert not any("global" in b.limit for b in verdict.breaches), "the global cap did not bind"
