@@ -50,12 +50,20 @@
     Small but load-bearing: the daily session dance is where Breeze integrations actually
     fail. Port rather than vendor — pips splits the data plane into its own process with its
     own credentials (rule 7), so the auth surface changes shape even though the flow does not.
-    AUDITED 2026-09-04. The session-token flow itself is what pips already does (interactive,
-    daily, expires at midnight; ADR-0011 keeps the token in the git-tracked .env of a private
-    repo). One line was NOT in pips and is worth having: "Only API *calls* must egress from the
-    whitelisted IP; the browser login can be from anywhere." That splits rule 9's static-IP
-    obligation in two, and it is the kind of thing that otherwise gets learned by a failed login
-    from the wrong machine. Cross-referenced onto BLK-0004.
+    AUDITED 2026-09-04. NO GAP. The session-token flow is what pips already does (interactive,
+    daily; ADR-0011 keeps the token in the git-tracked .env of a private repo).
+    CORRECTION to an earlier version of this note, which claimed the donor's line "Only API
+    *calls* must egress from the whitelisted IP; the browser login can be from anywhere" was NOT
+    in pips. It was — `data/breeze/client.py` has carried it since 8353095, in a docstring that
+    says "**Ported from SAL-0001**" and draws exactly that distinction. I searched the tree for
+    the donor SHA and concluded from its absence; this project credits ports by SAL ROW ID, not
+    by SHA, so the search was looking for the wrong thing.
+    That error was not confined to this row: the "only 1 of 15 PORT rows credits its donor in
+    source" figure recorded earlier today came from the same SHA-based search and is WRONG.
+    Counting row-id citations, SEVEN do: SAL-0001, 0002, 0003, 0004, 0010, 0015, 0016.
+    What this row DID produce is the guard in `client.py::_require_whitelisted_egress`: the
+    distinction was documented but nothing enforced it, so a Breeze session could be opened from
+    a laptop and fail at the vendor with an auth-shaped error that reads like a bad token.
 
 - id: SAL-0002
   component: "Breeze historical OHLCV fetcher + normalizer"

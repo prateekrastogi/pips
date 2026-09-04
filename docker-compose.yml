@@ -42,6 +42,11 @@ services:
       # Reaches the process as "" when unset, which `check_provenance` treats as UNSET rather
       # than as a value that could match an image that also failed to bake one.
       PIPS_EXPECTED_SHA: ${PIPS_EXPECTED_SHA:-}
+      # ICICI whitelists ONE IP for API calls and it is this host's. `build_session` refuses
+      # without this marker, so a Breeze fetch cannot be started from a laptop by accident and
+      # then misread as a bad token (rule 14; the guard is in data/breeze/client.py). Obtaining
+      # the daily token in a browser needs no whitelisted address and is exempt.
+      PIPS_VENDOR_EGRESS: arb-vm
     volumes:
       - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
     working_dir: /app
@@ -69,6 +74,9 @@ services:
     # .env rather than a VM-side file; the order plane keeps its own, VM-side, and the two
     # never meet in one process.
     env_file: [.env]
+    environment:
+      # See the note on `research`: only this host's IP is whitelisted for vendor API calls.
+      PIPS_VENDOR_EGRESS: arb-vm
     volumes:
       - ${PIPS_DATA_DIR:-/srv/pips}:/srv/pips
       - pips-sock:/run/pips
