@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from pips.data.breeze.budget import CallBudget
-from pips.data.breeze.probe import ist_range, ist_window
+from pips.data.breeze.probe import ist_range, ist_window, range_open_time
 
 __all__ = [
     "EGRESS_ENV",
@@ -139,7 +139,9 @@ def ranged_fetcher(
 
     def fetch(symbol: str, start: date, end: date) -> Any:
         budget.acquire()  # raises DailyBudgetExceededError, which the range run stops on
-        frm, to = ist_range(start, end)
+        # The window must open where THIS interval's bars are stamped: a daily bar sits at
+        # 00:00 and a window opened at the session open excludes the first day entirely.
+        frm, to = ist_range(start, end, open_at=range_open_time(interval))
         return client.get_historical_data_v2(
             interval=interval,
             from_date=frm,

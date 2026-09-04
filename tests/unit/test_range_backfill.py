@@ -252,7 +252,12 @@ def test_the_ranged_fetcher_asks_for_one_window_and_pays_one_call(tmp_path: Path
 
     assert budget.calls_made == 1, "a three-year range is one call"
     assert asked["interval"] == "1day"
-    assert asked["from_date"] == "2023-09-01T09:15:00.000Z"
+    # WAS 09:15 until 2026-09-05, and that expectation was WRONG rather than merely different:
+    # measured on the live API, a daily window opened at the session open silently drops its own
+    # first day, because the daily bar is stamped 00:00 and 09:15 is after it. This test pinned
+    # the bug. See tests/unit/test_range_window_open.py for the three overlapping windows that
+    # settled it.
+    assert asked["from_date"] == "2023-09-01T00:00:00.000Z"
     assert asked["to_date"] == "2026-08-31T15:30:00.000Z"
     assert asked["stock_code"] == "RELIND"
 

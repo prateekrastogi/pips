@@ -66,6 +66,30 @@ def ist_window(day: date, start: str = "09:15", end: str = "15:30") -> tuple[str
     return f"{iso}T{start}:00.000Z", f"{iso}T{end}:00.000Z"
 
 
+DAY_STAMPED_INTERVALS = frozenset({"1day"})
+"""Intervals whose bars Breeze stamps at MIDNIGHT rather than at a time inside the session.
+
+Every archived daily record carries `"datetime": "YYYY-MM-DD 00:00:00"`. Coarser intervals, if
+this project ever asks for them, belong here too.
+"""
+
+
+def range_open_time(interval: str) -> str:
+    """The IST wall-clock a ranged window must OPEN at, for bars of ``interval``.
+
+    MEASURED 2026-09-05. A ranged daily fetch opened at the session open (09:15) silently
+    dropped its own first day, three times out of three on overlapping windows -- because the
+    daily bar it was asking for is stamped 00:00, which is before the window began. The end day
+    survived only because the window closes at 15:30, after that day's midnight stamp.
+
+    Intraday intervals keep 09:15, and that is not laziness. Opening an intraday window at
+    midnight pulls in PRE-OPEN prints, which `normalize_candles` then clips out again -- so the
+    damage would be invisible rather than showing up as missing bars. Fixing one boundary by
+    breaking the other would be the worse trade.
+    """
+    return "00:00" if interval in DAY_STAMPED_INTERVALS else "09:15"
+
+
 def ist_range(
     start: date, end: date, open_at: str = "09:15", close_at: str = "15:30"
 ) -> tuple[str, str]:
