@@ -144,3 +144,44 @@ def test_every_declared_name_collision_is_real() -> None:
             "the entry is stale and is excusing the key from the honesty check for nothing"
         )
         assert why, f"{key} is excused from the check with no reason given"
+
+
+def test_the_declared_governor_is_the_one_the_code_enforces() -> None:
+    """`enforced_by` maps this threshold to "C-OBUD-01 (caller-supplied, not read from this
+    file)" — an honest label, and prose. The candle cap had the same shape two ticks ago and
+    got a test binding the declared value to the constant; this one got the label and no test.
+
+    The failure it closes is the one `config/breeze.yaml` already demonstrated: a number
+    declared in a config nothing reads, agreeing with the code by care rather than by check.
+    Someone tightening the governor here would change a document; the engine would keep its own
+    5, and rule 9's "caps at 5/s" would be true of neither on purpose.
+    """
+    from pips.selection.order_budget import NSE_RETAIL_BUDGET
+
+    declared = config()["governor"]["orders_per_second_max"]
+
+    assert declared == NSE_RETAIL_BUDGET.global_per_second
+
+
+def test_the_governor_sits_under_the_legal_threshold_rule_9_names() -> None:
+    """Rule 9: "≤10 orders/sec per exchange/segment stays registration-free; engine governor
+    caps at 5/s". The governor exists to sit UNDER that, so the two numbers are related, not
+    independent — and only one of them is declared in this file."""
+    from pips.selection.order_budget import NSE_RETAIL_BUDGET
+
+    assert NSE_RETAIL_BUDGET.legal_per_second == 10
+    assert NSE_RETAIL_BUDGET.global_per_second < NSE_RETAIL_BUDGET.legal_per_second
+
+
+def test_the_governor_numbers_the_config_does_not_declare_are_named() -> None:
+    """Three of the four numbers `NSE_RETAIL_BUDGET` carries are code-only: the 2/s per-symbol
+    throttle, the ~3000 daily cap, and SEBI's 10/s threshold. Whether this file should declare
+    them is a design decision, not something to settle from a test — but a reader comparing the
+    config to the engine should not have to discover the gap by counting.
+    """
+    governor = config()["governor"]
+
+    assert set(governor) == {"orders_per_second_max"}, (
+        "the governor block gained or lost a key; if the throttle, the daily cap or the legal "
+        "threshold are now declared here, they need binding tests like the one above"
+    )
