@@ -16,7 +16,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential ca-certificates curl git make pandoc pkg-config \
+        build-essential ca-certificates curl git jq make pandoc pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Rust toolchain (pinned by rust-toolchain.toml at build time) -------------------

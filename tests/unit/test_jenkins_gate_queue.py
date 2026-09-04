@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -204,3 +206,55 @@ def test_a_controller_that_goes_silent_mid_wait_is_unreachable_not_queued() -> N
     assert done.returncode == 3, done.stdout
     assert "could not reach the controller" in done.stderr.lower(), done.stderr
     assert "still queued" not in done.stderr.lower(), done.stderr
+
+
+def test_a_missing_tool_is_not_reported_as_an_unreachable_controller() -> None:
+    """Jenkins #276: the CI image installs curl but not jq, and the gate said this:
+
+        /app/ops/jenkins/trigger.sh: line 51: jq: command not found
+        pips-ci: could not reach the controller -- the crumb request failed; is the
+                 controller up?
+
+    The controller was a stub in the same process, and it was fine. This is the third instance
+    of one shape in one script: a cause that was never observed, asserted as though it had
+    been. A missing tool is a missing tool, and the gate must say so before it blames anything
+    it cannot see.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        stunted = Path(tmp) / "bin"
+        stunted.mkdir()
+        # Everything the script needs EXCEPT jq, so the run fails for exactly one reason.
+        for tool in ("bash", "curl", "awk", "tr", "seq", "sleep", "cat"):
+            found = shutil.which(tool)
+            if found:
+                (stunted / tool).symlink_to(found)
+        done = subprocess.run(
+            ["bash", str(TRIGGER), "main"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={"PATH": str(stunted), "HOME": tmp, "TMPDIR": tmp},
+        )
+    assert done.returncode == 3, done.stdout
+    assert "jq" in done.stderr, done.stderr
+    assert "could not reach the controller" not in done.stderr.lower(), done.stderr
+
+
+def test_the_ci_image_supplies_every_tool_the_gate_requires() -> None:
+    """The script's requirement and the image's package list must not drift apart.
+
+    They already did once: `curl` was installed, `jq` was not, and the tests for this very
+    script could not run in CI. Read the requirement from the script rather than restating it
+    here, so adding a tool to the preflight without adding it to the image fails loudly.
+    """
+    required = re.search(
+        r"^for tool in ([a-z0-9 ]+); do$", TRIGGER.read_text(encoding="utf-8"), re.M
+    )
+    assert required, "the preflight must list its tools in one greppable place"
+    dockerfile = (ROOT / "docker" / "research.Dockerfile").read_text(encoding="utf-8")
+    apt = re.search(r"apt-get install -y --no-install-recommends \\\n(.*?)\\\n", dockerfile, re.S)
+    assert apt, "could not find the apt package list"
+    installed = set(apt.group(1).split())
+    # `awk` ships in the base image via mawk/gawk; only packages named by the same name matter.
+    missing = {t for t in required.group(1).split() if t not in installed} - {"awk"}
+    assert not missing, f"the gate needs {sorted(missing)}, which the CI image does not install"

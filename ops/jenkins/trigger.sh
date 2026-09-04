@@ -35,6 +35,20 @@ still_queued() {
   exit "${UNREACHABLE}"
 }
 
+# A MISSING TOOL IS NOT AN UNREACHABLE CONTROLLER. Without `jq`, the crumb pipeline "fails" and
+# this script reported "the crumb request failed; is the controller up?" -- sending the reader to
+# check a controller that was fine. Jenkins build #276 failed exactly that way: the CI image
+# installs curl but not jq. That is the third instance of one shape in this one file, so the
+# check goes FIRST, before any claim about anything the script cannot see.
+for tool in curl jq awk; do
+  if ! command -v "${tool}" >/dev/null 2>&1; then
+    echo "pips-ci: '${tool}' is not installed -- THE GATE DID NOT RUN." >&2
+    echo "         Nothing was contacted and nothing is known about the controller." >&2
+    echo "         Install ${tool} and run again." >&2
+    exit "${UNREACHABLE}"
+  fi
+done
+
 # TMPDIR, not a hardcoded /tmp: some sandboxes deny /tmp writes, and curl then fails to
 # open its cookie jar and exits before the request is ever made — which reads as an auth or
 # network fault rather than a filesystem one.
