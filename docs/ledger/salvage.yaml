@@ -209,6 +209,18 @@
     M7's score is a fixed-weight z-combination (log median rupee volume, spread, Amihud,
     gap-rate). This donor solves the same shape for a different venue; take the ranking and
     hysteresis machinery, not the weights — pips' are stress-tested and never P&L-tuned.
+    AUDITED 2026-09-04, and the answer is NO GAP. The donor ranks on ONE component (percentile
+    rank of dollar volume, with hysteresis); pips ranks on the blueprint's four-component
+    z-combination (§4.1). Different notions, and pips follows its own spec, so the machinery is
+    not portable as-is. Its three SAFETY properties were checked against pips one by one and
+    all three are already present, with reasons recorded in the code:
+      * ties -- donor average-ranks; `top_n` sorts on `(-score, symbol)`, deterministic (rule 1);
+      * short pools -- donor never backfills with ineligible names; `top_n`'s docstring says "n
+        is a MAXIMUM ... padding would name a universe member that was never measured";
+      * missing inputs -- donor forces stale names to rank 0 so they can only be excluded;
+        pips' `_usable` drops non-finite components entirely, which is stronger.
+    So this row needs no code change. Recording the audit because a PORT row with the work
+    already done independently is indistinguishable from one nobody ever looked at.
 
 - id: SAL-0012
   component: "Universe API + eligibility gates"
