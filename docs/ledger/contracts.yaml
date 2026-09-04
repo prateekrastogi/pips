@@ -777,8 +777,25 @@
   title: "Integer boundary types; f64 confined to the kernel; half-to-even; zero tolerance"
   spec: "IMPLEMENTATION.md#311-numeric-boundary-semantics"
   code: "python/pips/core/money.py"
-  tests: []
-  status: planned
+  tests:
+    - "tests/unit/core/test_money.py"
+    - "tests/unit/core/test_numeric_boundary.py"
+  # THE ROW SAID `planned` WITH NO TESTS while six production modules cited it as a rule they
+  # already satisfy: `costs/statutory.py` computes every charge in integer paise, `core/money.py`
+  # IS the boundary API, `core/ids.py` refuses NaN and infinities at canonicalisation,
+  # `core/trial.py` depends on that refusal -- pydantic's JSON serialiser turns a non-finite
+  # float into `null`, so `inf` and `None` would hash identically and two different trials would
+  # share one id and one cached result -- and `data/breeze/ingest.py` converts rupees to exact
+  # paise. Two test files asserted it in passing, bound to no row.
+  #
+  # A ledger that under-reports is the same defect as one that over-reports, pointed the other
+  # way: anyone reading it to find what exists would have concluded numeric boundary semantics
+  # were unstarted, and the claims the code makes about this rule had nothing holding them.
+  #
+  # `building`, not `enforced`, and the missing half is real: "f64 confined to the kernel" needs
+  # a kernel, and all 21 Rust crates are M0 scaffolds. The Python boundary is done and now has
+  # tests bound to the row; the confinement claim is a Rust-side promise nothing can check yet.
+  status: building
   owner_milestone: M21
 
 - id: C-PAR-01
