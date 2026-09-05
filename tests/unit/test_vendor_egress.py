@@ -20,6 +20,9 @@ can pass it. Its job is to make the rule unforgettable, and to fail with the rea
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 from pips.data.breeze.client import EGRESS_ENV, VendorEgressError, build_session
@@ -53,14 +56,41 @@ def test_the_guard_runs_before_the_api_key_is_read(monkeypatch: pytest.MonkeyPat
 def test_the_marker_lets_the_call_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """The guard must be passable, or it is just a broken fetcher.
 
-    Past the guard the next thing `build_session` needs is the API key, so a missing key is the
-    proof that egress was allowed. Asserting the *specific* next failure, not merely "not
-    VendorEgressError", which would also hold for a guard that raised nothing and did nothing.
+    WAS ASSERTED VIA `KeyError: BREEZE_API_KEY` — "past the guard, the next thing it needs is the
+    key". That coupled the test to two things it is not about: the real vendor SDK importing
+    successfully, and the credential being absent from the environment. It failed once in a full
+    suite run on 2026-09-05 and then passed twice on identical re-runs, which is the worst kind
+    of gate: one that teaches people to re-run instead of read.
+
+    So the vendor module is INJECTED. The assertion is now the real thing — a session is
+    constructed, and it is constructed with the key it was given — rather than an incidental
+    failure standing in for success.
     """
+    constructed: dict[str, object] = {}
+
+    class FakeBreeze:
+        def __init__(self, api_key: str) -> None:
+            constructed["api_key"] = api_key
+
+        def generate_session(self, api_secret: str, session_token: str) -> None:
+            constructed["secret"] = api_secret
+            constructed["token"] = session_token
+
+    module = types.ModuleType("breeze_connect")
+    module.BreezeConnect = FakeBreeze  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "breeze_connect", module)
+
     monkeypatch.setenv(EGRESS_ENV, "arb-vm")
-    monkeypatch.delenv("BREEZE_API_KEY", raising=False)
-    with pytest.raises(KeyError, match="BREEZE_API_KEY"):
-        build_session()
+    monkeypatch.setenv("BREEZE_API_KEY", "k")
+    monkeypatch.setenv("BREEZE_API_SECRET", "s")
+    monkeypatch.setenv("BREEZE_SESSION_TOKEN", "t")
+
+    session = build_session()
+    assert isinstance(session, FakeBreeze)
+    assert constructed == {"api_key": "k", "secret": "s", "token": "t"}, (
+        "the session must be generated too -- an unauthenticated client would fail later, "
+        "at the vendor, looking like a credential problem"
+    )
 
 
 def test_an_empty_marker_is_not_a_marker(monkeypatch: pytest.MonkeyPatch) -> None:

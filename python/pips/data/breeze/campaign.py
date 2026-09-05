@@ -14,7 +14,10 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
+import yaml
+
 from pips.core.calendar import SESSION_MINUTES_DEFAULT, load_calendar
+from pips.data.breeze.pacing import AdaptivePacer
 
 __all__ = [
     "CANDLES_PER_CALL",
@@ -294,6 +297,23 @@ def plan_campaign(
     )
 
 
+def pacer_for(data_root: str | None) -> AdaptivePacer:
+    """The campaign's pacer: no fixed ceiling, learning from the vendor's own replies.
+
+    Owner instruction, 2026-09-05: "run it to maximum and without any limits, basis real time
+    responding conditions of api." So there is no daily cap to refuse against -- pacing IS the
+    mechanism, and `run_backfill` already stops cleanly on the vendor's own rate rejection.
+
+    State lives under the DATA ROOT, not the checkout (rule 14), and persisting it is the point:
+    `run_backfill` stops on the first RATE_LIMITED reply, so a rate learned and then forgotten is
+    relearned by being rejected again, at a day of progress each time.
+    """
+    from pips.data.breeze.client import default_paths
+
+    _, _, budget_state = default_paths(data_root)
+    return AdaptivePacer(state_path=budget_state.parent / "pacing.json")
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI: ``pips backfill --symbols A,B --from YYYY-MM-DD --to YYYY-MM-DD [--dry-run]``.
 
@@ -337,15 +357,30 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"backfill plan: {plan.describe()}")
 
-    from pips.data.breeze.budget import CallBudget
     from pips.data.breeze.client import budgeted_fetcher, build_session, default_paths
 
-    bronze, manifest_path, budget_state = default_paths(args.data_root)
-    budget = CallBudget.from_config(Path("config/breeze.yaml"), state_path=budget_state)
-    print(f"  budget: {budget.remaining} calls remaining today of {budget.effective_budget}")
-    if plan.exceeds_budget(budget.remaining, ranged=args.ranged):
-        print("  NOTE: this plan exceeds today's remaining budget. It will stop cleanly when")
-        print("        the budget is spent and resume tomorrow — finished keys cost no calls.")
+    bronze, manifest_path, _ = default_paths(args.data_root)
+    # NO FIXED CEILING. The vendor's replies set the pace and `run_backfill` stops on its
+    # rejection; the plan's cost is still printed, because knowing what a run will spend is
+    # useful even when nothing refuses it.
+    budget = pacer_for(args.data_root)
+    print(f"  pacing: starting at {budget.interval:.3f}s/call (learned, no fixed daily cap)")
+
+    # THE COST STILL GETS STATED, even though nothing refuses on it any more. `max_calls_per_day`
+    # is no longer a cap the run stops at -- the vendor's own rejection is -- but it remains the
+    # only recorded per-day figure, and a plan larger than it will very likely span days. An
+    # operator who is told what a run will spend can plan; one who is told nothing cannot. Note
+    # the figure itself is DISPUTED: SAL-0003's donor measured 5,000/day against the 100,000
+    # recorded here, and nothing has ever settled it (see config/breeze.yaml).
+    reference = int(
+        (yaml.safe_load(Path("config/breeze.yaml").read_text(encoding="utf-8")) or {})
+        .get("quota", {})
+        .get("max_calls_per_day", 0)
+    )
+    if reference and plan.exceeds_budget(reference, ranged=args.ranged):
+        print("  NOTE: this plan exceeds today's remaining budget reference — it will likely")
+        print("        span several days. Nothing refuses it: the run stops when the VENDOR")
+        print("        rejects, and finished keys cost no calls on the next run.")
 
     if args.dry_run:
         print("  --dry-run: nothing fetched.")

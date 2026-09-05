@@ -510,8 +510,14 @@ def test_an_unranged_run_that_really_does_exceed_still_warns(
     cli: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The other direction, on the SAME plan: silencing the ranged case must not silence the
-    warning everywhere. Unranged, those 200 symbols cost 156,800 calls and genuinely will stop
-    on budget."""
+    warning everywhere. Unranged, those 200 symbols cost 156,800 calls.
+
+    WHAT CHANGED 2026-09-05: there is no daily cap to stop on any more — the owner asked for
+    "no fixed limits, basis real time responding conditions of api", and the run now stops when
+    the VENDOR rejects. The warning was NOT removed with the cap, because the thing it tells an
+    operator is still true and still useful: this plan is far larger than any recorded per-day
+    figure and will span days. Only its basis changed, from a cap that refuses to a reference
+    that informs."""
     assert campaign_module.main(BIG) == 0
 
     assert "exceeds today's remaining budget" in capsys.readouterr().out
