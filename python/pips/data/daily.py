@@ -194,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     import os
     import sys
 
+    from pips.core.fsguard import writable_directory
     from pips.data.pit.instruments import InstrumentMaster
     from pips.data.pit.store import PitStore
 
@@ -212,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
         else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
     )
     bronze, daily_root = root / "bronze", root / "daily"
+    refusal = writable_directory(daily_root)
+    if refusal is not None:
+        print(f"daily promote: {refusal}", file=sys.stderr)
+        return 2
     if not bronze.exists():
         print(f"daily promote: no bronze at {bronze} — nothing to promote.")
         print("    That is not a pass. Run a daily backfill first (ops/runbooks/backfill.md).")

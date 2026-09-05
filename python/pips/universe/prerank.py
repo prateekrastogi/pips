@@ -183,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     import os
     import sys
 
+    from pips.core.fsguard import writable_directory
     from pips.data.pit.explain import jump_explainer
     from pips.universe.daily_stats import daily_stats_from_panel
     from pips.universe.shortlist import CAPTURE_SHORTLIST_N
@@ -211,6 +212,10 @@ def main(argv: list[str] | None = None) -> int:
         else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
     )
     as_of = date.fromisoformat(args.as_of)
+    refusal = writable_directory(root / "universes")
+    if refusal is not None:
+        print(f"prerank: {refusal}", file=sys.stderr)
+        return 2
     panel = root / "daily" / "bars_1d.parquet"
     if not panel.exists():
         print(f"prerank: no daily panel at {panel} — nothing to rank.")

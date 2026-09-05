@@ -203,3 +203,13 @@ def test_a_pit_store_when_present_is_consulted_for_every_overnight_pair(
     # six symbols, three sessions each: two overnight pairs per symbol
     assert len(asked) == 12
     assert {a[0] for a in asked} == set(SIX)
+
+
+def test_an_unwritable_universes_root_is_refused_before_the_panel_is_read(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path, SIX)
+    (root / "universes").write_text("a file where the directory should be")
+    assert run(root, "--n", "4") == 2
+    err = capsys.readouterr().err
+    assert "cannot write" in err and str(root / "universes") in err

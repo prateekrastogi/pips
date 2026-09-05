@@ -1512,6 +1512,23 @@
   # frozen-date mutant survived). Two-word command, so `--help` is the dispatcher's central
   # guard, like `ledger check`.
 
+- id: C-GUARD-01
+  title: "An output root that cannot be written refuses the run before the work, by a real write"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/core/fsguard.py"
+  tests:
+    - "tests/unit/test_fsguard.py"
+    - "tests/unit/test_daily_promote_cli.py"
+    - "tests/unit/test_prerank_cli.py"
+  status: building
+  owner_milestone: M6
+  # arb-vm, 2026-09-05: `pips daily promote` built 4.6M rows for 26 minutes and died on
+  # `mkdir('/srv/pips/daily')`. The check is a REAL write -- create if absent, probe, unlink --
+  # because `os.access` is lied to by bind mounts, ACLs and setgid directories. A directory the
+  # probe created is removed again (a nothing-to-do run leaves no artifact dir); an existing
+  # empty directory is KEPT (`/srv/pips/universes` is one; a mutant removing it survived until
+  # a test said so). Refusal: exit 2, the path named, nothing read.
+
 - id: C-QC-02
   title: "Quarantine retains the evidence with its reason; bronze is never modified"
   spec: "IMPLEMENTATION.md#6-milestone-plan"

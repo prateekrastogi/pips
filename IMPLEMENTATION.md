@@ -825,7 +825,7 @@ human.
   T2T, **broker_capability daily snapshotter**, index membership; bitemporal storage +
   Merkle snapshot manifests `[C-DATA-02]`. *Verify:* as-of reads are byte-identical
   regardless of later snapshots; survivorship audit query runs.
-  Daily bars live beside silver, not in it: bronze range records become the daily panel `bars_1d.parquet` `[C-DATA-04]`, one row per instrument-day resolved as of that day, via `pips daily promote` (BLK-0003).
+  Daily bars live beside silver, not in it: bronze range records become the daily panel `bars_1d.parquet` `[C-DATA-04]`, one row per instrument-day resolved as of that day, via `pips daily promote` (BLK-0003); both it and `pips universe prerank` refuse an output root they cannot write BEFORE reading anything, by a real write probe `[C-GUARD-01]`.
 - **M7 universe policies** `[C-UNIV-01]`: liquidity score `z(log median ₹vol) − 0.75·z(spread) −
   0.50·z(Amihud) − 0.25·z(gap-rate)` with fixed (stress-tested, never P&L-tuned) weights — so the
   scorer takes **no** weights: one that could be passed is one somebody tunes until the universe

@@ -175,3 +175,16 @@ def test_known_on_governs_resolution_a_date_before_the_listing_quarantines(
     assert "record(s) quarantined" in out  # the phrase, not a word tmp_path might contain
     panel = root / "daily" / "bars_1d.parquet"
     assert not panel.exists() or pl.read_parquet(panel).height == 0
+
+
+def test_an_unwritable_daily_root_is_refused_before_any_record_is_read(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # arb-vm, 2026-09-05: 26 minutes of promotion, then PermissionError on mkdir('/srv/pips/daily').
+    # The output root is checked FIRST; a run that cannot end in a write must not begin.
+    root = archive(tmp_path)
+    (root / "daily").write_text("a file where the directory should be")  # mkdir will fail
+    assert daily_module.main([str(root), "--known-on", KNOWN_ON]) == 2
+    captured = capsys.readouterr()
+    assert "cannot write" in captured.err and str(root / "daily") in captured.err
+    assert "range record" not in captured.out  # nothing was read, nothing was counted
