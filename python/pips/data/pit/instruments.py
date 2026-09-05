@@ -117,6 +117,8 @@ class InstrumentMaster:
     def __init__(self, store: PitStore) -> None:
         self.store = store
         self._views: dict[tuple[date, date | None, int, int], _View] = {}
+        self._objects: dict[tuple[str, date, date], Instrument] = {}
+        self._objects_fp: tuple[int, int] = (-1, -1)
 
     # ------------------------------------------------------------- writing ----------
 
@@ -251,6 +253,27 @@ class InstrumentMaster:
         """
         return list(self._view(on, known_on).instruments)
 
+    def _instrument(self, record: PitRecord) -> Instrument:
+        """ONE `Instrument` per PIT record version, shared by every view that includes it.
+
+        A view per day with its own objects was ~745 x ~2,500 pydantic models on arb-vm --
+        gigabytes, for records that never differ between days. Keyed on the record's identity
+        (key, valid_from, known_from); dropped wholesale whenever the store grows or re-parses.
+        """
+        # Keyed on the record COUNT as well as the parse counter: a same-process append updates
+        # the store's cache in place without a re-parse, and a same-day rename shares the
+        # identity key with the record it amends -- the parse counter alone never cleared this.
+        fingerprint = (len(self.store.all_records(TABLE)), self.store.file_parses)
+        if self._objects_fp != fingerprint:
+            self._objects.clear()
+            self._objects_fp = fingerprint
+        ident = (record.key, record.valid_from, record.known_from)
+        instrument = self._objects.get(ident)
+        if instrument is None:
+            instrument = from_payload(Instrument, record.payload)
+            self._objects[ident] = instrument
+        return instrument
+
     def _view(self, on: date, known_on: date | None) -> _View:
         """The instruments live on ``on`` as known on ``known_on``, indexed -- built ONCE.
 
@@ -266,7 +289,7 @@ class InstrumentMaster:
         view = self._views.get(key)
         if view is None:
             instruments = [
-                from_payload(Instrument, r.payload)
+                self._instrument(r)
                 for r in self.store.as_of(TABLE, known_on=known_on or _FAR_FUTURE, valid_on=on)
             ]
             view = _View(instruments=instruments)

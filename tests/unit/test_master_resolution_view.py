@@ -9,7 +9,7 @@ computed. Duplicates on a day still raise.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -90,7 +90,10 @@ def test_a_different_day_or_knowledge_date_is_a_different_view(
         stale_knowledge = master.resolve_symbol("SYM001", date(2026, 9, 12), known_on=DAY)
     assert before is not None and after is not None and stale_knowledge is not None
     assert before.isin == after.isin == stale_knowledge.isin
-    assert calls[0] == 30  # three distinct (on, known_on) views, ten instruments each
+    # Three distinct (on, known_on) views -- asserted directly. Constructions are one per PIT
+    # record VERSION: ten originals plus the rename, shared by every view that includes them.
+    assert len(master._views) == 3
+    assert calls[0] == 11
 
 
 def test_an_append_invalidates_the_view(tmp_path: Path) -> None:
@@ -137,3 +140,31 @@ def test_the_view_cache_is_bounded_and_eviction_does_not_change_answers(
         found = master.resolve_vendor_code("VC001", day, known_on=day)
         assert found is not None and found.symbol == "SYM001"
     assert len(master._views) == 3
+
+
+def test_instruments_are_shared_across_views_not_rebuilt_per_day(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # arb-vm, second panel run: ~745 daily views x ~2,500 instruments, each view its own
+    # pydantic objects -- gigabytes, and the run was stopped before it could OOM the plant.
+    # One Instrument per PIT record, referenced by every view that includes it.
+    master = master_with(tmp_path, n=10)
+    calls = count_constructions(monkeypatch)
+    for k in range(30):
+        day = date(2026, 6, 1) + timedelta(days=k)
+        assert master.resolve_vendor_code("VC003", day, known_on=day) is not None
+    assert calls[0] == 10  # ten records, ten constructions, thirty views
+    a = master.resolve_vendor_code("VC003", date(2026, 6, 1), known_on=date(2026, 6, 1))
+    b = master.resolve_vendor_code("VC003", date(2026, 6, 30), known_on=date(2026, 6, 30))
+    assert a is b  # the same object, not an equal copy
+
+
+def test_a_same_day_amendment_is_not_served_from_the_old_object(tmp_path: Path) -> None:
+    # An upsert and a rename on the SAME known_from share (key, valid_from, known_from). The
+    # shared-object cache must be dropped when the store re-parses, or the view keeps handing
+    # out the pre-rename Instrument for the post-rename record. Found by the honest sweep.
+    master = master_with(tmp_path, n=3)
+    assert master.resolve_symbol("SYM001", DAY, known_on=None) is not None
+    master.rename("INE000000001", "RENAMED", known_from=date(2020, 1, 1))
+    assert master.resolve_symbol("RENAMED", DAY, known_on=None) is not None
+    assert master.resolve_symbol("SYM001", DAY, known_on=None) is None
