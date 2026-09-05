@@ -88,6 +88,41 @@ below the cut on a weekly rotation (default 0). Point the capture at it with `pi
 that does not resolve to a Breeze code as of the artifact's date refuses the whole run and is
 named — fix the master, do not trim the list.
 
+## 7. Daily refresh: yesterday's bars → panel → today's 500 (measured 2026-09-06)
+
+Run after the close, on arb-vm, with the day's token in the checkout's `.env`. Spends ~3,100 calls
+at the learned pace; everything else is local compute.
+
+```bash
+cd /srv/pips/checkout
+D=2026-09-04   # the session just closed
+SYMS=$(ls -d /srv/pips/bronze/*/1day | awk -F/ '{print $(NF-1)}' | paste -sd,)   # the seed's codes
+
+# 1. one RANGE record per symbol for the day (~4 min; re-run the same line if it stops rate-limited)
+docker compose run --rm --no-deps research python -m pips.cli backfill \
+  --symbols "$SYMS" --from $D --to $D --interval 1day --ranged
+
+# 2. the panel, one row per instrument-day (30 min on the old store; time it on the new one)
+docker compose run --rm --no-deps research python -m pips.cli daily promote /srv/pips --known-on $(date +%F)
+
+# 3. the shortlist as of that session (88 s), append-only: a second run for the same day refuses
+docker compose run --rm --no-deps research python -m pips.cli universe prerank /srv/pips --as-of $D
+
+# 4. resolve it to Breeze codes without opening anything
+docker compose run --rm --no-deps research python -m pips.cli capture /srv/pips \
+  --shortlist /srv/pips/universes/prerank-$D.json
+```
+
+What "done" looks like: step 1 prints `campaign complete`; step 2 prints `N of M range record(s) ->
+R row(s)` and a superseded count (the seed's double fetch makes that 1,577,851 — it is not new);
+step 3 prints `500 selected of ~2,480 admissible`; step 4 prints `capture: 500 symbol(s): …` and
+`planned only, nothing opened`. An empty reply for a name that had bars yesterday is a delisting or
+a suspension, quarantined with its reason — look before assuming the vendor failed.
+
+Known clutter: `docker compose` warns about orphan containers `pips-seed-daily` and
+`pips-capture-20260904`; the latter's logs are preserved at
+`/srv/pips/state/blk-0004-capture-20260904.docker-log`. Remove them when BLK-0004 is closed.
+
 ## What the manifest does and does not mean
 
 `/srv/pips/state/backfill-manifest.json` records an **outcome** per key, not just "done":
