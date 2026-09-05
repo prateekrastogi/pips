@@ -83,8 +83,10 @@ docker compose run --rm --no-deps research python -m pips.cli universe prerank /
 Writes `/srv/pips/universes/prerank-<as_of>.json` once; a second run for the same as-of is exit 1
 and changes nothing (append-only — look at why the selection would differ, do not replace it).
 `--n` defaults to the shortlist width (500) and is a maximum. `--explore K` adds K names from
-below the cut on a weekly rotation (default 0). This artifact is what `pips capture` should be
-pointed at; that wiring is the next unit.
+below the cut on a weekly rotation (default 0). Point the capture at it with `pips capture /srv/pips --shortlist
+/srv/pips/universes/prerank-<as_of>.json` (PLAN by default; `--live` to subscribe). Any symbol
+that does not resolve to a Breeze code as of the artifact's date refuses the whole run and is
+named — fix the master, do not trim the list.
 
 ## What the manifest does and does not mean
 

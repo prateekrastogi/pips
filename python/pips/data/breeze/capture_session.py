@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -149,6 +149,45 @@ def run_session(
     )
 
 
+def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
+    """Exchange symbols in a prerank artifact -> Breeze codes, or a refusal message.
+
+    Every symbol must resolve as of the artifact's ``as_of``: a shortlist that quietly lost a
+    name would capture nothing for a symbol the universe may later admit, which is the failure
+    the shortlist exists to prevent. So one unresolved name refuses the run and is named.
+    """
+    import json
+
+    from pips.data.pit.instruments import InstrumentMaster
+    from pips.data.pit.store import PitStore
+
+    pit = root / "pit"
+    if not pit.exists():
+        return (
+            f"capture: no instrument master at {pit}; the shortlist's exchange symbols cannot be "
+            "resolved to Breeze codes, and an unresolved shortlist is not an empty one."
+        )
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    as_of = date.fromisoformat(payload["as_of"])
+    selected = [str(sym) for sym in payload["selected"]]
+    master = InstrumentMaster(PitStore(pit))
+    codes: list[str] = []
+    missing: list[str] = []
+    for symbol in selected:
+        instrument = master.resolve_symbol(symbol, as_of, known_on=as_of)
+        if instrument is None or not instrument.vendor_code:
+            missing.append(symbol)
+        else:
+            codes.append(instrument.vendor_code)
+    if missing:
+        return (
+            f"capture: {len(missing)} of {len(selected)} shortlist symbol(s) do not resolve as of "
+            f"{as_of.isoformat()}: {', '.join(missing)}. Refusing: a dropped name is a name that "
+            "later trades with no captured data behind it."
+        )
+    return codes
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -174,13 +213,33 @@ def main(
 
     parser = argparse.ArgumentParser(prog="pips capture")
     parser.add_argument("data_root", nargs="?", default=None, help="defaults to $PIPS_DATA_ROOT")
-    parser.add_argument("--symbols", required=True, help="comma-separated Breeze stock codes")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--symbols", help="comma-separated Breeze stock codes")
+    source.add_argument(
+        "--shortlist",
+        help="a `pips universe prerank` artifact; its EXCHANGE symbols are resolved to Breeze "
+        "codes through the PIT master as of the artifact's as_of, and any that do not resolve "
+        "refuse the whole run",
+    )
     parser.add_argument("--now", default=None, help="ISO instant WITH a timezone; defaults to now")
     parser.add_argument("--calendar", default="config/calendars/nse_equity.yaml")
     parser.add_argument("--live", action="store_true", help="open the socket and capture")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
-    symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    root = (
+        Path(args.data_root)
+        if args.data_root
+        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
+    )
+    origin = None
+    if args.shortlist:
+        resolved = _resolve_shortlist(Path(args.shortlist), root)
+        if isinstance(resolved, str):
+            print(resolved, file=sys.stderr)
+            return 2
+        symbols, origin = resolved, Path(args.shortlist)
+    else:
+        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     if not symbols:
         print(
             "capture: no symbols. An empty subscription records an empty archive and reports "
@@ -189,11 +248,6 @@ def main(
         )
         return 2
 
-    root = (
-        Path(args.data_root)
-        if args.data_root
-        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
-    )
     calendar = load_calendar(Path(args.calendar))
     # A naive `--now` is refused by `plan_capture` and NOT repaired here: attaching a zone of
     # this module's choosing is exactly the guess that makes a UTC container capture the wrong
@@ -204,6 +258,8 @@ def main(
     opens = decision.opens_at.strftime("%H:%M") if decision.opens_at else "—"
     closes = decision.closes_at.strftime("%H:%M") if decision.closes_at else "—"
     print(f"capture: {len(symbols)} symbol(s): {', '.join(symbols)}")
+    if origin is not None:
+        print(f"  shortlist from {origin}")
     print(f"  session {opens}-{closes} {calendar.timezone} — {decision.reason}")
     print(f"  would write under {root}")
     if decision.late_by_seconds:

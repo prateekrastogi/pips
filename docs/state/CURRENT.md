@@ -32,7 +32,7 @@ exploration budget captures names just outside the 500 so a missed name is corre
 permanently absent.
 
 **The A+ pre-rank exists** (`pips.universe.prerank`): the three-component ranking, the superset
-check, and the rotating exploration budget — 18 tests, sweep 8/8. **The DailyStats reader exists** (`pips.universe.daily_stats`, 13 tests, sweep 12/12 after two median-blind survivors were fixed). **`pips daily promote` and `pips universe prerank` exist** (10 + 10 tests; sweeps 6/6 and 9/9). `835d6ba` (reader + daily promote) in the gate; the prerank CLI commit follows. **Next unit:** once deployed, on arb-vm: `pips daily promote /srv/pips --known-on 2026-09-05`, then `pips universe prerank /srv/pips --as-of <max trade_date in the panel>` — the first real 500 — then point `pips capture` at that artifact.
+check, and the rotating exploration budget — 18 tests, sweep 8/8. **The DailyStats reader exists** (`pips.universe.daily_stats`, 13 tests, sweep 12/12 after two median-blind survivors were fixed). **`pips daily promote`, `pips universe prerank` and `pips capture --shortlist` exist** (10 + 10 + 7 tests; sweeps 6/6, 9/9, 7/7). `835d6ba` deployed on arb-vm and `daily promote` is running there; `47ec6aa` (prerank CLI) in the gate; the `--shortlist` commit follows. **Next unit:** `pips universe prerank /srv/pips --as-of <max trade_date in the panel>` on arb-vm — the first real 500 — then a PLAN run of `pips capture --shortlist` against it (Monday 09:15 IST for `--live`, with the owner's fresh token; BLK-0004 retry).
 
 **Open, not blocking:** `BLK-0004` — the streaming namespace refusal is unexplained (entitlement and
 whitelist both confirmed by the owner); the next test is Monday 2026-09-07's open. GATE-0's

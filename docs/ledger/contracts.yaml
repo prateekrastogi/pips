@@ -1378,6 +1378,7 @@
   spec: "IMPLEMENTATION.md#6-milestone-plan"
   code: "python/pips/data/breeze/capture_session.py"
   tests:
+    - "tests/unit/test_capture_shortlist_flag.py"
     - "tests/unit/test_capture_cli.py"
   # Forward capture was built end to end and nothing started it, because starting it is a live
   # market-data subscription that is the owner's to authorise. That left the decision ABSTRACT:
@@ -1410,6 +1411,12 @@
   # and its authorisation are both still outstanding.
   status: building
   owner_milestone: M4
+  #
+  # `--shortlist <prerank artifact>` (2026-09-05): the artifact's EXCHANGE symbols are resolved
+  # to Breeze codes through the PIT master as of the artifact's `as_of` -- a later rename must
+  # not lose a name, pinned after a mutant resolving "as of 2030" survived a fixture that never
+  # changes. One unresolved name refuses the run and is named: a dropped name is a name that
+  # later trades with no captured data behind it, which is what the shortlist exists to prevent.
 
 - id: C-M4-12
   title: "The A+ pre-rank: three spread-free components pick the first 500, superset CHECKED, tail explored"
