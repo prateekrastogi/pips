@@ -27,12 +27,43 @@ zero delay and spinning. Everything above it is the vendor's to decide.
 
 from __future__ import annotations
 
+import json
 import time as _time
 from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from pips.data.breeze.ingest import ResponseKind
 
-__all__ = ["AdaptivePacer"]
+__all__ = ["AdaptivePacer", "Pacer"]
+
+
+@runtime_checkable
+class Pacer(Protocol):
+    """What a fetcher needs from whatever is pacing it.
+
+    `CallBudget` (fixed caps, persisted daily count) and `AdaptivePacer` (no fixed ceiling,
+    learns from replies) both satisfy this, and the fetchers take either. `observe` is optional
+    at the call site -- `CallBudget` does not have it -- which is why the fetchers look for it
+    with `getattr` rather than requiring it here.
+    """
+
+    def acquire(self) -> None: ...
+
+
+def _restore(state_path: Path | None, fallback: float) -> float:
+    """The interval a previous run learned, or ``fallback``.
+
+    A corrupt or missing file falls back rather than failing: a campaign must not be stopped by
+    its own pacing memory, and a value that cannot be read is not a value that was learned.
+    """
+    if state_path is None or not state_path.exists():
+        return fallback
+    try:
+        stored = json.loads(state_path.read_text(encoding="utf-8"))["interval"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return fallback
+    return float(stored) if isinstance(stored, (int, float)) and stored > 0 else fallback
 
 
 class AdaptivePacer:
@@ -45,10 +76,12 @@ class AdaptivePacer:
         floor_interval: float = 0.1,
         step: float = 0.02,
         backoff: float = 2.0,
+        state_path: Path | None = None,
         sleep: Callable[[float], None] = _time.sleep,
         clock: Callable[[], float] = _time.monotonic,
     ) -> None:
-        self.interval = float(start_interval)
+        self.state_path = state_path
+        self.interval = _restore(state_path, float(start_interval))
         self.floor_interval = float(floor_interval)
         self.step = float(step)
         self.backoff = float(backoff)
@@ -90,6 +123,24 @@ class AdaptivePacer:
             self.interval *= self.backoff
         elif kind in (ResponseKind.OK, ResponseKind.EMPTY):
             self.interval = max(self.floor_interval, self.interval - self.step)
+        else:
+            return
+        self._remember()
+
+    def _remember(self) -> None:
+        """Write the learned interval down.
+
+        `run_backfill` STOPS on the first RATE_LIMITED reply -- pushing on "would collect more
+        rejections, and marking this key done would record a hole that looks like a holiday
+        forever". So the multiplicative decrease barely acts within a run: the run is over. Its
+        value is ACROSS runs, and only if the number survives the process. Without this, every
+        run restarts at the same optimistic rate and rediscovers the limit by being rejected,
+        which costs a day each time.
+        """
+        if self.state_path is None:
+            return
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_path.write_text(json.dumps({"interval": self.interval}), encoding="utf-8")
 
     def observed_rate_per_minute(self) -> float:
         """Calls per minute actually achieved so far, measured rather than configured."""

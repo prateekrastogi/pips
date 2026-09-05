@@ -22,13 +22,15 @@ exception.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from pips.data.breeze.ingest import ResponseKind
 from pips.data.breeze.pacing import AdaptivePacer
 
 
-def pacer(**kw: float) -> AdaptivePacer:
+def pacer(**kw: Any) -> AdaptivePacer:
     slept: list[float] = []
     clock = {"t": 0.0}
 

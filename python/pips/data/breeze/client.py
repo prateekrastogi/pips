@@ -18,7 +18,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from pips.data.breeze.budget import CallBudget
+from pips.data.breeze.ingest import classify_response
+from pips.data.breeze.pacing import Pacer
 from pips.data.breeze.probe import ist_range, ist_window, range_open_time
 
 __all__ = [
@@ -89,7 +90,7 @@ def build_session(api_key: str | None = None) -> Any:
 
 def budgeted_fetcher(
     client: Any,
-    budget: CallBudget,
+    budget: Pacer,
     exchange: str = "NSE",
     product: str = "cash",
     interval: str = "1minute",
@@ -103,7 +104,7 @@ def budgeted_fetcher(
     def fetch(symbol: str, day: date) -> Any:
         budget.acquire()  # raises DailyBudgetExceededError, which the campaign stops on
         frm, to = ist_window(day)
-        return client.get_historical_data_v2(
+        reply = client.get_historical_data_v2(
             interval=interval,
             from_date=frm,
             to_date=to,
@@ -111,13 +112,19 @@ def budgeted_fetcher(
             exchange_code=exchange,
             product_type=product,
         )
+        # Feed the reply back into whatever paces us. A rate rejection arrives in the BODY
+        # (Status 5), never as an HTTP status, so nothing upstream can see it on our behalf.
+        observe = getattr(budget, "observe", None)
+        if observe is not None:
+            observe(classify_response(reply))
+        return reply
 
     return fetch
 
 
 def ranged_fetcher(
     client: Any,
-    budget: CallBudget,
+    budget: Pacer,
     exchange: str = "NSE",
     product: str = "cash",
     interval: str = "1day",
@@ -142,7 +149,7 @@ def ranged_fetcher(
         # The window must open where THIS interval's bars are stamped: a daily bar sits at
         # 00:00 and a window opened at the session open excludes the first day entirely.
         frm, to = ist_range(start, end, open_at=range_open_time(interval))
-        return client.get_historical_data_v2(
+        reply = client.get_historical_data_v2(
             interval=interval,
             from_date=frm,
             to_date=to,
@@ -150,6 +157,12 @@ def ranged_fetcher(
             exchange_code=exchange,
             product_type=product,
         )
+        # Feed the reply back into whatever paces us. A rate rejection arrives in the BODY
+        # (Status 5), never as an HTTP status, so nothing upstream can see it on our behalf.
+        observe = getattr(budget, "observe", None)
+        if observe is not None:
+            observe(classify_response(reply))
+        return reply
 
     return fetch
 

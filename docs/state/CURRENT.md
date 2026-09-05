@@ -346,12 +346,13 @@ remote branch. `make ci` is unaffected (`salvage-verify` was never in the ladder
 explains that the folder was removed on purpose and prints the `git clone` lines that restore it.
 
 ## Blockers / awaiting
-- **WAITING ON `BLK-0005`, and it sits on the critical path**, so the tick stops here rather
-  than falling through (LOOP.md §1.2). The shortlist scores with `liquidity_scores`, which
-  refuses a missing spread; spread comes from the 1-second capture the shortlist itself selects
-  names for. `CURRENT.md`'s ordering breaks that circle with a three-component pre-rank and
-  `shortlist.py` forbids exactly that, on the stated grounds that a second score would silently
-  break the shortlist's superset-of-the-universe guarantee. Both deliberate; both cannot hold.
+- **`BLK-0005` RESOLVED 2026-09-05 — owner chose A+.** A three-component pre-rank picks the
+  500; the superset property becomes *checked each refresh* rather than guaranteed by
+  construction, and an exploration budget captures names just outside the 500 so a missed name
+  is corrected rather than permanently absent from the archive.
+- **Owner approved three items on 2026-09-05:** re-fetch the seed's missing 2023-09-04 (clear
+  the terminal manifest keys first), wire `AdaptivePacer` into the fetchers, and retry live
+  capture at Monday's open for `BLK-0004`.
 - **`BLK-0003` RESOLVED 2026-09-05.** Both decisions made; the daily panel and `gap_rate` are
   built and swept. Three of the four score components now exist.
 - **Awaiting the owner, not blocking a tick:** (a) whether to clear the manifest keys and
