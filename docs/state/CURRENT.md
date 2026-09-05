@@ -12,34 +12,32 @@
 
 ## Active item
 
-**`BLK-0003` is resolved and the data path is unblocked.** Both owner decisions landed on
-2026-09-05: daily bars get their own panel beside silver, and `gap_rate` is a frequency with
-corporate actions excluded. `pips.data.daily.promote_daily` explodes range records into
-symbol-day rows; `amihud_ratio` and `gap_rate` are both implemented and swept.
+**The seed is whole, the shortlist path is unblocked, and the next unit is the A+ pre-rank.**
 
-**Median ₹-volume, Amihud and gap-rate are all implemented and swept.** Three of the four score
-components exist.
+The daily seed's missing first day is repaired: four paced runs re-fetched all 3,101 symbols with
+the corrected window (6,208 bronze files, every range key terminal), and the totals — fetched
+2,690, empty 411 — match the original seed exactly, so the only thing that changed is the day the
+window bug dropped. `20MICR`/`3MIND` went 744 → 745 bars, first bar 2023-09-04.
 
-**But the fourth is not arithmetic, it is `BLK-0005`.** I recorded here that the three-component
-ranking was "arithmetic, not a decision". That was wrong. `build_shortlist` scores with
-`liquidity_scores`, whose `_unmeasurable` requires a finite spread and refuses to default it —
-and spread comes from the 1-second capture that the shortlist itself selects the names for. The
-shortlist needs spread; spread is what the shortlist buys. `shortlist.py` forbids the
-three-component pre-rank that `CURRENT.md`'s own ordering calls for, on the stated grounds that a
-second score would break the shortlist's superset-of-the-universe guarantee. Both were written
-deliberately and they cannot both hold.
+**The vendor is measured**, not guessed: a burst of ~800 calls at ~600/min before rejection, three
+times running. The donor's 100/min is disproven for this account; ~4,900 calls in one day with no
+daily rejection makes the disputed 5,000/day unlikely. `config/breeze.yaml`'s conflict note stands,
+narrowed. The pacer that measured it had a flaw — additive increase erased its learned backoff
+within seconds — fixed by ratcheting the floor on rejection (committed, deploying).
 
-### Before promoting the seed, one thing must be settled
+**Decided this weekend (owner):** `BLK-0003` — daily panel beside silver; `gap_rate` a frequency
+with corporate actions excluded. `BLK-0005` — **A+**: a three-component pre-rank picks the 500,
+the superset property is CHECKED each refresh rather than guaranteed by construction, and an
+exploration budget captures names just outside the 500 so a missed name is corrected rather than
+permanently absent.
 
-**Every one of the 3,101 seeded records is missing 2023-09-04.** `ist_range` opened daily windows
-at the session open (09:15) while a daily bar is stamped 00:00, so the first day of every range
-fell outside its own window — measured on the live API across three overlapping windows, and
-fixed the same day. The seed predates the fix.
+**Next unit:** the A+ pre-rank itself — `median_rupee_volume`, `amihud_ratio` and `gap_rate` now all
+exist over the daily panel, so this is arithmetic plus the two safeguards A+ requires. Then the
+1-second capture for the 500, and the four-component score.
 
-It is one call per symbol to repair, but the manifest records those range keys as TERMINAL, so a
-normal backfill skips them: the keys must be cleared first. Promoting before that bakes a
-systematic first-day hole into the daily panel — and a uniform gap does not look like corruption,
-it looks like the range starting a day later than it does. **Owner's call, recorded not spent.**
+**Open, not blocking:** `BLK-0004` — the streaming namespace refusal is unexplained (entitlement and
+whitelist both confirmed by the owner); the next test is Monday 2026-09-07's open. GATE-0's
+`evidence_paths` still points at the owner's attestation, not ICICI's reply.
 
 ## Superseded by the above
 **Nothing is in flight. The research factory is built and every part of it verified as far as

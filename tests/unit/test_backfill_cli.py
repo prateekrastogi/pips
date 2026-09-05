@@ -156,18 +156,31 @@ def test_a_real_run_does_reach_the_fetcher(cli: list[str]) -> None:
     assert "build_session" in cli
 
 
-def test_a_rate_limited_stop_is_a_failure_exit(
-    cli: list[str], monkeypatch: pytest.MonkeyPatch
+def test_a_rate_limited_stop_exits_zero_but_does_not_claim_completion(
+    cli: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The vendor rejected us below our own configured pace, so the pace is wrong.
+    """WAS `..._is_a_failure_exit`, asserting exit 1, on this reasoning: "the vendor rejected us
+    below our own configured pace, so the pace is wrong" -- a misconfiguration to fix, and
+    "exiting 0 would tell a scheduler the campaign succeeded, and it would stop re-running,
+    leaving an archive with a hole in it."
 
-    Exiting 0 would tell a scheduler the campaign succeeded, and it would stop re-running —
-    leaving an archive with a hole in it that no later QC can distinguish from a quiet market.
+    The first half is no longer true. Since 2026-09-05 there is no configured pace: the pacer
+    learns from the vendor's replies, and a rate-limit stop is its learning event -- the interval
+    is already raised and persisted, and the correct next action is to RE-RUN. Exit 1 would tell
+    a `set -e` wrapper the run failed and abort exactly that.
+
+    The second half is still true and still protected -- the same way it already is for the
+    budget stop in the test below: the MESSAGE carries completion, not the exit code. A
+    resumable stop exits 0 and must never print "campaign complete". So this asserts both, and
+    the two stops now behave as the same class of event, which is what they are.
     """
     monkeypatch.setattr(
         backfill_module, "run_backfill", lambda *_a, **_k: _result(stopped_on_rate_limit=True)
     )
-    assert campaign_module.main(ARGS) == 1
+    assert campaign_module.main(ARGS) == 0
+    out = capsys.readouterr().out
+    assert "campaign complete" not in out, "a stop must not read as completion"
+    assert "STOPPED" in out and "re-run" in out.lower(), out
 
 
 def test_a_budget_stop_exits_zero_but_does_not_claim_completion(

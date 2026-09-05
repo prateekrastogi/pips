@@ -22,6 +22,7 @@ exception.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -133,3 +134,40 @@ def test_acquire_waits_the_current_interval() -> None:
     p.acquire()  # first call has nothing to wait for
     p.acquire()
     assert p.slept and p.slept[-1] == pytest.approx(0.5)  # type: ignore[attr-defined]
+
+
+def test_a_rejection_raises_the_floor_so_healthy_replies_cannot_erode_the_backoff() -> None:
+    """MEASURED 2026-09-05, two runs. Run 1 started at 0.8s, stepped down to the 0.1s floor, ran
+    ~800 calls at 600/min, was rejected, doubled to 0.2s and persisted it. Run 2 started at 0.2s,
+    and FIVE clean replies stepped it straight back to 0.1s, where it ran another ~800 calls,
+    was rejected at the same pace, doubled to 0.2s and persisted -- the identical number. The
+    backoff was learned and then erased in under a second, every run.
+
+    So the pace a rejection was earned at becomes a CEILING on speed: the floor ratchets up to
+    the post-backoff interval and is persisted with it. Healthy replies may still probe faster
+    than the start -- but never faster than the vendor has already refused.
+    """
+    p = pacer(start_interval=0.2, floor_interval=0.1, step=0.05)
+    p.observe(ResponseKind.RATE_LIMITED)  # rejected at 0.2 -> 0.4
+    assert p.interval == pytest.approx(0.4)
+    for _ in range(50):
+        p.observe(ResponseKind.OK)  # try to erode it
+    assert p.interval >= 0.4 - 1e-9, (
+        f"50 clean replies took the interval to {p.interval}: the floor did not ratchet, so the "
+        "next run will repeat the rejection exactly as runs 1 and 2 did"
+    )
+
+
+def test_the_raised_floor_is_persisted_with_the_interval(tmp_path: Path) -> None:
+    """A floor that dies with the process is a floor the next run never had."""
+    state = tmp_path / "pace.json"
+    first = AdaptivePacer(
+        start_interval=0.2, floor_interval=0.1, state_path=state, sleep=lambda _s: None
+    )
+    first.observe(ResponseKind.RATE_LIMITED)
+    second = AdaptivePacer(
+        start_interval=0.2, floor_interval=0.1, state_path=state, sleep=lambda _s: None
+    )
+    for _ in range(50):
+        second.observe(ResponseKind.OK)
+    assert second.interval >= first.interval - 1e-9

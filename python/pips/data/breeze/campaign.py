@@ -9,6 +9,8 @@ Pure: no session, no network. The planning is what can be got wrong quietly.
 
 from __future__ import annotations
 
+import time as _time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -297,7 +299,12 @@ def plan_campaign(
     )
 
 
-def pacer_for(data_root: str | None) -> AdaptivePacer:
+def pacer_for(
+    data_root: str | None,
+    *,
+    sleep: Callable[[float], None] = _time.sleep,
+    clock: Callable[[], float] = _time.monotonic,
+) -> AdaptivePacer:
     """The campaign's pacer: no fixed ceiling, learning from the vendor's own replies.
 
     Owner instruction, 2026-09-05: "run it to maximum and without any limits, basis real time
@@ -311,7 +318,10 @@ def pacer_for(data_root: str | None) -> AdaptivePacer:
     from pips.data.breeze.client import default_paths
 
     _, _, budget_state = default_paths(data_root)
-    return AdaptivePacer(state_path=budget_state.parent / "pacing.json")
+    # `sleep`/`clock` are injectable for the same reason CallBudget's were: a test that drives
+    # 500 acquires through the REAL clock sleeps for ~400 seconds and proves nothing by it. One
+    # such test doubled every ladder run on 2026-09-05 before anyone noticed.
+    return AdaptivePacer(state_path=budget_state.parent / "pacing.json", sleep=sleep, clock=clock)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -428,10 +438,19 @@ def main(argv: list[str] | None = None) -> int:
         f"errored={result.errored} skipped={result.skipped}"
     )
     if result.stopped_on_rate_limit:
-        print("  STOPPED: rate limited. The vendor rejected us BELOW the configured pace, so")
-        print("           the pace is wrong — lower max_calls_per_minute in config/breeze.yaml")
-        print("           rather than retrying (ops/runbooks/backfill.md).")
-        return 1
+        # NOT a misconfiguration and NOT a failure: this is the pacer's learning event. There is no
+        # configured pace any more; the interval has already been raised and written down, so the
+        # right move is the opposite of the old advice -- re-run, and it resumes slower. Exits like
+        # the budget stop, because it is the same class of event: clean, progress saved, resume.
+        print(
+            "  STOPPED: the vendor rate-limited us. That is expected and the pace has been learned:"
+        )
+        print(
+            f"           next run starts at {budget.interval:.3f}s/call "
+            f"(floor {budget.floor_interval:.3f}s)."
+        )
+        print("           Finished keys are recorded. Re-run the same command to continue.")
+        return 0
     if result.stopped_on_budget:
         print("  STOPPED: daily budget spent. Resume tomorrow; finished keys cost no calls.")
         return 0

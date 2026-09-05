@@ -51,7 +51,7 @@ class Pacer(Protocol):
     def acquire(self) -> None: ...
 
 
-def _restore(state_path: Path | None, fallback: float) -> float:
+def _restore(state_path: Path | None, fallback: float, *, key: str = "interval") -> float:
     """The interval a previous run learned, or ``fallback``.
 
     A corrupt or missing file falls back rather than failing: a campaign must not be stopped by
@@ -60,7 +60,7 @@ def _restore(state_path: Path | None, fallback: float) -> float:
     if state_path is None or not state_path.exists():
         return fallback
     try:
-        stored = json.loads(state_path.read_text(encoding="utf-8"))["interval"]
+        stored = json.loads(state_path.read_text(encoding="utf-8"))[key]
     except (OSError, ValueError, KeyError, TypeError):
         return fallback
     return float(stored) if isinstance(stored, (int, float)) and stored > 0 else fallback
@@ -82,7 +82,10 @@ class AdaptivePacer:
     ) -> None:
         self.state_path = state_path
         self.interval = _restore(state_path, float(start_interval))
-        self.floor_interval = float(floor_interval)
+        # The floor is learned too, and a persisted one is never LOWER than the configured one.
+        self.floor_interval = max(
+            float(floor_interval), _restore(state_path, float(floor_interval), key="floor_interval")
+        )
         self.step = float(step)
         self.backoff = float(backoff)
         self._sleep = sleep
@@ -121,6 +124,14 @@ class AdaptivePacer:
         if kind is ResponseKind.RATE_LIMITED:
             self.rejections += 1
             self.interval *= self.backoff
+            # THE PACE A REJECTION WAS EARNED AT BECOMES A CEILING ON SPEED. Measured over two runs
+            # on 2026-09-05: back off to 0.2s, persist it, and five clean replies stepped the next
+            # run straight back to the 0.1s floor, where it was rejected at the identical pace
+            # and persisted the identical 0.2s. The learning was erased in under a second, every
+            # run. Raising the floor to the post-backoff interval is what makes the backoff stick:
+            # healthy replies may still probe faster than the START, never faster than the vendor
+            # has already refused.
+            self.floor_interval = max(self.floor_interval, self.interval)
         elif kind in (ResponseKind.OK, ResponseKind.EMPTY):
             self.interval = max(self.floor_interval, self.interval - self.step)
         else:
@@ -140,7 +151,10 @@ class AdaptivePacer:
         if self.state_path is None:
             return
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(json.dumps({"interval": self.interval}), encoding="utf-8")
+        self.state_path.write_text(
+            json.dumps({"interval": self.interval, "floor_interval": self.floor_interval}),
+            encoding="utf-8",
+        )
 
     def observed_rate_per_minute(self) -> float:
         """Calls per minute actually achieved so far, measured rather than configured."""
