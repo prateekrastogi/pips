@@ -290,11 +290,8 @@ class PitStore:
     def as_of(self, table: str, known_on: date, valid_on: date | None = None) -> list[PitRecord]:
         """The table as it was readable on ``known_on``, sorted by key.
 
-        COST, stated rather than left to be discovered the way the append defect was: this is
-        O(keys x records), because each key scans every record for its latest admissible
-        version. On the real instrument master — 5,851 keys, one version each — that is about
-        0.4s, fine for a daily read and not for a per-bar one. If a caller ever needs it in a
-        loop the fix is an index by key, not a cache of the answer.
+        COST: one pass over the records (it was O(keys x records) -- each key scanning every
+        record -- until 2026-09-06, when the daily panel build asked it ~745 times).
 
 
         ``valid_on`` defaults to ``known_on``: the overwhelmingly common question is "what did
@@ -302,14 +299,19 @@ class PitStore:
         spell that out twice invites the two dates drifting apart by accident.
         """
         effective_valid = known_on if valid_on is None else valid_on
-        keys = sorted({r.key for r in self.all_records(table)})
-        out: list[PitRecord] = []
-        for key in keys:
-            version = self._latest_version(table, key, known_on=known_on, valid_on=effective_valid)
-            if version is None or version.op is PitOp.CLOSE:
+        # ONE pass, an index by key -- the fix the paragraph above prescribed. Same rules as
+        # `_latest_version`, in the same order: both filters BEFORE choosing, then the latest
+        # known_from wins and a tie goes to the later write (file order, `>=`). The daily panel
+        # asks this once per trading day and the prerank once per overnight pair; O(keys x
+        # records) was ~5 minutes of every panel build (2026-09-06).
+        winners: dict[str, PitRecord] = {}
+        for record in self.all_records(table):
+            if record.known_from > known_on or record.valid_from > effective_valid:
                 continue
-            out.append(version)
-        return out
+            current = winners.get(record.key)
+            if current is None or record.known_from >= current.known_from:
+                winners[record.key] = record
+        return [winners[key] for key in sorted(winners) if winners[key].op is not PitOp.CLOSE]
 
     # ------------------------------------------------------- snapshot manifests ------
 

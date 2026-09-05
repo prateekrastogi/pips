@@ -75,6 +75,7 @@
     - "tests/unit/test_pit.py"
     - "tests/unit/test_instrument_master.py"
     - "tests/unit/test_master_resolution_view.py"
+    - "tests/unit/test_pit_as_of_single_pass.py"
     - "tests/unit/test_corporate_actions.py"
     - "tests/unit/test_capability_master.py"
     - "tests/unit/test_locality_coverage.py"
@@ -113,6 +114,10 @@
   # and a same-day rename share the identity key, and a same-process append updates the store's
   # cache in place without a re-parse -- so the drop is keyed on record count AND parse counter.
   # Found by a sweep rerun over a GREEN suite, after a red one had reported 9/9 for free.
+  #
+  # `as_of` IS ONE PASS (2026-09-06): the index by key its own docstring prescribed. Both filters
+  # before choosing, latest known_from wins, tie to the later write, sorted, CLOSE dropped -- pinned
+  # against the per-key scan as oracle, and against the masking shape (choose first, filter after).
 
 - id: C-DATA-02
   title: "Snapshot manifests are Merkle-rooted; experiments pin snapshot_root"

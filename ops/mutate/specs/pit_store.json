@@ -1,0 +1,41 @@
+{
+ "source": "python/pips/data/pit/store.py",
+ "tests": [
+  "tests/unit/test_pit_as_of_single_pass.py",
+  "tests/unit/test_pit.py",
+  "tests/unit/test_pit_performance.py"
+ ],
+ "timeout": 240,
+ "mutations": [
+  {
+   "name": "tie-goes-to-first-write",
+   "old": "            if current is None or record.known_from >= current.known_from:",
+   "new": "            if current is None or record.known_from > current.known_from:"
+  },
+  {
+   "name": "valid-filter-dropped",
+   "old": "            if record.known_from > known_on or record.valid_from > effective_valid:",
+   "new": "            if record.known_from > known_on:"
+  },
+  {
+   "name": "known-filter-dropped",
+   "old": "            if record.known_from > known_on or record.valid_from > effective_valid:",
+   "new": "            if record.valid_from > effective_valid:"
+  },
+  {
+   "name": "closed-keys-returned",
+   "old": "        return [winners[key] for key in sorted(winners) if winners[key].op is not PitOp.CLOSE]",
+   "new": "        return [winners[key] for key in sorted(winners)]"
+  },
+  {
+   "name": "unsorted",
+   "old": "        return [winners[key] for key in sorted(winners) if winners[key].op is not PitOp.CLOSE]",
+   "new": "        return [winners[key] for key in winners if winners[key].op is not PitOp.CLOSE]"
+  },
+  {
+   "name": "latest-chosen-before-filtering",
+   "old": "            if record.known_from > known_on or record.valid_from > effective_valid:\n                continue\n            current = winners.get(record.key)\n            if current is None or record.known_from >= current.known_from:\n                winners[record.key] = record\n        return [winners[key] for key in sorted(winners) if winners[key].op is not PitOp.CLOSE]",
+   "new": "            current = winners.get(record.key)\n            if current is None or record.known_from >= current.known_from:\n                winners[record.key] = record\n        return [winners[key] for key in sorted(winners) if winners[key].op is not PitOp.CLOSE and not (winners[key].known_from > known_on or winners[key].valid_from > effective_valid)]"
+  }
+ ]
+}
