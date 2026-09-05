@@ -1411,6 +1411,83 @@
   status: building
   owner_milestone: M4
 
+- id: C-M4-12
+  title: "The A+ pre-rank: three spread-free components pick the first 500, superset CHECKED, tail explored"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/universe/prerank.py"
+  tests:
+    - "tests/unit/test_prerank.py"
+  status: building
+  owner_milestone: M4
+  # OWNER DECISION 2026-09-05 ("go with A+", BLK-0005). `C-M4-06`'s scorer needs a spread that
+  # only 1s capture produces, and 1s capture is budgeted for the 500 names the shortlist picks:
+  # a circle. This breaks it with the three components daily bars CAN give -- log median rupee
+  # volume, Amihud, gap rate -- using `liquidity.WEIGHTS` minus `relative_spread`, so it is the
+  # same ordering with one term missing, not a second tuned score.
+  #
+  # THE SUPERSET PROPERTY IS CHECKED, NOT ASSUMED. `shortlist.py` gets it by construction because
+  # it ranks by the universe's own score; a pre-rank cannot, so `superset_breaches` names every
+  # universe member the shortlist missed, each refresh. A breach is a name that would trade with
+  # no captured data behind it.
+  #
+  # THE CUT IS RE-EXAMINED. `exploration_picks` rotates a weekly budget through the tail below
+  # the cut (deterministic offset from the refresh date), so a name that would enter under the
+  # four-component score is not frozen out by the three-component one that first excluded it.
+  # Covers the whole tail in ceil(len/budget) refreshes and not more -- pinned by test after a
+  # mutant that orbited one step survived the first sweep.
+  #
+  # `PreRank` is NOT a universe. Its docstring is the guard against using it as one, and the
+  # test asserts the docstring exists (the ladder refused once on that being `str | None`).
+
+- id: C-UNIV-07
+  title: "DailyStats from the daily panel: trailing window ending at as_of, exclusions named, duplicates refused"
+  spec: "IMPLEMENTATION.md#phase-p1"
+  code: "python/pips/universe/daily_stats.py"
+  tests:
+    - "tests/unit/test_daily_stats_reader.py"
+  status: building
+  owner_milestone: M7
+  # THE INPUTS `C-UNIV-01` SAID THE PROJECT DID NOT HAVE. `bars_1d.parquet` (`C-DATA-04`) ->
+  # per symbol median rupee volume, Amihud and gap rate over `lookback_sessions` ending at
+  # `as_of` INCLUSIVE, with the CA explainer passed straight to `gap_rate`.
+  #
+  # FOUR REFUSALS: rows after `as_of` are filtered before anything is computed (rule 2); fewer
+  # than `lookback_sessions` visible sessions is an exclusion WITH the count, never a shorter
+  # sample; a duplicated (symbol, trade_date) RAISES -- it doubles a volume and halves a return;
+  # a non-positive close excludes that one symbol with `median_rupee_volume`'s own reason instead
+  # of crashing the population.
+  #
+  # THE SWEEP FOUND THE TESTS, NOT THE CODE. Deleting the `as_of` filter outright survived,
+  # because the causality test asserted on the MEDIAN and one wild bar in three cannot move a
+  # median; deleting the date sort survived the same way, ten minutes later. Both tests now
+  # assert on statistics one row moves (gap rate, Amihud) or make the wrong rows the majority
+  # of the window. 12/12 after. Two redundant lines (a second sort, an empty-frame guard) were
+  # removed rather than left as equivalent mutants.
+
+- id: C-DATA-04
+  title: "The daily panel: bronze range records -> bars_1d.parquet beside silver, and a CLI that calls it"
+  spec: "IMPLEMENTATION.md#6-milestone-plan"
+  code: "python/pips/data/daily.py"
+  tests:
+    - "tests/unit/test_daily_panel.py"
+    - "tests/unit/test_daily_promote_cli.py"
+  status: building
+  owner_milestone: M6
+  # BLK-0003: silver is DEFINITIONALLY the 1-minute panel (session clip 09:15-15:30), and daily
+  # bars stamped 00:00:00 do not belong in it. So the daily panel lives beside silver, one row
+  # per trading day per instrument, each candle dated by its own stamp and each day's vendor
+  # code resolved against the master AS OF that day (not once per record).
+  #
+  # THE PROMOTER HAD NO CALLER for two days: arb-vm held 6,202 daily bronze records and no
+  # `bars_1d.parquet`, which nothing downstream could see because nothing downstream existed.
+  # `pips daily promote <root> --known-on` is `pips promote`'s sibling: no bronze is "not a
+  # pass" at exit 0, no master is exit 2, an EMPTY bronze tree says "found no range records ...
+  # not a pass either" -- the sweep caught a test that accepted "0 of 0 range record(s)", which
+  # is exactly the clean-looking line the message exists to replace. `--known-on` is required
+  # and governs resolution (a 2019 as-of quarantines a 2020 listing; pinned by test after a
+  # frozen-date mutant survived). Two-word command, so `--help` is the dispatcher's central
+  # guard, like `ledger check`.
+
 - id: C-QC-02
   title: "Quarantine retains the evidence with its reason; bronze is never modified"
   spec: "IMPLEMENTATION.md#6-milestone-plan"
@@ -1642,6 +1719,10 @@
   code: "python/pips/universe/shortlist.py"
   tests:
     - "tests/unit/test_capture_shortlist.py"
+  # BOOTSTRAP: this scorer refuses a missing spread, and spread comes from the 1s capture this
+  # shortlist selects for -- so before any capture exists it admits nobody. `C-M4-12` is the
+  # spread-free PRE-rank that picks the first 500; once captured, THIS module takes over and
+  # `prerank.superset_breaches` checks each refresh that the universe stayed inside the shortlist.
   # M4's phrase is "1s only for a predeclared liquid subset". This is the subset, and the
   # width is an INPUT because the cost is fixed: 500 symbols x 60 sessions of one-second bars
   # is 690,000 calls, about 7.7 quota-days. That single fact decides the mechanism.

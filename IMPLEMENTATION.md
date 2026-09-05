@@ -806,7 +806,7 @@ human.
 
   1s only for a **predeclared liquid subset** — 500 names, filtered for admissibility and then
   ranked by M7's own liquidity score so the subset is a superset of every registered universe
-  by construction `[C-M4-06]`; **forward WS capture from day one** `[C-M4-04]`, started and stopped on the
+  by construction `[C-M4-06]` — and, before any capture exists to give that scorer a spread, seeded by the spread-free A+ pre-rank `[C-M4-12]`, superset CHECKED each refresh and the tail explored on a rotating budget (owner decision 2026-09-05, BLK-0005); **forward WS capture from day one** `[C-M4-04]`, started and stopped on the
   exchange's own clock rather than the container's `[C-M4-07]`, writing the open it missed into
   the stream when it starts late and nothing when it does not `[C-M4-08]`, and stopping at the
   bell without leaving a timer behind `[C-M4-09]`. `pips capture` `[C-M4-11]` is the entry
@@ -825,6 +825,7 @@ human.
   T2T, **broker_capability daily snapshotter**, index membership; bitemporal storage +
   Merkle snapshot manifests `[C-DATA-02]`. *Verify:* as-of reads are byte-identical
   regardless of later snapshots; survivorship audit query runs.
+  Daily bars live beside silver, not in it: bronze range records become the daily panel `bars_1d.parquet` `[C-DATA-04]`, one row per instrument-day resolved as of that day, via `pips daily promote` (BLK-0003).
 - **M7 universe policies** `[C-UNIV-01]`: liquidity score `z(log median ₹vol) − 0.75·z(spread) −
   0.50·z(Amihud) − 0.25·z(gap-rate)` with fixed (stress-tested, never P&L-tuned) weights — so the
   scorer takes **no** weights: one that could be passed is one somebody tunes until the universe
@@ -844,7 +845,7 @@ human.
   composed into a per-session snapshot `[C-UNIV-06]` — eligibility BEFORE scoring, because the
   score is a cross-sectional z and a barred name still moves every other name's rank; and an
   ineligible incumbent exits regardless of the buffer, which damps score churn and was never
-  a licence to trade a suspended stock;
+  a licence to trade a suspended stock; the daily inputs the score needs — median rupee volume, Amihud, gap rate — read from the daily panel over a trailing window ending at `as_of` inclusive `[C-UNIV-07]`, short windows excluded by count and duplicated sessions refused;
   eligibility gates `[C-UNIV-02]` (series, suspension, MIS/short per capability snapshot,
   history, bands) — decided BEFORE the session opens, because §4.2 is explicit that *the
   completed day's volume cannot retrospectively add a stock to that day's universe*; and

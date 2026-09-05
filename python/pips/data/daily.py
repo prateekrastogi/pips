@@ -30,7 +30,7 @@ from pips.data.breeze.ingest import ResponseKind, classify_response, rupees_to_p
 if TYPE_CHECKING:
     from pips.data.pit.instruments import InstrumentMaster
 
-__all__ = ["DailyPromotionReport", "Quarantined", "promote_daily"]
+__all__ = ["DailyPromotionReport", "Quarantined", "main", "promote_daily"]
 
 
 @dataclass(frozen=True)
@@ -178,3 +178,73 @@ def _write(daily_root: Path, rows: list[dict[str, Any]]) -> None:
     # Sorted so a rebuild produces the same file in the same order (rule 1).
     ordered = sorted(rows, key=lambda r: (r["symbol"], r["trade_date"]))
     pl.DataFrame(ordered).write_parquet(Path(daily_root) / "bars_1d.parquet")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: ``pips daily promote <data_root> --known-on YYYY-MM-DD``.
+
+    `promote_daily` had no caller outside tests since `BLK-0003`, which is why arb-vm held
+    6,202 daily bronze records and no `bars_1d.parquet`. This is `pips promote`'s sibling: same
+    root layout (`<root>/bronze`, `<root>/pit`, and `<root>/daily` beside silver), same
+    undefaulted `--known-on`, same "no bronze is not a pass", same refusal without a master.
+    There is no QC gate here: QC's checks are session-shaped and the daily panel is not on the
+    path to capital -- it ranks names for capture, it does not trade them.
+    """
+    import argparse
+    import os
+    import sys
+
+    from pips.data.pit.instruments import InstrumentMaster
+    from pips.data.pit.store import PitStore
+
+    parser = argparse.ArgumentParser(prog="pips daily promote")
+    parser.add_argument("data_root", nargs="?", default=None, help="defaults to $PIPS_DATA_ROOT")
+    parser.add_argument(
+        "--known-on",
+        required=True,
+        help="the as-of knowledge date for instrument resolution; NOT defaulted, because a "
+        "bitemporal read that moves is the one thing §3.4 forbids",
+    )
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+    root = (
+        Path(args.data_root)
+        if args.data_root
+        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
+    )
+    bronze, daily_root = root / "bronze", root / "daily"
+    if not bronze.exists():
+        print(f"daily promote: no bronze at {bronze} — nothing to promote.")
+        print("    That is not a pass. Run a daily backfill first (ops/runbooks/backfill.md).")
+        return 0
+    pit = root / "pit"
+    if not pit.exists():
+        print(
+            f"daily promote: no instrument master at {pit}. Every vendor code would resolve to "
+            "nothing and every record would quarantine under an identity reason, which is a "
+            "true statement about each record and a misleading one about the run.",
+            file=sys.stderr,
+        )
+        return 2
+    report = promote_daily(
+        bronze,
+        daily_root,
+        InstrumentMaster(PitStore(pit)),
+        known_on=date.fromisoformat(args.known_on),
+    )
+    if report.files_read == 0:
+        print(f"daily promote: found no range records under {bronze} — nothing was written.")
+        print("    That is not a pass either: an empty bronze tree is a backfill that did not run.")
+        return 0
+    print(
+        f"daily promote: {report.files_promoted} of {report.files_read} range record(s) -> "
+        f"{report.rows} row(s) in {daily_root / 'bars_1d.parquet'}"
+    )
+    if report.other_shape:
+        print(f"    {report.other_shape} day-keyed record(s) skipped — those belong to silver")
+    if report.quarantined:
+        print(f"    {len(report.quarantined)} record(s) quarantined:")
+        for item in report.quarantined[:5]:
+            print(f"      {item.source}: {item.reason}")
+        if len(report.quarantined) > 5:
+            print(f"      ... and {len(report.quarantined) - 5} more")
+    return 0

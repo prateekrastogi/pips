@@ -58,6 +58,21 @@ The run reports `attempted / fetched / empty / errored / skipped` and why it sto
 | **rate limited** | stop and think. The vendor rejected us *below* the configured pace, so the pace is wrong — lower `max_calls_per_minute` in `config/breeze.yaml` rather than retrying |
 | errors | inspect. Errored keys are deliberately not marked done and retry on the next run |
 
+## 5. Promote the daily panel (after a `1day` campaign)
+
+The seed's `1day` records are RANGE records and belong in the daily panel beside silver, not in
+silver itself (BLK-0003). Promotion spends nothing and opens no session:
+
+```bash
+docker compose run --rm --no-deps research python -m pips.cli daily promote /srv/pips \
+  --known-on 2026-09-05   # today's date: the as-of for instrument resolution, never defaulted
+```
+
+It writes `/srv/pips/daily/bars_1d.parquet` and prints `N of M range record(s) -> R row(s)`.
+"no bronze" and "found no range records" both exit 0 and both say **not a pass** — an empty
+panel is a campaign that did not run, not a clean one. Exit 2 means no instrument master at
+`/srv/pips/pit`. This panel is what `pips.universe.daily_stats` reads for the capture pre-rank.
+
 ## What the manifest does and does not mean
 
 `/srv/pips/state/backfill-manifest.json` records an **outcome** per key, not just "done":

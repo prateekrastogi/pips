@@ -24,6 +24,8 @@ commands:
   qc [data_root]             quality-check bronze, quarantine failures (§6 M5)
   capture --symbols A,B      PLAN forward capture; --live to subscribe (§6 M4)
   promote <root> --known-on  bronze -> silver, consulting QC's verdicts (§6 M5/M6)
+  daily promote <root> --known-on
+                             bronze -> the daily panel (bars_1d.parquet), beside silver (BLK-0003)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -147,6 +149,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.data.breeze.capture_session import main as capture_main
 
         return capture_main(rest)
+    if command == "daily" and rest[:1] == ["promote"]:
+        from pips.data.daily import main as daily_main
+
+        return daily_main(rest[1:])
     if command == "promote":
         from pips.data.silver import main as promote_main
 
