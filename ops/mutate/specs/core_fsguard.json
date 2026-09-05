@@ -1,0 +1,36 @@
+{
+ "source": "python/pips/core/fsguard.py",
+ "tests": [
+  "tests/unit/test_fsguard.py",
+  "tests/unit/test_daily_promote_cli.py",
+  "tests/unit/test_prerank_cli.py"
+ ],
+ "mutations": [
+  {
+   "name": "probe-write-dropped",
+   "old": "        probe.write_text(\"ok\", encoding=\"utf-8\")\n        probe.unlink()\n",
+   "new": ""
+  },
+  {
+   "name": "created-dir-left-behind",
+   "old": "    if created:\n        with contextlib.suppress(OSError):",
+   "new": "    if False:\n        with contextlib.suppress(OSError):"
+  },
+  {
+   "name": "refusal-is-none",
+   "old": "        return f\"cannot write {path}: {error.strerror or error}. Fix the plant, then re-run.\"",
+   "new": "        return None"
+  },
+  {
+   "name": "path-not-named",
+   "old": "f\"cannot write {path}: {error.strerror or error}. Fix the plant, then re-run.\"",
+   "new": "f\"cannot write: {error.strerror or error}. Fix the plant, then re-run.\""
+  },
+  {
+   "name": "existing-dir-removed",
+   "old": "    created = not path.exists()",
+   "new": "    created = True"
+  }
+ ],
+ "timeout": 180
+}

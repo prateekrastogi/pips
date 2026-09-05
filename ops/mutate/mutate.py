@@ -22,6 +22,27 @@ import subprocess
 import sys
 
 
+def _baseline_green(tests: list[str], timeout: int) -> bool:
+    """Do the listed tests PASS on the untouched source?
+
+    2026-09-05: a chained command edited a test, swept in the same shell and read "9 killed,
+    0 survived" -- over a suite that was failing. Every mutant dies for free when the baseline
+    is red, and the canary below cannot tell (a failing suite "notices" the raise too). So the
+    baseline is checked first, and a red one refuses the sweep outright.
+    """
+    try:
+        probe = subprocess.run(
+            [sys.executable, "-m", "pytest", "-x", "-q", "--no-header", *tests],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        return probe.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
 def _canary_dies(source: pathlib.Path, original: str, tests: list[str], timeout: int) -> bool:
     """Do the listed tests actually EXERCISE this source?
 
@@ -88,9 +109,31 @@ def main() -> int:
     original = source.read_text()
     backup.write_text(original)
     timeout = spec.get("timeout", 90)
-    killed = survived = broken = 0
+    killed = survived = broken = expected = 0
 
     try:
+        undocumented = [
+            m["name"]
+            for m in spec["mutations"]
+            if m.get("expect") == "survive" and not m.get("why")
+        ]
+        if undocumented:
+            print(
+                f"  !! {len(undocumented)} mutation(s) declare `expect: survive` without a `why`:"
+            )
+            for name in undocumented:
+                print(f"     [{name}]")
+            print(
+                "     An equivalent mutant is a claim; the spec must say why it cannot be killed."
+            )
+            backup.unlink(missing_ok=True)
+            return 2
+        if not _baseline_green(spec["tests"], timeout):
+            print("  !! BASELINE RED: the listed tests FAIL on the untouched source.")
+            print("     Every mutant would be reported killed for free. Make the suite green,")
+            print("     then sweep. Nothing was mutated.")
+            backup.unlink(missing_ok=True)
+            return 2
         if not _canary_dies(source, original, spec["tests"], spec.get("timeout", 90)):
             print("  !! THE LISTED TESTS DO NOT EXERCISE THIS SOURCE.")
             print(f"     A module-level raise in {source} left them passing, so every")
@@ -137,11 +180,19 @@ def main() -> int:
             finally:
                 source.write_text(original)
 
-            print(f"  [{name}] {verdict}")
-            if verdict.startswith("KILLED") or verdict.startswith("HUNG"):
-                killed += 1
+            died = verdict.startswith("KILLED") or verdict.startswith("HUNG")
+            if mutation.get("expect") == "survive" and not died:
+                print(f"  [{name}] EXPECTED SURVIVOR -- equivalent: {mutation.get('why')}")
+                expected += 1
+            elif mutation.get("expect") == "survive" and died:
+                print(f"  [{name}] {verdict} -- but the spec declares it equivalent. Stale claim.")
+                broken += 1
             else:
-                survived += 1
+                print(f"  [{name}] {verdict}")
+                if died:
+                    killed += 1
+                else:
+                    survived += 1
     finally:
         source.write_text(original)
         backup.unlink(missing_ok=True)
@@ -164,7 +215,7 @@ def main() -> int:
         )
 
     print(
-        f"\n  {killed} killed, {survived} survived"
+        f"\n  {killed} killed, {survived} survived, {expected} expected"
         + (f", {broken} not run (bad anchor)" if broken else "")
     )
 

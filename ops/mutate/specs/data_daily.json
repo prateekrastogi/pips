@@ -1,0 +1,65 @@
+{
+ "source": "python/pips/data/daily.py",
+ "tests": [
+  "tests/unit/test_daily_panel.py",
+  "tests/unit/test_daily_promote_cli.py"
+ ],
+ "mutations": [
+  {
+   "name": "no-master-passes",
+   "old": "        return 2\n    report = promote_daily(",
+   "new": "        return 0\n    report = promote_daily("
+  },
+  {
+   "name": "no-bronze-silently-ok",
+   "old": "        print(\"    That is not a pass. Run a daily backfill first (ops/runbooks/backfill.md).\")\n",
+   "new": ""
+  },
+  {
+   "name": "empty-tree-reads-as-clean",
+   "old": "    if report.files_read == 0:",
+   "new": "    if False:"
+  },
+  {
+   "name": "known-on-frozen",
+   "old": "known_on=date.fromisoformat(args.known_on)",
+   "new": "known_on=date(2020, 1, 1)"
+  },
+  {
+   "name": "row-count-not-reported",
+   "old": "f\"{report.rows} row(s) in {daily_root / 'bars_1d.parquet'}\"",
+   "new": "f\"rows in {daily_root / 'bars_1d.parquet'}\""
+  },
+  {
+   "name": "silver-not-daily-root",
+   "old": "bronze, daily_root = root / \"bronze\", root / \"daily\"",
+   "new": "bronze, daily_root = root / \"bronze\", root / \"silver\""
+  },
+  {
+   "name": "earliest-wins",
+   "old": "int(row[\"received_at_ns\"]) > int(current[\"received_at_ns\"])",
+   "new": "int(row[\"received_at_ns\"]) < int(current[\"received_at_ns\"])"
+  },
+  {
+   "name": "superseded-not-counted",
+   "old": "        report.superseded = len(report.written) - len(kept)\n",
+   "new": "        report.superseded = 0\n"
+  },
+  {
+   "name": "rows-count-stale",
+   "old": "        report.rows = len(kept)\n",
+   "new": ""
+  },
+  {
+   "name": "cli-superseded-line-dropped",
+   "old": "    if report.superseded:\n        print(",
+   "new": "    if False:\n        print("
+  },
+  {
+   "name": "dedupe-skipped",
+   "old": "        kept = _latest_per_instrument_day(report.written)\n",
+   "new": "        kept = list(report.written)\n"
+  }
+ ],
+ "timeout": 180
+}

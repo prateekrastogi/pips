@@ -28,4 +28,4 @@ ledger status flips; commit. A session that ends without updating `CURRENT.md` i
 | `DATA_DICTIONARY.md` | field-level semantics per zone | shard past ~300 lines |
 
 **Verification:** `make ledger-check` proves prose ↔ ledger ↔ code ↔ tests agree;
-`make tdd-check` proves the branch was written test-first `[G-TDD-01]`. Both run in `make ci`.
+`make tdd-check` proves the branch was written test-first `[G-TDD-01]`; `make sweep` mutation-sweeps every changed production module by its committed spec `[G-SWEEP-01]`. All run in `make ci`.

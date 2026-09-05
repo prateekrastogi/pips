@@ -66,6 +66,7 @@ pipeline {
     }
 
     stage('py tests')     { steps { sh 'docker run --rm "$IMAGE" make test' } }
+    stage('sweep')        { steps { sh 'docker run --rm "$IMAGE" make sweep BASE=origin/main' } }
     stage('rust tests')   { steps { sh 'docker run --rm "$IMAGE" make rust-test' } }
     stage('determinism')  { steps { sh 'docker run --rm "$IMAGE" make determinism' } }
     stage('ledger-check') { steps { sh 'docker run --rm "$IMAGE" make ledger-check' } }

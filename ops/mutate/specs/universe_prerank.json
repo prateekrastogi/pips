@@ -1,0 +1,55 @@
+{
+ "source": "python/pips/universe/prerank.py",
+ "tests": [
+  "tests/unit/test_prerank.py",
+  "tests/unit/test_prerank_cli.py"
+ ],
+ "mutations": [
+  {
+   "name": "overwrite-instead-of-refuse",
+   "old": "    if target.exists():",
+   "new": "    if False:"
+  },
+  {
+   "name": "no-panel-silently-ok",
+   "old": "            \"    That is not a pass. Run `pips daily promote` first (ops/runbooks/backfill.md \u00a75).\"\n",
+   "new": "            \"\"\n"
+  },
+  {
+   "name": "as-of-is-today",
+   "old": "as_of = date.fromisoformat(args.as_of)",
+   "new": "as_of = date.today()"
+  },
+  {
+   "name": "reader-exclusions-dropped",
+   "old": "excluded = {**report.excluded, **pre.excluded}",
+   "new": "excluded = {**pre.excluded}"
+  },
+  {
+   "name": "explainer-dropped",
+   "old": "gap_threshold=threshold, explain=explain",
+   "new": "gap_threshold=threshold, explain=None"
+  },
+  {
+   "name": "lookback-hardcoded",
+   "old": "int(raw[\"lookback_sessions\"])",
+   "new": "3"
+  },
+  {
+   "name": "maximum-not-said",
+   "old": "    if len(pre.selected) < args.n:",
+   "new": "    if False:"
+  },
+  {
+   "name": "pit-warning-dropped",
+   "old": "    if explain is None:",
+   "new": "    if False:"
+  },
+  {
+   "name": "selected-is-ranked",
+   "old": "\"selected\": list(pre.selected),",
+   "new": "\"selected\": list(pre.ranked),"
+  }
+ ],
+ "timeout": 180
+}

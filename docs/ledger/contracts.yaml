@@ -1500,6 +1500,7 @@
   tests:
     - "tests/unit/test_daily_panel.py"
     - "tests/unit/test_daily_promote_cli.py"
+    - "tests/integration/test_daily_to_capture_plan_e2e.py"
   status: building
   owner_milestone: M6
   # BLK-0003: silver is DEFINITIONALLY the 1-minute panel (session clip 09:15-15:30), and daily

@@ -1,0 +1,55 @@
+{
+ "source": "python/pips/data/pit/instruments.py",
+ "tests": [
+  "tests/unit/test_master_resolution_view.py",
+  "tests/unit/test_instrument_master.py"
+ ],
+ "mutations": [
+  {
+   "name": "view-never-invalidated",
+   "old": "key = (on, known_on, len(records), self.store.file_parses)",
+   "new": "key = (on, known_on, 0, 0)"
+  },
+  {
+   "name": "view-ignores-knowledge-date",
+   "old": "key = (on, known_on, len(records), self.store.file_parses)",
+   "new": "key = (on, None, len(records), self.store.file_parses)"
+  },
+  {
+   "name": "as-of-hands-out-the-internal-list",
+   "old": "        return list(self._view(on, known_on).instruments)",
+   "new": "        return self._view(on, known_on).instruments"
+  },
+  {
+   "name": "vendor-first-match-not-exactly-one",
+   "old": "        return self._exactly_one(matches, f\"vendor code {vendor_code!r}\", on)",
+   "new": "        return matches[0] if matches else None"
+  },
+  {
+   "name": "empty-code-guard-dropped",
+   "old": "        if not vendor_code:\n            # `vendor_code` defaults",
+   "new": "        if False:\n            # `vendor_code` defaults"
+  },
+  {
+   "name": "cap-never-evicts",
+   "old": "            if len(self._views) >= _MAX_VIEWS:",
+   "new": "            if False:"
+  },
+  {
+   "name": "symbol-index-is-vendor-index",
+   "old": "        matches = self._view(on, known_on).by_symbol.get(symbol, [])",
+   "new": "        matches = self._view(on, known_on).by_vendor.get(symbol, [])"
+  },
+  {
+   "name": "objects-never-shared",
+   "old": "        instrument = self._objects.get(ident)\n",
+   "new": "        instrument = None\n"
+  },
+  {
+   "name": "objects-never-dropped",
+   "old": "        if self._objects_fp != fingerprint:",
+   "new": "        if False:"
+  }
+ ],
+ "timeout": 180
+}

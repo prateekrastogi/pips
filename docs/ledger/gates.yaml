@@ -77,6 +77,28 @@
   status: enforced
   owner_milestone: M0
 
+- id: G-SWEEP-01
+  title: "Mutation sweep: every production module changed against BASE is swept by a committed spec"
+  spec: "IMPLEMENTATION.md#71-test-first-protocol"
+  source_refs: ["IMPLEMENTATION.md §2 rule 10", "docs/state/log/2026-09-05.md"]
+  threshold: {changed_modules_without_spec_max: 0, undeclared_survivors_max: 0, red_baseline_sweeps_max: 0}
+  enforced_by: "ops/mutate/sweep.py::run"
+  evidence: "ops/mutate/specs/*.json"
+  code: "ops/mutate/sweep.py"
+  tests: ["tests/unit/test_sweep_runner.py", "tests/unit/test_mutate_tool.py", "tests/unit/test_ladder_mirror.py"]
+  status: enforced
+  owner_milestone: M0
+  # OWNER DECISION 2026-09-05 ("go with 1 and 2"). Manual sweeps found the day's best defects --
+  # two median-blind causality tests, a tmp_path name leaking into stdout, a cache that never
+  # invalidated -- and nothing enforced them. `make sweep` runs in the ladder after `test`: the
+  # production modules changed against BASE each need a spec under ops/mutate/specs/ (a changed
+  # module without one is RED, the ratchet ledger-check applies to rows); a survivor is red
+  # unless declared `expect: survive` with a `why`; a spec whose tests are red on the untouched
+  # source is refused -- a red suite reports every mutant killed for free, which happened once
+  # today and the canary did not catch it. The Jenkinsfile is checked to run exactly the
+  # Makefile's ladder, because a step added to one and not the other is a gate that stopped
+  # gating without saying so.
+
 - id: G-PROV-01
   title: "A verify of unknown provenance cannot report a verdict"
   spec: "IMPLEMENTATION.md#phase-p0-foundation-authority"

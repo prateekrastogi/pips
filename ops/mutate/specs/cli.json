@@ -1,0 +1,26 @@
+{
+ "source": "python/pips/cli.py",
+ "tests": [
+  "tests/unit/test_daily_promote_cli.py",
+  "tests/unit/test_prerank_cli.py",
+  "tests/unit/test_cli_help_is_not_data.py"
+ ],
+ "timeout": 180,
+ "mutations": [
+  {
+   "name": "daily-promote-not-routed",
+   "old": "    if command == \"daily\" and rest[:1] == [\"promote\"]:",
+   "new": "    if False:"
+  },
+  {
+   "name": "universe-prerank-not-routed",
+   "old": "    if command == \"universe\" and rest[:1] == [\"prerank\"]:",
+   "new": "    if False:"
+  },
+  {
+   "name": "help-guard-dropped",
+   "old": "    if command in _COMMANDS and command not in _OWN_HELP and (\"-h\" in rest or \"--help\" in rest):",
+   "new": "    if False:"
+  }
+ ]
+}

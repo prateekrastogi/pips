@@ -32,6 +32,9 @@ typecheck: ## mypy --strict over core/ + schemas/
 test: ## pytest (unit + property + integration)
 	$(RUN) pytest
 
+sweep: ## Mutation-sweep every production module changed against BASE, by its committed spec
+	uv run python ops/mutate/sweep.py --base $(BASE)
+
 tdd-check: ## Refuse production code committed ahead of its test [G-TDD-01]
 	$(PY) -m pips.cli tdd check $(BASE) .
 
@@ -57,7 +60,7 @@ rust-test: ## cargo clippy -D warnings + cargo test
 provenance: ## Refuse to run the ladder against code that is not the code under test
 	$(PY) -m pips.cli provenance
 
-ci: provenance lint typecheck tdd-check test rust-test determinism ledger-check ## The full ladder Jenkins runs
+ci: provenance lint typecheck tdd-check test sweep rust-test determinism ledger-check ## The full ladder Jenkins runs
 	@echo "ci: green"
 
 # Dirtiness is probed with `git status --porcelain`, which reports UNTRACKED files too. The

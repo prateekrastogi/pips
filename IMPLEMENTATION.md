@@ -165,7 +165,7 @@ build/test probes; fan out subagents if there are many repos.
     for the right reason. Write the test, watch it go red, record that red output in the
     session log and the PR body, then write the smallest code that turns it green, then
     refactor under green. **No production code may be committed ahead of a test that
-    covers it** — `make tdd-check` `[G-TDD-01]` walks the branch and refuses it. Pure
+    covers it** — `make tdd-check` `[G-TDD-01]` walks the branch and refuses it; `make sweep` `[G-SWEEP-01]` then mutation-sweeps every changed production module against its committed spec, and a changed module nobody swept is red. Pure
     renames and mechanical refactors whose behaviour is already pinned may carry a
     `TDD-Exempt: <reason>` commit trailer; the reason is printed by CI and reviewed, and
     an empty reason is not an exemption. "The test is obvious" is not a reason, and a

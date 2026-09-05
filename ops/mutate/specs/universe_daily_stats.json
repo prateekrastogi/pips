@@ -1,0 +1,69 @@
+{
+ "source": "python/pips/universe/daily_stats.py",
+ "tests": [
+  "tests/unit/test_daily_stats_reader.py"
+ ],
+ "mutations": [
+  {
+   "name": "as-of-day-excluded",
+   "old": "pl.col(\"trade_date\") <= as_of",
+   "new": "pl.col(\"trade_date\") < as_of"
+  },
+  {
+   "name": "future-leaks",
+   "old": "frame.filter(pl.col(\"trade_date\") <= as_of).sort(",
+   "new": "frame.sort("
+  },
+  {
+   "name": "short-window-ranked",
+   "old": "if window.height < lookback_sessions:",
+   "new": "if window.height < 1:"
+  },
+  {
+   "name": "head-not-tail",
+   "old": "rows.tail(lookback_sessions)",
+   "new": "rows.head(lookback_sessions)"
+  },
+  {
+   "name": "dupes-ignored",
+   "old": "if dupes.height:",
+   "new": "if False:"
+  },
+  {
+   "name": "rupee-volume-in-paise",
+   "old": "c * v / PAISE_PER_RUPEE",
+   "new": "c * v"
+  },
+  {
+   "name": "returns-misaligned",
+   "old": "rupee_volume[1:]",
+   "new": "rupee_volume[:-1]"
+  },
+  {
+   "name": "explainer-dropped",
+   "old": "explain=explain,",
+   "new": "explain=None,"
+  },
+  {
+   "name": "symbol-not-passed-to-gap-rate",
+   "old": "                    symbol=symbol,\n                ),",
+   "new": "                    symbol=\"\",\n                ),"
+  },
+  {
+   "name": "final-sort-dropped",
+   "old": "stats.sort(key=lambda s: s.symbol)",
+   "new": "pass"
+  },
+  {
+   "name": "bad-close-crashes-population",
+   "old": "excluded[symbol] = str(error)\n            continue",
+   "new": "raise"
+  },
+  {
+   "name": "date-sort-dropped",
+   "old": ".sort(\"trade_date\")",
+   "new": ""
+  }
+ ],
+ "timeout": 180
+}
