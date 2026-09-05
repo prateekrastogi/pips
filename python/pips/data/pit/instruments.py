@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
 
@@ -92,6 +93,19 @@ class Instrument(PipsConfig):
         return validate_isin(value)
 
 
+_MAX_VIEWS: Final = 4096  # ~745 trading days x a handful of knowledge dates, with room
+
+
+@dataclass
+class _View:
+    """One (valid date, knowledge date) slice of the master, indexed three ways."""
+
+    instruments: list[Instrument]
+    by_vendor: dict[str, list[Instrument]] = field(default_factory=dict)
+    by_symbol: dict[str, list[Instrument]] = field(default_factory=dict)
+    by_token: dict[str, list[Instrument]] = field(default_factory=dict)
+
+
 class InstrumentMaster:
     """The instrument table, over a :class:`PitStore`.
 
@@ -102,6 +116,7 @@ class InstrumentMaster:
 
     def __init__(self, store: PitStore) -> None:
         self.store = store
+        self._views: dict[tuple[date, date | None, int, int], _View] = {}
 
     # ------------------------------------------------------------- writing ----------
 
@@ -234,10 +249,35 @@ class InstrumentMaster:
         mistake announces itself — one resolves nothing, the other silently uses today — so
         the choice is typed at the call site rather than inherited from a default.
         """
-        return [
-            from_payload(Instrument, r.payload)
-            for r in self.store.as_of(TABLE, known_on=known_on or _FAR_FUTURE, valid_on=on)
-        ]
+        return list(self._view(on, known_on).instruments)
+
+    def _view(self, on: date, known_on: date | None) -> _View:
+        """The instruments live on ``on`` as known on ``known_on``, indexed -- built ONCE.
+
+        Found on arb-vm: promoting 6,202 daily range records is ~4.6 million vendor-code
+        resolutions, and each one filtered every record and re-validated every instrument into
+        a pydantic model -- days of CPU for one parquet file. The view is keyed on the store's
+        record count AND its parse counter, so an append by this process or by another one
+        over the same directory (a backfill beside a QC pass) invalidates it. Same answers;
+        fewer times computed.
+        """
+        records = self.store.all_records(TABLE)  # refreshes the store's own size-keyed cache
+        key = (on, known_on, len(records), self.store.file_parses)
+        view = self._views.get(key)
+        if view is None:
+            instruments = [
+                from_payload(Instrument, r.payload)
+                for r in self.store.as_of(TABLE, known_on=known_on or _FAR_FUTURE, valid_on=on)
+            ]
+            view = _View(instruments=instruments)
+            for instrument in instruments:
+                view.by_vendor.setdefault(instrument.vendor_code, []).append(instrument)
+                view.by_symbol.setdefault(instrument.symbol, []).append(instrument)
+                view.by_token.setdefault(instrument.exchange_token, []).append(instrument)
+            if len(self._views) >= _MAX_VIEWS:
+                self._views.pop(next(iter(self._views)))
+            self._views[key] = view
+        return view
 
     def resolve_symbol(self, symbol: str, on: date, *, known_on: date | None) -> Instrument | None:
         """The instrument holding ``symbol`` on ``on``. ``None`` if nobody held it.
@@ -246,16 +286,14 @@ class InstrumentMaster:
         falling back to "the most recent holder" is exactly how one price series ends up
         containing two companies.
         """
-        matches = [i for i in self.as_of(on, known_on=known_on) if i.symbol == symbol]
+        matches = self._view(on, known_on).by_symbol.get(symbol, [])
         return self._exactly_one(matches, f"symbol {symbol!r}", on)
 
     def resolve_token(
         self, exchange_token: str, on: date, *, known_on: date | None
     ) -> Instrument | None:
         """The instrument holding ``exchange_token`` on ``on``."""
-        matches = [
-            i for i in self.as_of(on, known_on=known_on) if i.exchange_token == exchange_token
-        ]
+        matches = self._view(on, known_on).by_token.get(exchange_token, [])
         return self._exactly_one(matches, f"token {exchange_token!r}", on)
 
     def resolve_vendor_code(
@@ -268,11 +306,11 @@ class InstrumentMaster:
         a vendor code through the symbol path would silently miss every name whose two codes
         differ, which is most of them.
         """
-        matches = [
-            i
-            for i in self.as_of(on, known_on=known_on)
-            if i.vendor_code and i.vendor_code == vendor_code
-        ]
+        if not vendor_code:
+            # `vendor_code` defaults to empty, so "" would match every instrument the vendor
+            # never named: thousands of live matches, or one wrong one. Nothing is the answer.
+            return None
+        matches = self._view(on, known_on).by_vendor.get(vendor_code, [])
         return self._exactly_one(matches, f"vendor code {vendor_code!r}", on)
 
     @staticmethod

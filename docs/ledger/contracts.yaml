@@ -74,6 +74,7 @@
   tests:
     - "tests/unit/test_pit.py"
     - "tests/unit/test_instrument_master.py"
+    - "tests/unit/test_master_resolution_view.py"
     - "tests/unit/test_corporate_actions.py"
     - "tests/unit/test_capability_master.py"
     - "tests/unit/test_locality_coverage.py"
@@ -99,6 +100,14 @@
   # for the repository fails before it spends any time.
   status: building
   owner_milestone: M6
+  #
+  # RESOLUTION GOES THROUGH A PER-DAY VIEW (2026-09-05). Found on arb-vm: promoting 6,202 daily
+  # range records is ~4.6M vendor-code resolutions, each filtering every record and re-validating
+  # every instrument -- days of CPU. `InstrumentMaster._view(on, known_on)` is built once per
+  # (valid, knowledge) date, indexed by vendor code / symbol / token, keyed on the store's record
+  # count and parse counter so ANY append (this process or another over the same directory)
+  # invalidates it. Same answers: duplicates still raise, "" still resolves to nothing, `as_of`
+  # still returns a copy. Bounded (4,096, FIFO); eviction cannot change an answer.
 
 - id: C-DATA-02
   title: "Snapshot manifests are Merkle-rooted; experiments pin snapshot_root"
