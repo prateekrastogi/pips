@@ -46,6 +46,7 @@ class DailyPromotionReport:
     files_read: int = 0
     files_promoted: int = 0
     rows: int = 0
+    superseded: int = 0
     other_shape: int = 0
     """Day-keyed records: silver's business, not this panel's. Counted, never quarantined."""
     quarantined: list[Quarantined] = field(default_factory=list)
@@ -113,7 +114,15 @@ def promote_daily(
             report.files_promoted += 1
 
     if report.written:
-        _write(daily_root, report.written)
+        # One row per instrument-day. Bronze may hold several replies for one range (a seed
+        # fetch and a later re-fetch, or a vendor correction); the LATEST received_at_ns wins
+        # and the rest are COUNTED -- a duplicated day doubles a volume and halves a return,
+        # and a silently collapsed one hides that the vendor answered twice.
+        kept = _latest_per_instrument_day(report.written)
+        report.superseded = len(report.written) - len(kept)
+        report.rows = len(kept)
+        report.written = kept
+        _write(daily_root, kept)
     return report
 
 
@@ -169,6 +178,17 @@ def _rows_for(
             continue
         rows.append(row)
     return rows
+
+
+def _latest_per_instrument_day(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep, for each (isin, trade_date), the row with the greatest ``received_at_ns``."""
+    latest: dict[tuple[str, date], dict[str, Any]] = {}
+    for row in rows:
+        key = (str(row["isin"]), row["trade_date"])
+        current = latest.get(key)
+        if current is None or int(row["received_at_ns"]) > int(current["received_at_ns"]):
+            latest[key] = row
+    return list(latest.values())
 
 
 def _write(daily_root: Path, rows: list[dict[str, Any]]) -> None:
@@ -246,6 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     if report.other_shape:
         print(f"    {report.other_shape} day-keyed record(s) skipped — those belong to silver")
+    if report.superseded:
+        print(
+            f"    {report.superseded} superseded row(s): a later reply covered the same "
+            "instrument-day and won; the earlier ones are not in the panel"
+        )
     if report.quarantined:
         print(f"    {len(report.quarantined)} record(s) quarantined:")
         for item in report.quarantined[:5]:

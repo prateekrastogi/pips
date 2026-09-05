@@ -1516,6 +1516,11 @@
   # and governs resolution (a 2019 as-of quarantines a 2020 listing; pinned by test after a
   # frozen-date mutant survived). Two-word command, so `--help` is the dispatcher's central
   # guard, like `ledger check`.
+  #
+  # ONE ROW PER INSTRUMENT-DAY (2026-09-05): the first real panel had 1,577,851 duplicate
+  # (symbol, trade_date) pairs because every seed range was fetched twice and both replies were
+  # exploded. The latest `received_at_ns` wins; the superseded count is REPORTED, never dropped
+  # silently -- a duplicated day doubles a volume and halves a return, and the reader refuses it.
 
 - id: C-GUARD-01
   title: "An output root that cannot be written refuses the run before the work, by a real write"

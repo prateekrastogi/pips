@@ -21,6 +21,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
+import polars as pl
+
 from pips.data.daily import promote_daily
 
 RANGE_RECORD: dict[str, Any] = {
@@ -210,3 +212,32 @@ def test_a_record_without_a_usable_received_at_is_refused(tmp_path: Path) -> Non
     )
     assert report.rows == 0
     assert any("received_at_ns" in q.reason for q in report.quarantined)
+
+
+def test_two_replies_for_one_instrument_day_keep_the_latest_and_report_the_rest(
+    tmp_path: Path,
+) -> None:
+    # arb-vm, 2026-09-05: every seed range was fetched twice (original + the re-fetch that filled
+    # 2023-09-04), so bronze holds two range records per key and the panel came out with
+    # 1,577,851 duplicate (symbol, trade_date) pairs -- which the reader rightly refuses.
+    # One row per instrument-day: the LATEST received_at_ns wins; the rest are counted, not lost.
+    first = json.loads(json.dumps(RANGE_RECORD))
+    later = json.loads(json.dumps(RANGE_RECORD))
+    later["received_at_ns"] = first["received_at_ns"] + 1_000
+    for bar in later["payload"]["Success"]:
+        bar["close"] = bar["close"] + 1.0  # the correction the vendor sent second
+    write(tmp_path / "bronze", first, name="first.json")
+    write(tmp_path / "bronze", later, name="later.json")
+    report = promote_daily(
+        tmp_path / "bronze", tmp_path / "daily", cast(Any, FakeMaster()), known_on=date(2026, 9, 4)
+    )
+    panel = pl.read_parquet(tmp_path / "daily" / "bars_1d.parquet")
+    assert panel.height == 3
+    assert panel.group_by(["isin", "trade_date"]).len()["len"].max() == 1
+    assert panel.sort("trade_date")["close_paise"].to_list() == [
+        10600,
+        11200,
+        11500,
+    ]  # the later closes
+    assert report.rows == 3
+    assert report.superseded == 3

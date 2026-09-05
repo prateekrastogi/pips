@@ -188,3 +188,17 @@ def test_an_unwritable_daily_root_is_refused_before_any_record_is_read(
     captured = capsys.readouterr()
     assert "cannot write" in captured.err and str(root / "daily") in captured.err
     assert "range record" not in captured.out  # nothing was read, nothing was counted
+
+
+def test_superseded_replies_are_reported_not_silently_collapsed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path)
+    later = range_record()
+    later["received_at_ns"] += 1_000
+    d = root / "bronze" / "RELIND" / "1day" / "2026-08-24_2026-08-26"
+    (d / "later.json").write_text(json.dumps(later), encoding="utf-8")
+    assert daily_module.main([str(root), "--known-on", KNOWN_ON]) == 0
+    out = capsys.readouterr().out
+    assert "3 row(s) in" in out  # one per instrument-day, not six
+    assert "3 superseded" in out  # the earlier reply's rows, counted aloud
