@@ -26,6 +26,8 @@ commands:
   promote <root> --known-on  bronze -> silver, consulting QC's verdicts (§6 M5/M6)
   daily promote <root> --known-on
                              bronze -> the daily panel (bars_1d.parquet), beside silver (BLK-0003)
+  universe prerank <root> --as-of
+                             the spread-free A+ pre-rank -> universes/prerank-<as_of>.json (§6 M4)
   fixtures generate [out]    regenerate the seeded smoke fixtures
   determinism [root]         run the smoke pipeline twice and diff hashes
 """
@@ -149,6 +151,10 @@ def main(argv: list[str] | None = None) -> int:
         from pips.data.breeze.capture_session import main as capture_main
 
         return capture_main(rest)
+    if command == "universe" and rest[:1] == ["prerank"]:
+        from pips.universe.prerank import main as prerank_main
+
+        return prerank_main(rest[1:])
     if command == "daily" and rest[:1] == ["promote"]:
         from pips.data.daily import main as daily_main
 

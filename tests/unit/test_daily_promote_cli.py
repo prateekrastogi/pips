@@ -172,6 +172,6 @@ def test_known_on_governs_resolution_a_date_before_the_listing_quarantines(
     root = archive(tmp_path)
     assert daily_module.main([str(root), "--known-on", "2019-06-01"]) == 0
     out = capsys.readouterr().out
-    assert "quarantined" in out
+    assert "record(s) quarantined" in out  # the phrase, not a word tmp_path might contain
     panel = root / "daily" / "bars_1d.parquet"
     assert not panel.exists() or pl.read_parquet(panel).height == 0

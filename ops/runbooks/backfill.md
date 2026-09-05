@@ -73,6 +73,19 @@ It writes `/srv/pips/daily/bars_1d.parquet` and prints `N of M range record(s) -
 panel is a campaign that did not run, not a clean one. Exit 2 means no instrument master at
 `/srv/pips/pit`. This panel is what `pips.universe.daily_stats` reads for the capture pre-rank.
 
+## 6. Rank the capture shortlist from the daily panel
+
+```bash
+docker compose run --rm --no-deps research python -m pips.cli universe prerank /srv/pips \
+  --as-of 2026-09-03   # the LAST SESSION IN THE PANEL, not today: check max(trade_date) first
+```
+
+Writes `/srv/pips/universes/prerank-<as_of>.json` once; a second run for the same as-of is exit 1
+and changes nothing (append-only — look at why the selection would differ, do not replace it).
+`--n` defaults to the shortlist width (500) and is a maximum. `--explore K` adds K names from
+below the cut on a weekly rotation (default 0). This artifact is what `pips capture` should be
+pointed at; that wiring is the next unit.
+
 ## What the manifest does and does not mean
 
 `/srv/pips/state/backfill-manifest.json` records an **outcome** per key, not just "done":

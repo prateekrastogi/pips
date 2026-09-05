@@ -28,6 +28,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 # One z-score implementation in this package, not two. `_z` is private to `liquidity` because
 # nothing else needed it; this is the second caller, and copying it would give the pre-rank a
@@ -151,3 +152,118 @@ def exploration_picks(
         return tail
     offset = ((refresh.toordinal() // 7) * budget) % len(tail)
     return tuple(tail[(offset + i) % len(tail)] for i in range(budget))
+
+
+def _gap_config(path: Path) -> tuple[float, int]:
+    """`config/universe/gap_rate.yaml` -> (threshold, lookback_sessions).
+
+    Both required: the pre-rank has no built-in value for either.
+    """
+    import yaml
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        return float(raw["threshold"]), int(raw["lookback_sessions"])
+    except KeyError as missing:
+        raise ValueError(
+            f"{path}: missing {missing} -- the pre-rank takes no built-in value"
+        ) from None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: ``pips universe prerank <root> --as-of YYYY-MM-DD [--n 500] [--config P]``.
+
+    The daily panel (`pips daily promote`) -> `DailyStats` over the configured lookback ->
+    `prerank_for_capture` -> ONE artifact at ``<root>/universes/prerank-<as_of>.json``. The
+    artifact is append-only: the same as-of twice is a refusal, because a re-run that would pick a
+    different 500 for the same day is a fact to be looked at, not a file to be replaced.
+    """
+    import argparse
+    import json
+    import os
+    import sys
+
+    from pips.data.pit.explain import jump_explainer
+    from pips.universe.daily_stats import daily_stats_from_panel
+    from pips.universe.shortlist import CAPTURE_SHORTLIST_N
+
+    parser = argparse.ArgumentParser(prog="pips universe prerank")
+    parser.add_argument("data_root", nargs="?", default=None, help="defaults to $PIPS_DATA_ROOT")
+    parser.add_argument(
+        "--as-of",
+        required=True,
+        help="the last session the window may see; NOT defaulted to today, so the artifact "
+        "names the date it was built for rather than the date somebody ran it",
+    )
+    parser.add_argument(
+        "--n", type=int, default=CAPTURE_SHORTLIST_N, help="a MAXIMUM, not a target"
+    )
+    parser.add_argument(
+        "--config", default="config/universe/gap_rate.yaml", help="threshold + lookback_sessions"
+    )
+    parser.add_argument(
+        "--explore", type=int, default=0, help="exploration budget below the cut (0: none)"
+    )
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+    root = (
+        Path(args.data_root)
+        if args.data_root
+        else Path(os.environ.get("PIPS_DATA_ROOT", "/srv/pips"))
+    )
+    as_of = date.fromisoformat(args.as_of)
+    panel = root / "daily" / "bars_1d.parquet"
+    if not panel.exists():
+        print(f"prerank: no daily panel at {panel} — nothing to rank.")
+        print(
+            "    That is not a pass. Run `pips daily promote` first (ops/runbooks/backfill.md §5)."
+        )
+        return 0
+    target = root / "universes" / f"prerank-{as_of.isoformat()}.json"
+    if target.exists():
+        print(
+            f"prerank: {target} already exists — the artifact is append-only. A different "
+            "selection for the same as-of is a fact to be looked at, not a file to be replaced.",
+            file=sys.stderr,
+        )
+        return 1
+    threshold, lookback = _gap_config(Path(args.config))
+    explain = jump_explainer(root / "pit")
+    if explain is None:
+        print(
+            f"prerank: no PIT store at {root / 'pit'} — corporate-action gaps are counted as "
+            "gaps in gap_rate, which is the conservative direction (a CA name looks jumpier)."
+        )
+    report = daily_stats_from_panel(
+        panel, as_of=as_of, lookback_sessions=lookback, gap_threshold=threshold, explain=explain
+    )
+    pre = prerank_for_capture(report.stats, n=args.n, as_of=as_of)
+    excluded = {**report.excluded, **pre.excluded}
+    explore = exploration_picks(
+        pre.ranked, cut=len(pre.selected), budget=args.explore, refresh=as_of
+    )
+    artifact = {
+        "as_of": as_of.isoformat(),
+        "n": args.n,
+        "n_admissible": pre.n_admissible,
+        "lookback_sessions": lookback,
+        "gap_threshold": threshold,
+        "config": str(args.config),
+        "panel": str(panel),
+        "selected": list(pre.selected),
+        "ranked": list(pre.ranked),
+        "exploration": list(explore),
+        "excluded": dict(sorted(excluded.items())),
+        "weights": dict(PRERANK_WEIGHTS),
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(artifact, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(
+        f"prerank as of {as_of.isoformat()}: {len(pre.selected)} selected of {pre.n_admissible} "
+        f"admissible (n={args.n}), {len(excluded)} excluded, {len(explore)} exploration -> {target}"
+    )
+    if len(pre.selected) < args.n:
+        print(
+            f"    n is a maximum: {pre.n_admissible} admissible name(s), so {len(pre.selected)} "
+            "selected. Fewer is a valid output; a padded list would not be."
+        )
+    return 0

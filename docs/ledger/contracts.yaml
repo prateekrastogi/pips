@@ -1417,6 +1417,7 @@
   code: "python/pips/universe/prerank.py"
   tests:
     - "tests/unit/test_prerank.py"
+    - "tests/unit/test_prerank_cli.py"
   status: building
   owner_milestone: M4
   # OWNER DECISION 2026-09-05 ("go with A+", BLK-0005). `C-M4-06`'s scorer needs a spread that
@@ -1438,6 +1439,13 @@
   #
   # `PreRank` is NOT a universe. Its docstring is the guard against using it as one, and the
   # test asserts the docstring exists (the ladder refused once on that being `str | None`).
+  #
+  # `pips universe prerank <root> --as-of` is the caller: daily panel -> `C-UNIV-07` reader -> this
+  # -> ONE append-only artifact `universes/prerank-<as_of>.json`. Same as-of twice is a refusal,
+  # not an overwrite. `--as-of` is required (never today), a missing PIT store is said aloud,
+  # and "n is a maximum" is printed when fewer are admissible -- pinned after a mutant survived
+  # on the bare word "maximum", which pytest's tmp_path (named after the test) put into the
+  # printed path. Assertions are full phrases now.
 
 - id: C-UNIV-07
   title: "DailyStats from the daily panel: trailing window ending at as_of, exclusions named, duplicates refused"
