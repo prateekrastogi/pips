@@ -20,6 +20,7 @@ from pips.data.pit.store import PitStore
 
 WEEKEND = "2026-09-06T10:00:00+05:30"  # a Sunday: the plan is printed, nothing opens
 AS_OF = "2026-09-03"
+KNOWN_ISINS = {"RELIANCE": "INE002A01018", "ICICIBANK": "INE090A01021"}
 
 
 def instrument(symbol: str, vendor: str, isin: str) -> Instrument:
@@ -41,7 +42,18 @@ def archive(tmp_path: Path, selected: list[str]) -> Path:
     master.upsert(instrument("ICICIBANK", "ICIBAN", "INE090A01021"), known_from=date(2020, 1, 1))
     (tmp_path / "universes").mkdir()
     (tmp_path / "universes" / f"prerank-{AS_OF}.json").write_text(
-        json.dumps({"as_of": AS_OF, "n": 500, "selected": selected, "ranked": selected})
+        json.dumps(
+            {
+                "as_of": AS_OF,
+                "n": 500,
+                "selected": selected,
+                "ranked": selected,
+                # the artifact identifies names by ISIN; an unknown name gets an ISIN nobody holds
+                "isins": {
+                    sym: KNOWN_ISINS.get(sym, f"INE{sym[:6]:<6}0000")[:12] for sym in selected
+                },
+            }
+        )
     )
     return tmp_path
 
@@ -120,5 +132,62 @@ def test_resolution_is_as_of_the_artifact_date_so_a_later_rename_does_not_lose_t
     InstrumentMaster(PitStore(root / "pit")).rename(
         "INE002A01018", "RELX", known_from=date(2026, 9, 10)
     )
+    assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 0
+    assert "RELIND, ICIBAN" in capsys.readouterr().out
+
+
+def archive_with_isins(tmp_path: Path, selected: list[str], isins: dict[str, str]) -> Path:
+    root = archive(tmp_path, selected)
+    artifact = root / "universes" / f"prerank-{AS_OF}.json"
+    payload = json.loads(artifact.read_text())
+    payload["isins"] = isins
+    artifact.write_text(json.dumps(payload))
+    return root
+
+
+def test_resolution_is_by_isin_so_the_equity_wins_over_a_warrant_with_the_same_symbol(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # arb-vm, 2026-09-05: HDFCBANK is held by INE040A01034 (EQ, HDFBAN) and INE040A13013
+    # ("HDFC BANK WARRANT AUG 23", W3, HDFWA2). By symbol the master refuses; by ISIN it cannot.
+    root = archive_with_isins(tmp_path, ["RELIANCE"], {"RELIANCE": "INE002A01018"})
+    warrant = instrument("RELIANCE", "RELWA1", "INE002A13016")
+    warrant = warrant.model_copy(update={"series": "W3"})
+    InstrumentMaster(PitStore(root / "pit")).upsert(warrant, known_from=date(2020, 1, 1))
+    assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 0
+    assert "capture: 1 symbol(s): RELIND" in capsys.readouterr().out
+
+
+def test_an_artifact_without_isins_is_refused_not_resolved_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path, ["RELIANCE"])
+    artifact = root / "universes" / f"prerank-{AS_OF}.json"
+    payload = json.loads(artifact.read_text())
+    del payload["isins"]  # the pre-ISIN artifact shape
+    artifact.write_text(json.dumps(payload))
+    assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 2
+    err = capsys.readouterr().err
+    assert "isins" in err and "regenerate" in err.lower()
+
+
+def test_an_isin_unknown_to_the_master_as_of_the_artifact_date_is_a_refusal(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive_with_isins(
+        tmp_path, ["RELIANCE", "GHOSTCO"], {"RELIANCE": "INE002A01018", "GHOSTCO": "INE000GHOST0"}
+    )
+    assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 2
+    assert "GHOSTCO" in capsys.readouterr().err
+
+
+def test_resolution_is_as_of_the_artifact_date_so_a_later_delisting_does_not_lose_the_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # By ISIN a later rename is irrelevant; a later DELISTING is not. As of the artifact's date
+    # the instrument is live and must resolve; a resolver reading today's (or any later) state
+    # would find it gone and refuse a shortlist that was right when it was built.
+    root = archive(tmp_path, ["RELIANCE", "ICICIBANK"])
+    InstrumentMaster(PitStore(root / "pit")).delist("INE002A01018", known_from=date(2026, 9, 10))
     assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 0
     assert "RELIND, ICIBAN" in capsys.readouterr().out

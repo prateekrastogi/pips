@@ -49,6 +49,11 @@
    "name": "selected-is-ranked",
    "old": "\"selected\": list(pre.selected),",
    "new": "\"selected\": list(pre.ranked),"
+  },
+  {
+   "name": "isins-missing-from-artifact",
+   "old": "        \"isins\": {symbol: report.isins[symbol] for symbol in pre.ranked},\n",
+   "new": ""
   }
  ],
  "timeout": 180

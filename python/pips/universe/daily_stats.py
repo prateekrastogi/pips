@@ -21,7 +21,7 @@ opinion about what a verdict means.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from itertools import pairwise
 from pathlib import Path
@@ -42,6 +42,8 @@ class DailyStatsReport:
     excluded: Mapping[str, str]
     as_of: date
     lookback_sessions: int
+    isins: Mapping[str, str] = field(default_factory=dict)
+    """symbol -> ISIN over the window. A symbol is not an identity (HDFCBANK is also a warrant)."""
 
 
 def daily_stats_from_panel(
@@ -68,6 +70,7 @@ def daily_stats_from_panel(
 
     stats: list[DailyStats] = []
     excluded: dict[str, str] = {}
+    isins: dict[str, str] = {}
     for key, rows in visible.group_by(["symbol"], maintain_order=True):
         symbol = str(key[0])
         window = rows.tail(lookback_sessions)
@@ -76,6 +79,14 @@ def daily_stats_from_panel(
                 f"{window.height} of {lookback_sessions} sessions visible at {as_of.isoformat()}"
             )
             continue
+        held_by = sorted(set(window["isin"].to_list()))
+        if len(held_by) != 1:
+            excluded[symbol] = (
+                f"symbol held by {len(held_by)} ISINs in the window: {', '.join(held_by)} -- "
+                "a hand-over mid-window, not one series"
+            )
+            continue
+        isins[symbol] = held_by[0]
         days: list[date] = window["trade_date"].to_list()
         opens: list[int] = window["open_paise"].to_list()
         closes: list[int] = window["close_paise"].to_list()
@@ -101,4 +112,4 @@ def daily_stats_from_panel(
             )
         )
     stats.sort(key=lambda s: s.symbol)
-    return DailyStatsReport(tuple(stats), excluded, as_of, lookback_sessions)
+    return DailyStatsReport(tuple(stats), excluded, as_of, lookback_sessions, isins)

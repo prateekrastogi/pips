@@ -213,3 +213,11 @@ def test_an_unwritable_universes_root_is_refused_before_the_panel_is_read(
     assert run(root, "--n", "4") == 2
     err = capsys.readouterr().err
     assert "cannot write" in err and str(root / "universes") in err
+
+
+def test_the_artifact_carries_an_isin_for_every_ranked_symbol(tmp_path: Path) -> None:
+    root = archive(tmp_path, SIX)
+    assert run(root, "--n", "4") == 0
+    artifact = json.loads((root / "universes" / f"prerank-{AS_OF.isoformat()}.json").read_text())
+    assert set(artifact["isins"]) == set(artifact["ranked"])
+    assert artifact["isins"]["AAA"] == "INEAAA"

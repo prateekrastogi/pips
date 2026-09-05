@@ -1431,6 +1431,9 @@
   # not lose a name, pinned after a mutant resolving "as of 2030" survived a fixture that never
   # changes. One unresolved name refuses the run and is named: a dropped name is a name that
   # later trades with no captured data behind it, which is what the shortlist exists to prevent.
+  # Resolution is BY ISIN (2026-09-05): by symbol, HDFCBANK is ambiguous with its own warrant and
+  # the master rightly refuses. An artifact without `isins` is refused with "regenerate", never
+  # resolved by name. The artifact's date governs: a later delisting must not lose a name.
 
 - id: C-M4-12
   title: "The A+ pre-rank: three spread-free components pick the first 500, superset CHECKED, tail explored"
@@ -1466,7 +1469,8 @@
   # not an overwrite. `--as-of` is required (never today), a missing PIT store is said aloud,
   # and "n is a maximum" is printed when fewer are admissible -- pinned after a mutant survived
   # on the bare word "maximum", which pytest's tmp_path (named after the test) put into the
-  # printed path. Assertions are full phrases now.
+  # printed path. Assertions are full phrases now. The artifact carries `isins` for every ranked
+  # symbol, because the capture PLAN against the first real 500 refused on its first name.
 
 - id: C-UNIV-07
   title: "DailyStats from the daily panel: trailing window ending at as_of, exclusions named, duplicates refused"
@@ -1492,6 +1496,10 @@
   # assert on statistics one row moves (gap rate, Amihud) or make the wrong rows the majority
   # of the window. 12/12 after. Two redundant lines (a second sort, an empty-frame guard) were
   # removed rather than left as equivalent mutants.
+  #
+  # THE REPORT CARRIES symbol -> ISIN (2026-09-05): HDFCBANK is also "HDFC BANK WARRANT AUG 23",
+  # and twenty symbols in the master are held by more than one ISIN. A symbol held by two ISINs
+  # inside the window is excluded with both named -- a hand-over, not one series.
 
 - id: C-DATA-04
   title: "The daily panel: bronze range records -> bars_1d.parquet beside silver, and a CLI that calls it"

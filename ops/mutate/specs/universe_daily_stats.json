@@ -63,6 +63,16 @@
    "name": "date-sort-dropped",
    "old": ".sort(\"trade_date\")",
    "new": ""
+  },
+  {
+   "name": "dual-isin-not-excluded",
+   "old": "        if len(held_by) != 1:",
+   "new": "        if False:"
+  },
+  {
+   "name": "isins-not-reported",
+   "old": "        isins[symbol] = held_by[0]\n",
+   "new": ""
   }
  ],
  "timeout": 180

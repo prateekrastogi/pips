@@ -206,3 +206,33 @@ def test_panel_row_order_does_not_matter() -> None:
     )
     (stat,) = report.stats
     assert stat.median_rupee_volume == pytest.approx(10000.0)
+
+
+def test_the_report_carries_each_symbols_isin_because_a_symbol_is_not_an_identity() -> None:
+    # arb-vm, 2026-09-05: HDFCBANK resolves to two live instruments -- the equity and
+    # "HDFC BANK WARRANT AUG 23" (series W3). Twenty symbols in the master are like that. The
+    # panel rows carry the ISIN; the report must hand it on so downstream never resolves a name.
+    days = sessions(2)
+    report = daily_stats_from_panel(
+        panel([*flat("AAA", days), *flat("BBB", days)]),
+        as_of=days[1],
+        lookback_sessions=2,
+        gap_threshold=0.03,
+    )
+    assert report.isins == {"AAA": "INEAAA", "BBB": "INEBBB"}
+
+
+def test_a_symbol_held_by_two_isins_in_the_window_is_excluded_with_both_named() -> None:
+    days = sessions(2)
+    frame = panel([*flat("GOOD", days), *flat("DUAL", days)])
+    # DUAL's second session belongs to a different ISIN: a symbol handed over mid-window
+    frame = frame.with_columns(
+        pl.when((pl.col("symbol") == "DUAL") & (pl.col("trade_date") == days[1]))
+        .then(pl.lit("INEOTHER"))
+        .otherwise(pl.col("isin"))
+        .alias("isin")
+    )
+    report = daily_stats_from_panel(frame, as_of=days[1], lookback_sessions=2, gap_threshold=0.03)
+    assert [s.symbol for s in report.stats] == ["GOOD"]
+    assert "INEDUAL" in report.excluded["DUAL"] and "INEOTHER" in report.excluded["DUAL"]
+    assert "DUAL" not in report.isins

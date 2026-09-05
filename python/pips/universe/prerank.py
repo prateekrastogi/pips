@@ -256,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         "panel": str(panel),
         "selected": list(pre.selected),
         "ranked": list(pre.ranked),
+        "isins": {symbol: report.isins[symbol] for symbol in pre.ranked},
         "exploration": list(explore),
         "excluded": dict(sorted(excluded.items())),
         "weights": dict(PRERANK_WEIGHTS),

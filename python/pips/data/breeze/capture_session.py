@@ -152,7 +152,7 @@ def run_session(
 def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
     """Exchange symbols in a prerank artifact -> Breeze codes, or a refusal message.
 
-    Every symbol must resolve as of the artifact's ``as_of``: a shortlist that quietly lost a
+    Every name must resolve BY ISIN as of the artifact's ``as_of``: a shortlist that quietly lost a
     name would capture nothing for a symbol the universe may later admit, which is the failure
     the shortlist exists to prevent. So one unresolved name refuses the run and is named.
     """
@@ -170,11 +170,19 @@ def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     as_of = date.fromisoformat(payload["as_of"])
     selected = [str(sym) for sym in payload["selected"]]
+    isins = payload.get("isins")
+    if not isinstance(isins, dict):
+        return (
+            f"capture: {artifact} carries no `isins`. A symbol is not an identity -- HDFCBANK is "
+            "also a warrant, and twenty symbols in the master are held by more than one ISIN -- "
+            "so this artifact is not resolved by name. Regenerate it with `pips universe prerank`."
+        )
     master = InstrumentMaster(PitStore(pit))
+    by_isin = {i.isin: i for i in master.as_of(as_of, known_on=as_of)}
     codes: list[str] = []
     missing: list[str] = []
     for symbol in selected:
-        instrument = master.resolve_symbol(symbol, as_of, known_on=as_of)
+        instrument = by_isin.get(str(isins.get(symbol, "")))
         if instrument is None or not instrument.vendor_code:
             missing.append(symbol)
         else:
