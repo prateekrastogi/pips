@@ -345,6 +345,24 @@ remote branch. `make ci` is unaffected (`salvage-verify` was never in the ladder
 `tests/unit/test_salvage.py` builds its own repo under `tmp_path`. `make salvage-verify` now
 explains that the folder was removed on purpose and prints the `git clone` lines that restore it.
 
+## The pre-push gate had a window, and one commit went through it (2026-09-05)
+
+`dd3a55b` reached `main` and was deployed **without any Jenkins build having seen it**: a gated
+push began with `main` at e13dc08, Jenkins built e13dc08, dd3a55b was committed mid-gate, and
+GitHub records the single push landing dd3a55b. The mechanism is UNEXPLAINED — two controlled
+experiments show git sending the pre-hook ref — and is recorded as such rather than guessed at.
+
+Closed regardless of mechanism: the hook now pins `HEAD` when the gate begins and refuses the
+push if `HEAD` differs when it returns. Tested against the real hook; both natural mutations
+verified by hand (`mutate.py`'s canary is inert in bash).
+
+**Consequence for anyone committing:** do not commit on `main` while a push is gating. The gate
+takes ~15 minutes; a commit made in that window now makes the push REFUSE (correctly) rather than
+slip through. Wait for the push to land, then commit.
+
+A post-hoc `make ci` on dd3a55b is the mitigation for the commit that already landed; its result
+is recorded in the log when it finishes.
+
 ## Blockers / awaiting
 - **`BLK-0005` RESOLVED 2026-09-05 — owner chose A+.** A three-component pre-rank picks the
   500; the superset property becomes *checked each refresh* rather than guaranteed by

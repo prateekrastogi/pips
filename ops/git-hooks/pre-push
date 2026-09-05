@@ -24,7 +24,16 @@ if [ -z "$(git rev-list "@{u}..HEAD" 2>/dev/null || git rev-list HEAD -1)" ]; th
   exit 0
 fi
 
-echo "pre-push: running the Jenkins gate for '$BRANCH' before pushing to $REMOTE"
+# PIN WHAT THE GATE IS GATING. The Jenkins build takes ~15 minutes, and a commit made on this
+# branch during that window has, by definition, never been seen by the gate. On 2026-09-05 a
+# push started with main at e13dc08, Jenkins built e13dc08, a further commit dd3a55b was made at
+# 10:00Z mid-gate, and GitHub recorded the push landing dd3a55b -- deployed without any build
+# having seen it. Controlled experiments show `git push` sending the PRE-hook ref, so the exact
+# mechanism is not explained; this guard does not depend on explaining it. If HEAD is not where
+# it was when the gate began, the push is refused, whatever else may be true.
+GATED_SHA="$(git rev-parse HEAD)"
+
+echo "pre-push: running the Jenkins gate for '$BRANCH' (${GATED_SHA:0:12}) before pushing to $REMOTE"
 TRIGGER="$(git rev-parse --show-toplevel)/ops/jenkins/trigger.sh"
 if [ ! -x "$TRIGGER" ] && [ ! -f "$TRIGGER" ]; then
   echo "pre-push: $TRIGGER not found — cannot run the gate. Refusing (fail closed)." >&2
@@ -45,7 +54,20 @@ bash "$TRIGGER" "$BRANCH"
 STATUS=$?
 
 if [ "$STATUS" -eq 0 ]; then
-  echo "pre-push: pips-ci GREEN for '$BRANCH' — pushing"
+  NOW_SHA="$(git rev-parse HEAD)"
+  if [ "$NOW_SHA" != "$GATED_SHA" ]; then
+    cat >&2 <<MSG
+pre-push: REFUSED — '$BRANCH' moved while the gate was running.
+
+  gated:  ${GATED_SHA:0:12}   (this is what Jenkins built and passed)
+  now:    ${NOW_SHA:0:12}   (this is what would be pushed)
+
+The commits between them have never been built. A green gate on the old tip says nothing about
+the new one. Nothing was pushed. Run \`git push\` again: the gate will run on the current tip.
+MSG
+    exit 1
+  fi
+  echo "pre-push: pips-ci GREEN for '$BRANCH' at ${GATED_SHA:0:12} — pushing"
   exit 0
 fi
 
