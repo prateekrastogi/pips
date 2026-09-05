@@ -76,6 +76,9 @@
   tests: ["tests/unit/test_tdd.py"]
   status: enforced
   owner_milestone: M0
+  # THE JENKINS LEG WAS VACUOUS UNTIL 2026-09-05: "tdd-check OK: no commits ahead of origin/main" on
+  # every gated build, because in the gate's clone origin/main is the gated commit. Only the local
+  # ladder (BASE=main) ever checked a commit. Fixed with PIPS_BASE -- see [G-SWEEP-01].
 
 - id: G-SWEEP-01
   title: "Mutation sweep: every production module changed against BASE is swept by a committed spec"
@@ -98,6 +101,9 @@
   # today and the canary did not catch it. The Jenkinsfile is checked to run exactly the
   # Makefile's ladder, because a step added to one and not the other is a gate that stopped
   # gating without saying so.
+  # ITS FIRST REAL RUN IN JENKINS SWEPT NOTHING (#321, 2026-09-05): in the gate's clone origin/main
+  # IS the gated commit, so BASE=origin/main is an empty range. The pre-push hook now passes the
+  # remote's sha (from stdin) as PIPS_BASE and both this stage and tdd-check diff against it.
 
 - id: G-PROV-01
   title: "A verify of unknown provenance cannot report a verdict"

@@ -52,6 +52,7 @@ jobs:
         '''.stripIndent())
         parameters {
           stringParam('PIPS_REF', 'main', 'branch or ref to build, e.g. main or m/0-scaffold')
+          stringParam('PIPS_BASE', 'origin/main', 'the SHA the push starts from; tdd-check and sweep diff against it, because origin/main in this clone is the gated commit itself')
         }
         definition {
           cpsScm {

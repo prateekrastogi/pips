@@ -91,3 +91,20 @@ def test_a_branch_that_moved_during_the_gate_is_refused(tmp_path: Path) -> None:
     assert (
         "B during the gate" not in _git(tmp_path / "remote.git", "log", "--oneline", "main").stdout
     )
+
+
+def test_the_gate_is_told_where_the_remote_stands_so_its_diff_is_not_empty(tmp_path: Path) -> None:
+    # Jenkins #321 (2026-09-05) swept nothing and tdd-check found "no commits ahead of origin/main"
+    # for a commit that changed three production modules: in the gate's own clone origin/main IS
+    # the gated commit. The hook knows the remote's SHA -- git hands it over on stdin -- and must
+    # pass it on as PIPS_BASE, so the gate diffs against what the push starts from.
+    work = _repo_with_hook(
+        tmp_path, 'printf "%s" "${PIPS_BASE:-unset}" > "$(git rev-parse --show-toplevel)/base.txt"'
+    )
+    before = _git(work, "rev-parse", "origin/main").stdout.strip()
+    (work / "f.txt").write_text("more\n", encoding="utf-8")
+    _git(work, "add", "f.txt")
+    _git(work, "commit", "-q", "-m", "a change to gate")
+    result = _git(work, "push", "-q")
+    assert result.returncode == 0, result.stderr
+    assert (work / "base.txt").read_text() == before

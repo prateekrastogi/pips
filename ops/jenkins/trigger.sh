@@ -68,9 +68,15 @@ crumb() {
 echo "pips-ci: requesting build of ref '${REF}' at ${URL}"
 CRUMB="$(crumb)" || unreachable "the crumb request failed; is the controller up?"
 
+# PIPS_BASE (exported by the pre-push hook) is the remote's SHA before this push: what the gate's
+# tdd-check and sweep must diff against. Absent (a manual run, a new branch) the job's default holds.
+PARAMS="PIPS_REF=$(printf '%s' "$REF" | jq -sRr @uri)"
+if [ -n "${PIPS_BASE:-}" ]; then
+  PARAMS="${PARAMS}&PIPS_BASE=$(printf '%s' "$PIPS_BASE" | jq -sRr @uri)"
+fi
 QUEUE_URL="$(curl -fsS -X POST "${AUTH[@]}" --cookie "${WORK}/pips-jenkins-cookies" \
   -H "${CRUMB}" -D - -o /dev/null \
-  "${URL}/job/pips-ci/buildWithParameters?PIPS_REF=$(printf '%s' "$REF" | jq -sRr @uri)" \
+  "${URL}/job/pips-ci/buildWithParameters?${PARAMS}" \
   | awk 'tolower($1)=="location:"{print $2}' | tr -d '\r')" \
   || unreachable "the build request failed"
 

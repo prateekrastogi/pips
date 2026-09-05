@@ -62,11 +62,11 @@ pipeline {
       // git history, which is why .git rides into the research image and why the checkout is
       // not shallow. If it ever prints SKIPPED here, the gate has gone vacuous — treat that
       // as red, not as a pass.
-      steps { sh 'docker run --rm "$IMAGE" make tdd-check BASE=origin/main' }
+      steps { sh 'docker run --rm "$IMAGE" make tdd-check BASE=${PIPS_BASE:-origin/main}' }
     }
 
     stage('py tests')     { steps { sh 'docker run --rm "$IMAGE" make test' } }
-    stage('sweep')        { steps { sh 'docker run --rm "$IMAGE" make sweep BASE=origin/main' } }
+    stage('sweep')        { steps { sh 'docker run --rm "$IMAGE" make sweep BASE=${PIPS_BASE:-origin/main}' } }
     stage('rust tests')   { steps { sh 'docker run --rm "$IMAGE" make rust-test' } }
     stage('determinism')  { steps { sh 'docker run --rm "$IMAGE" make determinism' } }
     stage('ledger-check') { steps { sh 'docker run --rm "$IMAGE" make ledger-check' } }

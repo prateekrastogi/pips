@@ -16,6 +16,17 @@
 set -uo pipefail
 
 REMOTE="${1:-origin}"
+# git hands the refs being pushed on stdin: <local ref> <local sha> <remote ref> <remote sha>.
+# The remote sha is where the push STARTS FROM -- the only honest BASE for the gate's diff. In
+# the gate's own clone origin/main IS the gated commit, so `BASE=origin/main` there is an empty
+# range: Jenkins #321 (2026-09-05) found "no commits ahead" and "nothing to sweep" for a commit
+# that changed three production modules. An all-zero remote sha is a new branch: leave it unset
+# and the job falls back to its default.
+PIPS_BASE=""
+while read -r _local_ref _local_sha _remote_ref remote_sha; do
+  case "$remote_sha" in *[!0]*) PIPS_BASE="$remote_sha" ;; esac
+done
+export PIPS_BASE
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 # Deleting a branch, or pushing nothing, needs no build.

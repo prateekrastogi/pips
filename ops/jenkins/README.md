@@ -35,6 +35,12 @@ Override the placeholder login before first start:
    `origin/main` to prove the branch was written test-first. Under a depth-1 clone there is no
    history to walk, so the gate either goes vacuous or fails for the wrong reason. The
    neighbouring `keeper` project hit exactly this class of failure (its ledger §17.2253).
+   It went vacuous a second way on 2026-09-05: in the gate's own clone `origin/main` IS the
+   gated commit, so `BASE=origin/main` is an empty range and every build said "no commits
+   ahead". The pre-push hook now passes the remote's sha (git hands it over on stdin) as the
+   `PIPS_BASE` parameter, and `tdd-check` and `sweep` diff against it. Adding a parameter to
+   `casc.yaml` needs a controller reload (`POST /configuration-as-code/reload`) before the job
+   accepts it -- until then the parameter is silently dropped.
 
 3. **The pipeline uses no bind mounts.** The controller is a container driving the *host*
    daemon through a mounted socket, so `-v "$PWD:/app"` in a pipeline step is resolved by the
