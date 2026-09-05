@@ -102,7 +102,7 @@ SYMS=$(ls -d /srv/pips/bronze/*/1day | awk -F/ '{print $(NF-1)}' | paste -sd,)  
 docker compose run --rm --no-deps research python -m pips.cli backfill \
   --symbols "$SYMS" --from $D --to $D --interval 1day --ranged
 
-# 2. the panel, one row per instrument-day (30 min on the old store; time it on the new one)
+# 2. the panel, one row per instrument-day (3m45s measured 2026-09-06 on the single-pass store)
 docker compose run --rm --no-deps research python -m pips.cli daily promote /srv/pips --known-on $(date +%F)
 
 # 3. the shortlist as of that session (88 s), append-only: a second run for the same day refuses
