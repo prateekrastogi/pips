@@ -37,6 +37,7 @@ from pips.data.breeze.ws_capture import CaptureStopped
 
 __all__ = [
     "BreezeFeed",
+    "FeedConnectError",
     "FeedUnsupportedError",
     "SubscriptionFailedError",
     "WebSocketClient",
@@ -71,6 +72,10 @@ class WebSocketClient(Protocol):
     def ws_disconnect(self) -> Any: ...
 
 
+class FeedConnectError(RuntimeError):
+    """The vendor could not connect the live stream; the message carries the server's reason."""
+
+
 class BreezeFeed:
     """One connected Breeze subscription, read as an iterator of messages."""
 
@@ -91,9 +96,37 @@ class BreezeFeed:
         self._closed = False
         self.close_error: Exception | None = None
         """Set when `ws_disconnect` raised. Visible rather than swallowed; see `close`."""
+        self.connect_error_detail: Any = None
+        """The server's `connect_error` payload, if the namespace connect was refused.
+
+        BLK-0004: the 2026-09-04 attempt ended in "One or more namespaces failed to connect"
+        and nothing about WHY. python-socketio hands the server's refusal to a `connect_error`
+        listener; the SDK's own listener never surfaced it. Registered here, before any
+        connect, on the SDK's socket.io client when it exposes one -- chained after whatever
+        handler is already there, so the vendor keeps its behaviour and we keep the evidence.
+        """
+        self._listens_for_connect_error = self._listen_for_connect_error(client)
         # Registered before subscribing: the socketio thread can deliver the moment the
         # subscription lands, and a tick arriving before the callback exists is gone.
         client.on_ticks = self._receive
+
+    def _listen_for_connect_error(self, client: Any) -> bool:
+        sio = getattr(client, "sio", None)
+        register = getattr(sio, "on", None)
+        if not callable(register):
+            return False
+        previous = None
+        handlers = getattr(sio, "handlers", None)
+        if isinstance(handlers, dict):
+            previous = handlers.get("/", {}).get("connect_error")
+
+        def record(*data: Any) -> None:
+            self.connect_error_detail = data[0] if len(data) == 1 else (list(data) or None)
+            if callable(previous):
+                previous(*data)
+
+        register("connect_error", record)
+        return True
 
     def subscribe(self, symbols: list[str]) -> None:
         """Connect and subscribe, refusing any symbol the vendor did not actually take.
@@ -102,7 +135,16 @@ class BreezeFeed:
         is not a working capture, and the one it dropped would be missing from the archive
         with nothing to say so.
         """
-        self._client.ws_connect()
+        try:
+            self._client.ws_connect()
+        except Exception as failure:
+            if not self._listens_for_connect_error:
+                why = "no connect_error listener: the client exposes no socket.io client"
+            elif self.connect_error_detail is None:
+                why = "the server refused the socket.io namespace with no payload"
+            else:
+                why = f"the server refused the socket.io namespace: {self.connect_error_detail!r}"
+            raise FeedConnectError(f"{failure} -- {why}") from failure
         for symbol in symbols:
             response = self._client.subscribe_feeds(
                 stock_code=symbol,

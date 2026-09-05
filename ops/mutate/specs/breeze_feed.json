@@ -1,0 +1,40 @@
+{
+ "source": "python/pips/data/breeze/feed.py",
+ "tests": [
+  "tests/unit/test_feed_connect_error.py",
+  "tests/unit/test_breeze_feed.py"
+ ],
+ "timeout": 180,
+ "mutations": [
+  {
+   "name": "listener-not-registered",
+   "old": "        register(\"connect_error\", record)\n        return True\n",
+   "new": "        return True\n"
+  },
+  {
+   "name": "payload-not-recorded",
+   "old": "            self.connect_error_detail = data[0] if len(data) == 1 else (list(data) or None)\n",
+   "new": "            pass\n"
+  },
+  {
+   "name": "payload-not-in-message",
+   "old": "why = f\"the server refused the socket.io namespace: {self.connect_error_detail!r}\"",
+   "new": "why = \"the server refused the socket.io namespace\""
+  },
+  {
+   "name": "original-error-dropped",
+   "old": "raise FeedConnectError(f\"{failure} -- {why}\") from failure",
+   "new": "raise FeedConnectError(why) from failure"
+  },
+  {
+   "name": "no-sio-claims-listener",
+   "old": "        if not callable(register):\n            return False\n",
+   "new": "        if not callable(register):\n            return True\n"
+  },
+  {
+   "name": "close-error-raised-not-recorded",
+   "old": "            self.close_error = failure\n",
+   "new": "            raise\n"
+  }
+ ]
+}

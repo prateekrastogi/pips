@@ -1690,6 +1690,7 @@
   spec: "IMPLEMENTATION.md#6-milestone-plan"
   code: "python/pips/data/breeze/capture.py"
   tests:
+    - "tests/unit/test_feed_connect_error.py"
     - "tests/unit/test_ws_capture.py"
     - "tests/unit/test_ws_supervisor.py"
   # From scratch and pre-authorised: SAL-0025 is NONE_FOUND after a full sweep of every ref in
@@ -1723,6 +1724,12 @@
   # passes is spread and depth that cannot be recovered later. Enforced when something runs it.
   status: building
   owner_milestone: M4
+  #
+  # THE SERVER'S REFUSAL IS KEPT (2026-09-06, BLK-0004): the 2026-09-04 attempt ended in "one or
+  # more namespaces failed to connect" with no reason. The feed registers a `connect_error`
+  # listener on the SDK's socket.io client, records the payload, and raises FeedConnectError with
+  # the original failure and one of three DISTINCT reasons -- the payload, "no payload", or "no
+  # connect_error listener" -- because a missing listener must not read as a silent server.
 
 - id: C-M4-05
   title: "The Breeze stream adapter refuses a subscription the vendor only appeared to accept"
