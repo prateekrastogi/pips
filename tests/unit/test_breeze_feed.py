@@ -25,8 +25,9 @@ refusals.
 
 from __future__ import annotations
 
-import contextlib
 import json
+import threading
+import time
 from typing import Any
 
 import pytest
@@ -81,11 +82,45 @@ class FakeBreeze:
         return [{"message": "disconnected"}]
 
 
-def drain(feed: BreezeFeed) -> list[tuple[MessageKind, Any]]:
-    """Read until the feed says it is finished, the way the supervisor does."""
+def drain(feed: BreezeFeed, *, deadline_seconds: float = 5.0) -> list[tuple[MessageKind, Any]]:
+    """Read until the feed says it is finished, the way the supervisor does -- but not forever.
+
+    `messages()` is `while True` and ends only when `stop()` was called or the socket reports a
+    disconnect. A test that drains a fake which stays "connected" and forgets `stop()` therefore
+    spins on `queue.Empty` indefinitely. Three pytest processes doing exactly that were found on
+    2026-09-05, orphaned and two days old, from drafts of this file before the `stop()` calls
+    went in.
+
+    THE BOUND LIVES OUTSIDE THE GENERATOR ON PURPOSE. A first attempt checked a deadline between
+    `next()` calls, and hung for five minutes anyway: `next()` never RETURNS while the feed is
+    alive and silent, so a check between calls is never reached. The consumer runs in a daemon
+    thread and the deadline is enforced with `join(timeout)`, which holds whatever the generator
+    does. A daemon thread dies with the process, so a hung drain cannot outlive the test run --
+    the two-day orphans were exactly that outliving.
+    """
     out: list[tuple[MessageKind, Any]] = []
-    with contextlib.suppress(CaptureStopped):
-        out.extend(feed.messages())
+    failure: list[BaseException] = []
+
+    def consume() -> None:
+        try:
+            out.extend(feed.messages())
+        except CaptureStopped:
+            return
+        except BaseException as exc:
+            failure.append(exc)
+
+    worker = threading.Thread(target=consume, name="drain", daemon=True)
+    worker.start()
+    worker.join(timeout=deadline_seconds)
+    if worker.is_alive():
+        feed.stop("drain deadline")  # let the thread wind down; it is daemon either way
+        raise AssertionError(
+            f"drain() exceeded {deadline_seconds}s: the feed never stopped. The test almost "
+            "certainly forgot to call feed.stop() before draining -- without it messages() "
+            "loops forever, and a hanging test reports nothing."
+        )
+    if failure:
+        raise failure[0]
     return out
 
 
@@ -382,3 +417,21 @@ def test_a_failure_to_close_is_still_visible() -> None:
 
     assert feed.close_error is not None
     assert "not a connected namespace" in str(feed.close_error)
+
+
+def test_draining_a_feed_that_was_never_stopped_fails_loudly_rather_than_hanging() -> None:
+    """The hardening has to demonstrate itself, or it is a comment with a timer in it.
+
+    Three orphaned pytest processes, two days old, were found on 2026-09-05 -- drafts of this
+    file draining a fake that stays connected, with no `stop()`. `messages()` is `while True`
+    and had nothing to end on. This is that exact shape, and it must end in seconds with the
+    cause named, because a test that hangs reports nothing and takes the whole suite with it.
+    """
+    client = FakeBreeze()
+    feed = BreezeFeed(client, poll_seconds=0.05)
+    feed.subscribe(["RELIND"])
+    # Deliberately NO feed.stop(). The fake reports connected forever.
+    started = time.monotonic()
+    with pytest.raises(AssertionError, match=r"forgot to call feed\.stop"):
+        drain(feed, deadline_seconds=0.5)
+    assert time.monotonic() - started < 3.0, "it must give up promptly, not merely eventually"
