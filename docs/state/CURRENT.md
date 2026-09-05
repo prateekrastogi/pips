@@ -31,8 +31,10 @@ the superset property is CHECKED each refresh rather than guaranteed by construc
 exploration budget captures names just outside the 500 so a missed name is corrected rather than
 permanently absent.
 
-**Next unit:** the A+ pre-rank itself — `median_rupee_volume`, `amihud_ratio` and `gap_rate` now all
-exist over the daily panel, so this is arithmetic plus the two safeguards A+ requires. Then the
+**The A+ pre-rank exists** (`pips.universe.prerank`): the three-component ranking, the superset
+check, and the rotating exploration budget — 18 tests, sweep 8/8. **Next unit:** the reader that
+assembles `DailyStats` from the daily panel (60-session lookback, `jump_explainer` for the
+corporate-action exclusion), which is the last thing between the seed and an actual 500. Then
 1-second capture for the 500, and the four-component score.
 
 **Open, not blocking:** `BLK-0004` — the streaming namespace refusal is unexplained (entitlement and
