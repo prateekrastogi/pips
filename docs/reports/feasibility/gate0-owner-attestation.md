@@ -41,3 +41,10 @@ asking for the same answer in writing. It costs one email, it is not blocking, a
 `evidence_kind` from `VERBAL_ATTESTATION` to `WRITTEN` — which is what §2.1 actually asks for
 and what a compliance review would expect to see. Nothing before P6 depends on it, so there is
 time to do this properly.
+
+## Waiver, 2026-09-06
+
+The owner waived the requirement that ICICI's written reply be filed in this repository
+(message to the agent, 2026-09-06: "waiver gate 0 written reply from icici"). GATE-0 stands on
+the owner's attestation above and the WRITTEN classification of 2026-09-05. No further document
+is awaited. Recorded verbatim so the position is auditable rather than silent.

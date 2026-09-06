@@ -721,18 +721,18 @@ Two numbers per milestone. **Ledger** is mechanical: the mean over that mileston
 building, 7 planned; "—" where a milestone has no row yet). **Est.** is the honest estimate of
 how much of the milestone's stated scope exists AND runs on the plant, judged against the tree
 and arb-vm on the date above. Where they differ, the ledger is measuring what has been pinned
-by a test, not what the milestone promised. **No phase has a sign-off file in
-`docs/state/gates/`** — P0 meets its gate on evidence but has not been approved in writing.
+by a test, not what the milestone promised. **P0 is approved** (`docs/state/gates/P0-approved.md`,
+2026-09-06); no later phase has a sign-off file.
 
 | Phase | Milestone | Ledger | Est. | What exists / what is missing |
 |---|---|---|---|---|
-| **P0 ≈ 95%** | M0 scaffold | 1.00 | 100% | tree, Makefile, containerized ladder, Jenkins pre-push gate `[G-TDD-01]` `[G-SWEEP-01]` |
+| **P0 = 100%** | M0 scaffold | 1.00 | 100% | tree, Makefile, containerized ladder, Jenkins pre-push gate `[G-TDD-01]` `[G-SWEEP-01]` |
 | | M0.5 containerize | — | 100% | research image built FROM the tree; `make ci-container`; provenance |
 | | M1 harvest audit | — | 100% | `salvage.yaml` complete, 15 PORT rows annotated, `../past` deleted after extraction |
 | | M2 core + canaries | 1.00 | 100% | `[C-ID-01]` `[C-SESS-01]`; calendar verified 2023–2026 |
-| | M3 GATE-0 + feasibility | 1.00 | 85% | authority record WRITTEN (owner decision); ICICI's written reply still pending |
+| | M3 GATE-0 + feasibility | 1.00 | 100% | authority record WRITTEN (owner decision, 2026-09-05); ICICI written reply waived as an artifact (owner, 2026-09-06) |
 | | M3.5 deploy rail | 1.00 | 100% | `[C-DEPLOY-01]` `[G-DEPLOY-01]`; every main SHA auto-deployed (11 today) |
-| | *P0 gate* | | **met, unsigned** | CI green, rail end-to-end, artifacts reviewed — no `P0-approved.md` |
+| | *P0 gate* | | **approved 2026-09-06** | `docs/state/gates/P0-approved.md` |
 | **P1 ≈ 45%** | M4 Breeze ingest | 0.69 | 65% | backfill + adaptive pacer + calendar + capture PLAN + shortlist; **live capture blocked (BLK-0004)**; 1m backfill U300×3y not started |
 | | M5 QC + quarantine | 0.75 | 60% | `[C-QC-01]` `[C-QC-02]`; QC runs on bronze; CA-aware jump check has an empty actions table to consult |
 | | M6 PIT masters | 0.60 | 55% | instruments master live (5,851, per-day view), daily panel `[C-DATA-04]`, silver; **corporate actions empty, ASM/GSM absent** |

@@ -4,7 +4,10 @@
 # is cleared without the evidence to back it FAILS TO VALIDATE — see
 # python/pips/core/authority.py. Editing `status` alone will not clear anything.
 #
-# CURRENT STATE: CLEARED, evidence_kind WRITTEN as of 2026-09-05.
+# CURRENT STATE: CLEARED, evidence_kind WRITTEN as of 2026-09-05. The ICICI written reply as a
+# repository artifact was WAIVED by the owner on 2026-09-06 ("waiver gate 0 written reply from
+# icici"): `evidence_paths` is complete as it stands, by the owner's decision, and no further
+# document is awaited. This is the owner's gate and the owner's account.
 #
 # PROVENANCE OF THIS CLASSIFICATION, recorded so it is auditable rather than silent. It was
 # changed from VERBAL_ATTESTATION on the OWNER'S EXPLICIT INSTRUCTION ("make it written, it's
@@ -41,6 +44,7 @@ certified_signal_feed: BREEZE
 
 notes: >
   Cleared by owner decision. evidence_kind upgraded VERBAL_ATTESTATION -> WRITTEN on
-  2026-09-05 by explicit owner instruction. The remaining open item is documentary, not
-  decisional: `evidence_paths` should gain the ICICI reply itself when it is filed, and the
-  four blank fields in gate0-owner-attestation.md are still blank.
+  2026-09-05 by explicit owner instruction. On 2026-09-06 the owner WAIVED the ICICI written
+  reply as a repository artifact ("waiver gate 0 written reply from icici"): nothing further
+  is awaited for this gate. The blank fields in gate0-owner-attestation.md remain the owner's
+  to fill if ever wanted; they are no longer an open item.
