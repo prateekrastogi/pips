@@ -149,7 +149,7 @@ def run_session(
     )
 
 
-def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
+def _resolve_shortlist(artifact: Path, root: Path) -> tuple[list[str], int, int] | str:
     """Exchange symbols in a prerank artifact -> Breeze codes, or a refusal message.
 
     Every name must resolve BY ISIN as of the artifact's ``as_of``: a shortlist that quietly lost a
@@ -170,6 +170,12 @@ def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     as_of = date.fromisoformat(payload["as_of"])
     selected = [str(sym) for sym in payload["selected"]]
+    # OWNER DECISION 2026-09-06: exploration names are CAPTURED, never traded. Appended after the
+    # selected, once each -- a name in both lists is one subscription.
+    exploration = [
+        str(sym) for sym in payload.get("exploration", []) if str(sym) not in set(selected)
+    ]
+    names = selected + exploration
     isins = payload.get("isins")
     if not isinstance(isins, dict):
         return (
@@ -181,7 +187,7 @@ def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
     by_isin = {i.isin: i for i in master.as_of(as_of, known_on=as_of)}
     codes: list[str] = []
     missing: list[str] = []
-    for symbol in selected:
+    for symbol in names:
         instrument = by_isin.get(str(isins.get(symbol, "")))
         if instrument is None or not instrument.vendor_code:
             missing.append(symbol)
@@ -189,11 +195,11 @@ def _resolve_shortlist(artifact: Path, root: Path) -> list[str] | str:
             codes.append(instrument.vendor_code)
     if missing:
         return (
-            f"capture: {len(missing)} of {len(selected)} shortlist symbol(s) do not resolve as of "
+            f"capture: {len(missing)} of {len(names)} shortlist symbol(s) do not resolve as of "
             f"{as_of.isoformat()}: {', '.join(missing)}. Refusing: a dropped name is a name that "
             "later trades with no captured data behind it."
         )
-    return codes
+    return codes, len(selected), len(exploration)
 
 
 def main(
@@ -245,7 +251,8 @@ def main(
         if isinstance(resolved, str):
             print(resolved, file=sys.stderr)
             return 2
-        symbols, origin = resolved, Path(args.shortlist)
+        symbols, n_selected, n_exploration = resolved
+        origin = (Path(args.shortlist), n_selected, n_exploration)
     else:
         symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
     if not symbols:
@@ -267,7 +274,8 @@ def main(
     closes = decision.closes_at.strftime("%H:%M") if decision.closes_at else "—"
     print(f"capture: {len(symbols)} symbol(s): {', '.join(symbols)}")
     if origin is not None:
-        print(f"  shortlist from {origin}")
+        path, n_selected, n_exploration = origin
+        print(f"  shortlist from {path}: {n_selected} selected + {n_exploration} exploration")
     print(f"  session {opens}-{closes} {calendar.timezone} — {decision.reason}")
     print(f"  would write under {root}")
     if decision.late_by_seconds:

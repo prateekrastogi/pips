@@ -191,3 +191,32 @@ def test_resolution_is_as_of_the_artifact_date_so_a_later_delisting_does_not_los
     InstrumentMaster(PitStore(root / "pit")).delist("INE002A01018", known_from=date(2026, 9, 10))
     assert run(root, "--shortlist", str(root / "universes" / f"prerank-{AS_OF}.json")) == 0
     assert "RELIND, ICIBAN" in capsys.readouterr().out
+
+
+def test_exploration_names_join_the_subscription_after_the_selected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # OWNER DECISION 2026-09-06: exploration names are CAPTURED (never traded). Without this the
+    # budget measures nothing.
+    root = archive(tmp_path, ["RELIANCE"])
+    artifact = root / "universes" / f"prerank-{AS_OF}.json"
+    payload = json.loads(artifact.read_text())
+    payload["exploration"] = ["ICICIBANK"]
+    payload["isins"]["ICICIBANK"] = "INE090A01021"
+    artifact.write_text(json.dumps(payload))
+    assert run(root, "--shortlist", str(artifact)) == 0
+    out = capsys.readouterr().out
+    assert "capture: 2 symbol(s): RELIND, ICIBAN" in out
+    assert "1 selected + 1 exploration" in out
+
+
+def test_an_exploration_name_already_selected_is_not_subscribed_twice(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path, ["RELIANCE", "ICICIBANK"])
+    artifact = root / "universes" / f"prerank-{AS_OF}.json"
+    payload = json.loads(artifact.read_text())
+    payload["exploration"] = ["ICICIBANK"]
+    artifact.write_text(json.dumps(payload))
+    assert run(root, "--shortlist", str(artifact)) == 0
+    assert "capture: 2 symbol(s): RELIND, ICIBAN" in capsys.readouterr().out

@@ -132,7 +132,7 @@ def superset_breaches(*, universe: Sequence[str], shortlist: Sequence[str]) -> t
 
 
 def exploration_picks(
-    ranked: Sequence[str], *, cut: int, budget: int, refresh: date
+    ranked: Sequence[str], *, cut: int, budget: int, refresh: date, band_end: int | None = None
 ) -> tuple[str, ...]:
     """``budget`` names just OUTSIDE the cut, rotating deterministically by refresh date.
 
@@ -145,7 +145,9 @@ def exploration_picks(
     Deterministic in ``refresh`` (rule 1): rotating is not the same as random. A budget that covers
     the whole tail returns the tail once.
     """
-    tail = tuple(ranked[cut:])
+    # ``band_end`` bounds the pool to ranks (cut, band_end]: OWNER DECISION 2026-09-06, 501-1,000.
+    # A name at rank 2,400 will not qualify on four components; the budget belongs near the cut.
+    tail = tuple(ranked[cut:] if band_end is None else ranked[cut:band_end])
     if budget <= 0 or not tail:
         return ()
     if budget >= len(tail):
@@ -170,8 +172,29 @@ def _gap_config(path: Path) -> tuple[float, int]:
         ) from None
 
 
+def _exploration_policy(path: Path) -> tuple[int, int, bool, str]:
+    """`config/universe/prerank.yaml` -> (budget, band_end, active, activation_condition)."""
+    import yaml
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        e = raw["exploration"]
+        return (
+            int(e["budget"]),
+            int(e["band_end"]),
+            bool(e["active"]),
+            str(e["activation_condition"]),
+        )
+    except KeyError as missing:
+        raise ValueError(
+            f"{path}: missing {missing} in `exploration` -- no built-in policy"
+        ) from None
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI: ``pips universe prerank <root> --as-of YYYY-MM-DD [--n 500] [--config P]``.
+
+    ``--prerank-config Q`` names the exploration policy (``config/universe/prerank.yaml``).
 
     The daily panel (`pips daily promote`) -> `DailyStats` over the configured lookback ->
     `prerank_for_capture` -> ONE artifact at ``<root>/universes/prerank-<as_of>.json``. The
@@ -203,7 +226,9 @@ def main(argv: list[str] | None = None) -> int:
         "--config", default="config/universe/gap_rate.yaml", help="threshold + lookback_sessions"
     )
     parser.add_argument(
-        "--explore", type=int, default=0, help="exploration budget below the cut (0: none)"
+        "--prerank-config",
+        default="config/universe/prerank.yaml",
+        help="exploration policy: budget, band_end, active + its activation condition",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     root = (
@@ -243,9 +268,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     pre = prerank_for_capture(report.stats, n=args.n, as_of=as_of)
     excluded = {**report.excluded, **pre.excluded}
-    explore = exploration_picks(
-        pre.ranked, cut=len(pre.selected), budget=args.explore, refresh=as_of
-    )
+    budget, band_end, active, condition = _exploration_policy(Path(args.prerank_config))
+    if active:
+        explore = exploration_picks(
+            pre.ranked, cut=len(pre.selected), budget=budget, refresh=as_of, band_end=band_end
+        )
+    else:
+        explore = ()
+        print(
+            f"prerank: exploration inactive ({budget}/week over ranks {args.n + 1}-{band_end}): "
+            f"{condition}"
+        )
     artifact = {
         "as_of": as_of.isoformat(),
         "n": args.n,
@@ -258,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         "ranked": list(pre.ranked),
         "isins": {symbol: report.isins[symbol] for symbol in pre.ranked},
         "exploration": list(explore),
+        "exploration_policy": {"budget": budget, "band_end": band_end, "active": active},
         "excluded": dict(sorted(excluded.items())),
         "weights": dict(PRERANK_WEIGHTS),
     }

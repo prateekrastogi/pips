@@ -54,6 +54,21 @@
    "name": "isins-missing-from-artifact",
    "old": "        \"isins\": {symbol: report.isins[symbol] for symbol in pre.ranked},\n",
    "new": ""
+  },
+  {
+   "name": "band-ignored",
+   "old": "    tail = tuple(ranked[cut:] if band_end is None else ranked[cut:band_end])",
+   "new": "    tail = tuple(ranked[cut:])"
+  },
+  {
+   "name": "inactive-still-explores",
+   "old": "    if active:\n        explore = exploration_picks(",
+   "new": "    if True:\n        explore = exploration_picks("
+  },
+  {
+   "name": "policy-not-in-artifact",
+   "old": "        \"exploration_policy\": {\"budget\": budget, \"band_end\": band_end, \"active\": active},\n",
+   "new": ""
   }
  ],
  "timeout": 180

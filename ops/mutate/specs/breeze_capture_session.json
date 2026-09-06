@@ -16,7 +16,7 @@
   },
   {
    "name": "origin-not-printed",
-   "old": "        print(f\"  shortlist from {origin}\")\n",
+   "old": "        print(f\"  shortlist from {path}: {n_selected} selected + {n_exploration} exploration\")\n",
    "new": "        pass\n"
   },
   {
@@ -36,7 +36,7 @@
   },
   {
    "name": "missing-count-not-named",
-   "old": "f\"capture: {len(missing)} of {len(selected)} shortlist symbol(s) do not resolve as of \"",
+   "old": "f\"capture: {len(missing)} of {len(names)} shortlist symbol(s) do not resolve as of \"",
    "new": "f\"capture: shortlist symbol(s) do not resolve as of \""
   },
   {
@@ -48,6 +48,16 @@
    "name": "resolve-by-symbol-not-isin",
    "old": "        instrument = by_isin.get(str(isins.get(symbol, \"\")))",
    "new": "        instrument = master.resolve_symbol(symbol, as_of, known_on=as_of)"
+  },
+  {
+   "name": "exploration-not-subscribed",
+   "old": "    names = selected + exploration\n",
+   "new": "    names = list(selected)\n"
+  },
+  {
+   "name": "exploration-counted-but-duplicated",
+   "old": "        str(sym) for sym in payload.get(\"exploration\", []) if str(sym) not in set(selected)\n",
+   "new": "        str(sym) for sym in payload.get(\"exploration\", [])\n"
   }
  ],
  "timeout": 180

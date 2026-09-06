@@ -221,3 +221,65 @@ def test_the_artifact_carries_an_isin_for_every_ranked_symbol(tmp_path: Path) ->
     artifact = json.loads((root / "universes" / f"prerank-{AS_OF.isoformat()}.json").read_text())
     assert set(artifact["isins"]) == set(artifact["ranked"])
     assert artifact["isins"]["AAA"] == "INEAAA"
+
+
+def write_prerank_config(
+    root: Path, *, active: bool, budget: int = 25, band_end: int = 1000
+) -> Path:
+    cfg = root / "prerank.yaml"
+    cfg.write_text(
+        "schema_version: 1\nexploration:\n"
+        f"  budget: {budget}\n  band_end: {band_end}\n  active: {'true' if active else 'false'}\n"
+        '  activation_condition: "after the first live capture has run for a few days and the '
+        'streaming subscription ceiling is measured"\n'
+        "  decided_on: 2026-09-06\n  decided_by: owner\n",
+        encoding="utf-8",
+    )
+    return cfg
+
+
+def test_the_exploration_budget_comes_from_effective_dated_config_not_a_flag(
+    tmp_path: Path,
+) -> None:
+    root = archive(tmp_path, SIX)
+    with pytest.raises(
+        SystemExit
+    ) as stop:  # the flag is gone: a parameter is data, not an argument
+        run(root, "--explore", "5")
+    assert stop.value.code == 2
+
+
+def test_an_inactive_budget_explores_nothing_and_says_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path, SIX)
+    cfg = write_prerank_config(root, active=False)
+    assert run(root, "--n", "2", "--prerank-config", str(cfg)) == 0
+    artifact = json.loads((root / "universes" / f"prerank-{AS_OF.isoformat()}.json").read_text())
+    assert artifact["exploration"] == []
+    assert artifact["exploration_policy"] == {"budget": 25, "band_end": 1000, "active": False}
+    out = capsys.readouterr().out
+    assert "exploration inactive" in out and "subscription ceiling" in out
+
+
+def test_an_active_budget_explores_within_the_band(tmp_path: Path) -> None:
+    root = archive(tmp_path, SIX)
+    cfg = write_prerank_config(root, active=True, budget=2, band_end=4)
+    assert run(root, "--n", "2", "--prerank-config", str(cfg)) == 0
+    artifact = json.loads((root / "universes" / f"prerank-{AS_OF.isoformat()}.json").read_text())
+    assert len(artifact["exploration"]) == 2
+    assert set(artifact["exploration"]) <= set(artifact["ranked"][2:4])
+    assert not set(artifact["exploration"]) & set(artifact["selected"])
+
+
+def test_the_default_prerank_config_is_the_repo_yaml_and_is_inactive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = archive(tmp_path, SIX)
+    assert run(root, "--n", "2") == 0
+    artifact = json.loads((root / "universes" / f"prerank-{AS_OF.isoformat()}.json").read_text())
+    assert artifact["exploration_policy"]["active"] is False
+    assert (
+        artifact["exploration_policy"]["budget"] == 25
+        and artifact["exploration_policy"]["band_end"] == 1000
+    )

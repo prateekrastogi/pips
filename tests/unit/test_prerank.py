@@ -184,3 +184,44 @@ def test_exploration_covers_the_tail_in_ceil_len_over_budget_refreshes_not_more(
             )
         )
     assert seen == tail, f"after {needed} refreshes still unexplored: {tail - seen}"
+
+
+def test_exploration_can_be_bounded_to_a_band_below_the_cut() -> None:
+    # OWNER DECISION 2026-09-06: explore ranks 501-1,000 only. Names at rank 2,400 will never
+    # qualify on four components; spending the budget there measures nothing useful.
+    ranked = tuple(f"S{i:04d}" for i in range(1, 2001))
+    picks = exploration_picks(ranked, cut=500, budget=25, refresh=date(2026, 9, 7), band_end=1000)
+    assert len(picks) == 25
+    assert all(500 < int(p[1:]) <= 1000 for p in picks)
+
+
+def test_the_band_is_walked_completely_in_ceil_band_over_budget_refreshes() -> None:
+    ranked = tuple(f"S{i:04d}" for i in range(1, 2001))
+    seen: set[str] = set()
+    for week in range(20):  # 500 names / 25 per week
+        seen |= set(
+            exploration_picks(
+                ranked,
+                cut=500,
+                budget=25,
+                refresh=date(2026, 9, 7) + timedelta(weeks=week),
+                band_end=1000,
+            )
+        )
+    assert seen == set(ranked[500:1000])
+
+
+def test_a_band_that_ends_at_or_before_the_cut_explores_nothing() -> None:
+    ranked = tuple(f"S{i:04d}" for i in range(1, 2001))
+    assert (
+        exploration_picks(ranked, cut=500, budget=25, refresh=date(2026, 9, 7), band_end=500) == ()
+    )
+    assert (
+        exploration_picks(ranked, cut=500, budget=25, refresh=date(2026, 9, 7), band_end=300) == ()
+    )
+
+
+def test_without_a_band_the_whole_tail_is_the_pool_as_before() -> None:
+    ranked = tuple(f"S{i:04d}" for i in range(1, 2001))
+    picks = exploration_picks(ranked, cut=500, budget=25, refresh=date(2026, 9, 7))
+    assert len(picks) == 25 and all(int(p[1:]) > 500 for p in picks)

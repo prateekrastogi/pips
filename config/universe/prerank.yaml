@@ -1,0 +1,18 @@
+# The capture pre-rank's exploration policy -- effective-dated data, not a command flag (rule 6).
+#
+# OWNER DECISION 2026-09-06 ("go with your recommendation for all three"): explore ranks 501-1,000
+# only (names deeper in the tail will not qualify on four components; measuring them spends the
+# budget on nothing), 25 names per weekly refresh (the band is walked once every 20 weeks), and
+# exploration names JOIN the 1-second capture subscription -- they are captured, never traded.
+#
+# INACTIVE until the activation condition holds: nothing has been captured live yet (BLK-0004),
+# so the streaming subscription ceiling is unmeasured and 25 extra subscriptions are an untested
+# cost. Flip `active` with a dated reason when the condition is met.
+schema_version: 1
+exploration:
+  budget: 25
+  band_end: 1000
+  active: false
+  activation_condition: "after the first live capture has run for a few days and the streaming subscription ceiling is measured"
+  decided_on: 2026-09-06
+  decided_by: owner

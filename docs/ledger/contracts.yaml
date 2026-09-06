@@ -1439,6 +1439,8 @@
   # Resolution is BY ISIN (2026-09-05): by symbol, HDFCBANK is ambiguous with its own warrant and
   # the master rightly refuses. An artifact without `isins` is refused with "regenerate", never
   # resolved by name. The artifact's date governs: a later delisting must not lose a name.
+  # Exploration names JOIN the subscription (owner decision 2026-09-06), once each, after the
+  # selected: captured, never traded -- without this the budget measures nothing.
 
 - id: C-M4-12
   title: "The A+ pre-rank: three spread-free components pick the first 500, superset CHECKED, tail explored"
@@ -1476,6 +1478,9 @@
   # on the bare word "maximum", which pytest's tmp_path (named after the test) put into the
   # printed path. Assertions are full phrases now. The artifact carries `isins` for every ranked
   # symbol, because the capture PLAN against the first real 500 refused on its first name.
+  # EXPLORATION POLICY (OWNER DECISION 2026-09-06): ranks 501-1,000, 25/week, inactive until the
+  # first live capture has measured the subscription ceiling -- effective-dated in
+  # config/universe/prerank.yaml, read by the CLI; the --explore flag is gone.
 
 - id: C-UNIV-07
   title: "DailyStats from the daily panel: trailing window ending at as_of, exclusions named, duplicates refused"
