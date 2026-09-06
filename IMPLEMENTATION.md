@@ -714,6 +714,58 @@ human gate. **Gate sign-off is a file**, so the autonomous loop (§10.6) can run
 the human approves phase P\<k\> by creating `docs/state/gates/P<k>-approved.md` (a dated note;
 its absence means the loop holds at the gate and only re-verifies). Ledger rows (`owner_milestone`) tie every contract/gate to its milestone.
 
+### 6.0 Progress snapshot (approximate, as of 2026-09-06)
+
+Two numbers per milestone. **Ledger** is mechanical: the mean over that milestone's rows in
+`docs/ledger/*.yaml` of enforced = 1, building = ½, planned = 0 (75 rows: 30 enforced, 38
+building, 7 planned; "—" where a milestone has no row yet). **Est.** is the honest estimate of
+how much of the milestone's stated scope exists AND runs on the plant, judged against the tree
+and arb-vm on the date above. Where they differ, the ledger is measuring what has been pinned
+by a test, not what the milestone promised. **No phase has a sign-off file in
+`docs/state/gates/`** — P0 meets its gate on evidence but has not been approved in writing.
+
+| Phase | Milestone | Ledger | Est. | What exists / what is missing |
+|---|---|---|---|---|
+| **P0 ≈ 95%** | M0 scaffold | 1.00 | 100% | tree, Makefile, containerized ladder, Jenkins pre-push gate `[G-TDD-01]` `[G-SWEEP-01]` |
+| | M0.5 containerize | — | 100% | research image built FROM the tree; `make ci-container`; provenance |
+| | M1 harvest audit | — | 100% | `salvage.yaml` complete, 15 PORT rows annotated, `../past` deleted after extraction |
+| | M2 core + canaries | 1.00 | 100% | `[C-ID-01]` `[C-SESS-01]`; calendar verified 2023–2026 |
+| | M3 GATE-0 + feasibility | 1.00 | 85% | authority record WRITTEN (owner decision); ICICI's written reply still pending |
+| | M3.5 deploy rail | 1.00 | 100% | `[C-DEPLOY-01]` `[G-DEPLOY-01]`; every main SHA auto-deployed (11 today) |
+| | *P0 gate* | | **met, unsigned** | CI green, rail end-to-end, artifacts reviewed — no `P0-approved.md` |
+| **P1 ≈ 45%** | M4 Breeze ingest | 0.69 | 65% | backfill + adaptive pacer + calendar + capture PLAN + shortlist; **live capture blocked (BLK-0004)**; 1m backfill U300×3y not started |
+| | M5 QC + quarantine | 0.75 | 60% | `[C-QC-01]` `[C-QC-02]`; QC runs on bronze; CA-aware jump check has an empty actions table to consult |
+| | M6 PIT masters | 0.60 | 55% | instruments master live (5,851, per-day view), daily panel `[C-DATA-04]`, silver; **corporate actions empty, ASM/GSM absent** |
+| | M7 universe policies | 0.50 | 50% | pure layer `[C-UNIV-01…06]`, reader `[C-UNIV-07]`, A+ pre-rank and the first real 500; the 4-component universe needs spread from 1s capture |
+| | M8 feature store | — | 0% | `features/` is a stub |
+| | *P1 gate* | | **not met** | no nightly live capture; no 1m backfill; QC not green over a real panel; no universe snapshots |
+| **P2 ≈ 55%** | M9 cost model | 1.00 | 100% | `[C-COST-01…04]` goldens; effective-dated |
+| | M10 vectorized engine | — | 60% | funnel, silver panel, forward returns — on fixtures |
+| | M11 registry + manifests | 1.00 | 100% | `[C-REG-01]` `[C-TRIAL-01]` |
+| | M12 alpha wave 1 | 1.00 | 45% | spec/forecast/dispatch/grid enforced; T1 specs partial, none run on real data |
+| | M13 S1 runner | — | 70% | `s1-search`, `s1-smoke`, successive halving — fixtures only |
+| | *P2 gate* | | **not met** | needs ≥2y × U150 of real bars |
+| **P3 ≈ 30%** | M14 event engine + F1 fills | 0.50 | 50% | `[C-FILL-01]` building; `sim/` exists |
+| | M15 nested walk-forward | — | 50% | `validation/walk_forward.py`; `[G-P4-FOLDS]` referenced |
+| | M16 stress battery | — | 25% | cost/delay stress in the funnel; no battery as such |
+| | M17 alpha wave 2 | — | 0% | |
+| | *P3 gate* | | **not met** | |
+| **P4 ≈ 55%** | M18 stats stack | 0.75 | 60% | `[G-S4-DSR]` enforced; PSR/CSCV/PBO partial |
+| | M19 selection + turnover | 1.00 | 100% | `[C-SEL-01]` `[C-TURN-01]` `[C-NET-01]` `[C-OBUD-01]` `[C-S5-01]` |
+| | M20 bundles + dossiers | 0.50 | 50% | 15 rows building; `certify-smoke` measures the distance; 0 bundles certified |
+| | *P4 gate (human)* | | **not met** | 0 bundles |
+| **P5 ≈ 10%** | M21 kernel + market + bars | 0.17 | 20% | `rust/crates` skeleton, `rust-test` in the ladder; `[C-BAR-01]` building, `[C-NUM-01]` `[C-PAR-01]` planned |
+| | M22 IR runtime | — | 0% | |
+| | M23 OMS + risk + journal | 0.00 | 0% | `[C-OMS-01…03]` `[C-JRNL-01]` `[C-RISK-01]` planned |
+| | M24 chaos + release parity | — | 5% | `make parity` target exists; `tests/chaos/` empty |
+| | *P5 gate* | | **not met** | |
+| **P6 ≈ 0%** | M25 shadow, M26 limited live | — | 0% | |
+
+Unweighted mean over the 27 milestones ≈ **57%**, which overstates the whole: the phases with
+the most remaining work (P5, P6) are the largest. Read it as "the research factory's machinery
+is largely built on fixtures and the data plant is half real; nothing has been certified and
+nothing runs in Rust yet". The number that moves next is P1's, on the first nightly capture.
+
 ### Phase P0 — foundation & authority
 
 - **M0 scaffold**: §4 tree, CI, Makefile, schemas/ stubs, fixtures generator, docs shards
